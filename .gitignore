@@ -1,0 +1,42 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+coverage/
+*.nupkg
+
+# Node / Vue
+node_modules/
+web/dist/
+web/.vite/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker SSL
+infrastructure/nginx/ssl/*.pem
+infrastructure/nginx/ssl/*.crt
+infrastructure/nginx/ssl/*.key
+
+# Git workflow storage
+data/repos/
+
+# IDE
+.idea/
+.vscode/settings.json
+
+# Test results
+*.trx
+*.xml

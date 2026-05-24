@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/notify-phase-complete.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "agents": {
+    "git": {
+      "description": "Git Agent — repository governance, branch control, contributor management, Library sync",
+      "file": ".claude/agents/git.md",
+      "invoked_by": "PM"
+    }
+  }
+}
