@@ -137,18 +137,34 @@ public sealed class ModelResolutionService : IModelResolutionService
     private static ResolvedOverride? ParseOverride(string json, string functionId)
     {
         if (string.IsNullOrWhiteSpace(json) || json == "{}") return null;
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty(functionId, out var fn)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty(functionId, out var fn)) return null;
 
-        var modelId = fn.GetProperty("modelId").GetString()
-            ?? throw new InvalidOperationException("override missing modelId");
-        var provider = fn.GetProperty("provider").GetString()
-            ?? throw new InvalidOperationException("override missing provider");
-        var keySourceStr = fn.TryGetProperty("keySource", out var ks)
-            ? ks.GetString() ?? nameof(AiKeySource.Platform)
-            : nameof(AiKeySource.Platform);
-        var keySource = Enum.Parse<AiKeySource>(keySourceStr, ignoreCase: true);
-        return new ResolvedOverride(modelId, provider, keySource);
+            var modelId = fn.GetProperty("modelId").GetString()
+                ?? throw new ConfigViolationException(
+                    $"AI config override for function '{functionId}' is missing 'modelId'.");
+            var provider = fn.GetProperty("provider").GetString()
+                ?? throw new ConfigViolationException(
+                    $"AI config override for function '{functionId}' is missing 'provider'.");
+            var keySourceStr = fn.TryGetProperty("keySource", out var ks)
+                ? ks.GetString() ?? nameof(AiKeySource.Platform)
+                : nameof(AiKeySource.Platform);
+            var keySource = Enum.Parse<AiKeySource>(keySourceStr, ignoreCase: true);
+            return new ResolvedOverride(modelId, provider, keySource);
+        }
+        catch (ConfigViolationException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or ArgumentException)
+        {
+            // Malformed override JSON is a config-time violation, not a runtime crash —
+            // surface it through the same path as capability gate failures so callers can react uniformly.
+            throw new ConfigViolationException(
+                $"AI config override for function '{functionId}' is malformed: {ex.Message}");
+        }
     }
 
     private sealed record ResolvedOverride(string ModelId, string Provider, AiKeySource KeySource);

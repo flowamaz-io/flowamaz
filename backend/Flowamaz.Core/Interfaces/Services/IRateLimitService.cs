@@ -1,7 +1,7 @@
 namespace Flowamaz.Core.Interfaces.Services;
 
 /// <summary>
-/// Redis-backed sliding-window rate limiter. Used for Co-pilot rate cap
+/// Redis-backed fixed-window rate limiter. Used for Co-pilot rate cap
 /// (60 calls/user/hour — FUNCTIONAL.md §5.5 lever 7/8) and any other per-key window.
 /// </summary>
 public interface IRateLimitService

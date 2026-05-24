@@ -81,6 +81,9 @@ public sealed class ResponseWrapperMiddleware
     {
         var status = context.Response.StatusCode;
         if (status is < 200 or >= 300) return false; // GlobalExceptionMiddleware owns errors
+        // 204 No Content, 205 Reset Content, and 304 Not Modified MUST NOT carry a body
+        // per RFC 9110 §15.3.5/15.3.6/15.4.5 — wrapping would inject one and break caches/clients.
+        if (status is 204 or 205 or 304) return false;
         var contentType = context.Response.ContentType ?? "";
         return contentType.Contains("application/json", StringComparison.OrdinalIgnoreCase);
     }

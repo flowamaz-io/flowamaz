@@ -16,8 +16,11 @@ public class RepositoryBase<T> where T : BaseEntity
 
     public RepositoryBase(FlowAmazDbContext db) { Db = db; }
 
-    public virtual ValueTask<T?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
-        Set.FindAsync([id], ct);
+    // FirstOrDefaultAsync (not FindAsync) so the soft-delete query filter applied in DbContext
+    // is honoured — FindAsync hits the change tracker / SQL bypassing global query filters,
+    // which would silently return soft-deleted rows.
+    public virtual Task<T?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+        Set.FirstOrDefaultAsync(e => e.Id == id, ct);
 
     public virtual IQueryable<T> Query() => Set.AsQueryable();
 

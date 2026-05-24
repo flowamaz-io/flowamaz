@@ -5,6 +5,8 @@ namespace Flowamaz.Core.Interfaces.Services;
 /// <summary>
 /// Walks the 5-level model resolution hierarchy from FUNCTIONAL.md §5.3
 /// (node → workflow → workspace → org → platform) and returns the first defined config.
+/// Phase 1 implementation resolves workspace → org → platform only; node and workflow
+/// levels are applied by the F4 worker before calling this service and arrive in Phase 3.
 /// Enforces capability gates (F3 needs vision; F7 needs ≥100k ctx) — throws
 /// <c>ConfigViolationException</c> immediately, never at call time.
 /// </summary>

@@ -5,12 +5,24 @@ using StackExchange.Redis;
 namespace Flowamaz.Infrastructure.Services;
 
 /// <summary>
-/// Redis-backed fixed-window rate limiter. Uses INCR + EXPIRE on first hit per window.
-/// A sliding window with sorted sets is more accurate but costs more on every check;
-/// fixed-window is sufficient for the documented 60/user/hour Co-pilot cap.
+/// Redis-backed fixed-window rate limiter. INCR and EXPIRE are issued atomically via a Lua
+/// script so the first hit cannot miss its TTL (e.g. if the client dies between commands and
+/// leaves an immortal counter). A sliding window with sorted sets is more accurate but costs
+/// more on every check; fixed-window is sufficient for the documented 60/user/hour Co-pilot cap.
 /// </summary>
 public sealed class RateLimitService : IRateLimitService
 {
+    // KEYS[1] = counter key, ARGV[1] = window seconds. Returns the post-increment count.
+    // EXPIRE is set only when the key is freshly created (INCR returned 1), so subsequent
+    // hits within the same window leave the TTL untouched — that's what makes the window fixed.
+    private const string CheckAndIncrementScript = @"
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return current
+";
+
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RateLimitService> _logger;
 
@@ -38,11 +50,11 @@ public sealed class RateLimitService : IRateLimitService
         {
             var db = _redis.GetDatabase();
             var redisKey = (RedisKey)$"ratelimit:{key}";
-            var current = await db.StringIncrementAsync(redisKey);
-            if (current == 1)
-            {
-                await db.KeyExpireAsync(redisKey, TimeSpan.FromSeconds(windowSeconds));
-            }
+            var result = await db.ScriptEvaluateAsync(
+                CheckAndIncrementScript,
+                keys: [redisKey],
+                values: [windowSeconds]);
+            var current = (long)result;
             var allowed = current <= maxCount;
             _logger.LogDebug(
                 "RateLimitService.CheckAndIncrementAsync exit key={Key} count={Count} allowed={Allowed}",
