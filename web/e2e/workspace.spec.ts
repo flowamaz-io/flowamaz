@@ -48,7 +48,7 @@ test.describe('Workspace (S7–S11)', () => {
     await page.goto('/settings/members');
 
     await page.getByRole('button', { name: 'Invite member' }).click();
-    await page.getByLabel('Email').fill(`ghost-${uniqueSuffix()}@e2e.flowamaz.test`);
+    await page.getByPlaceholder('teammate@company.com').fill(`ghost-${uniqueSuffix()}@e2e.flowamaz.test`);
 
     // Default invite role in the modal is Designer.
     const dialog = page.getByRole('dialog');
@@ -196,7 +196,7 @@ test.describe('Workspace (S7–S11)', () => {
     await page.getByRole('button', { name: /Create your first API key|Create key/ }).first().click();
 
     const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Name').fill('test-key');
+    await dialog.getByPlaceholder('e.g. CI pipeline').fill('test-key');
     const envField = dialog.getByPlaceholder(/Environment ID/i);
     if (await envField.isVisible().catch(() => false)) {
       await envField.fill('00000000-0000-0000-0000-000000000001');

@@ -148,11 +148,14 @@ export async function loginViaUi(page: Page, org: TestOrg): Promise<void> {
   await resetRateLimits();
   await page.goto('/login');
   // FmInput labels also expose an aria-label on the inline help tooltip, so target the inputs by
-  // their (unambiguous) placeholders rather than by accessible label.
+  // their (unambiguous) placeholders rather than by accessible label. The org-slug placeholder is
+  // exactly "acme" — match exactly so it doesn't also hit "you@company.com" via substring.
   await page.getByPlaceholder('you@company.com').fill(org.email);
-  await page.getByPlaceholder('acme').fill(org.orgSlug);
+  await page.getByPlaceholder('acme', { exact: true }).fill(org.orgSlug);
   await page.locator('input[type="password"]').fill(org.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
+  // Wait until the SPA has established the session and navigated off /login.
+  await page.waitForURL((url) => !/\/login$/.test(new URL(url).pathname));
 }
 
 /**

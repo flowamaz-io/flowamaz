@@ -13,15 +13,14 @@ test.describe('Authentication (S1–S6)', () => {
   test('S1: register a new org redirects to the onboarding wizard', async ({ page }) => {
     await resetRateLimits();
     const suffix = uniqueSuffix();
-    const slug = `e2e-${suffix}`;
     const email = `owner-${suffix}@e2e.flowamaz.test`;
 
     await page.goto('/register');
     // First plan card is Community; pick Starter so registration creates a hosted trial.
     await page.getByRole('button', { name: /Starter/ }).click();
-    // Target inputs by placeholder — FmInput's help tooltip pollutes the accessible label.
+    // Target inputs by placeholder — FmInput's help tooltip pollutes the accessible label. The
+    // org-name suffix is unique, so the auto-generated org-URL slug is unique too (no need to set it).
     await page.getByPlaceholder('Acme Inc.').fill(`E2E Org ${suffix}`);
-    await page.getByPlaceholder('acme').fill(slug);
     await page.getByPlaceholder('Jane Doe').fill('E2E Owner');
     await page.getByPlaceholder('jane@acme.com').fill(email);
     await page.getByPlaceholder('At least 8 characters').fill('Sup3rSecret!23');
@@ -94,8 +93,10 @@ test.describe('Authentication (S1–S6)', () => {
 
     const panel = page.getByRole('complementary', { name: 'Help panel' });
     await expect(panel).toBeVisible();
-    // articleMap['/'] = getting-started/what-is-flowamaz → title "What is Flowamaz?".
-    await expect(panel.getByText('What is Flowamaz?', { exact: false })).toBeVisible();
+    // articleMap['/'] = getting-started/what-is-flowamaz → article body H1 "What is Flowamaz?".
+    await expect(
+      panel.getByRole('article').getByRole('heading', { name: 'What is Flowamaz?', level: 1 }),
+    ).toBeVisible();
   });
 
   // S6: Logout clears the session → /settings redirects to /login.

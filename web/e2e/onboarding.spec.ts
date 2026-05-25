@@ -13,7 +13,7 @@ test.describe('Onboarding (S12–S14)', () => {
 
     // Step 1 — name the workspace and continue (creates it via the API).
     await expect(page.getByRole('heading', { name: 'Name your first workspace' })).toBeVisible();
-    await page.getByLabel('Workspace name').fill(`Operations ${uniqueSuffix()}`);
+    await page.getByPlaceholder('e.g. Operations').fill(`Operations ${uniqueSuffix()}`);
     await page.getByRole('button', { name: 'Continue' }).click();
 
     // Step 2 — creation methods preview.
@@ -39,7 +39,7 @@ test.describe('Onboarding (S12–S14)', () => {
     await page.waitForURL('**/onboarding');
 
     // Complete step 1 → wizard advances to step 2 and persists progress.
-    await page.getByLabel('Workspace name').fill(`Ops ${uniqueSuffix()}`);
+    await page.getByPlaceholder('e.g. Operations').fill(`Ops ${uniqueSuffix()}`);
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByRole('heading', { name: 'Your workflows will build themselves' })).toBeVisible();
 
@@ -58,7 +58,7 @@ test.describe('Onboarding (S12–S14)', () => {
     // Walk the full wizard so onboarding is complete and we land on the dashboard.
     await loginViaUi(page, org);
     await page.waitForURL('**/onboarding');
-    await page.getByLabel('Workspace name').fill(`Ops ${uniqueSuffix()}`);
+    await page.getByPlaceholder('e.g. Operations').fill(`Ops ${uniqueSuffix()}`);
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByRole('button', { name: 'Skip for now' }).click();

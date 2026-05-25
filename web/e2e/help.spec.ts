@@ -37,12 +37,16 @@ test.describe('Help (S15–S17)', () => {
     const { org } = await setupReadyOrg(page);
     await seedOnboardingComplete(page, org.orgId);
 
+    const panel = page.getByRole('complementary', { name: 'Help panel' });
+
     for (const [route, title] of Object.entries(ARTICLE_TITLE_BY_ROUTE)) {
       await page.goto(route);
       await page.waitForURL((url) => new URL(url).pathname === route);
+      // Ensure the app shell has mounted (its keydown handler is registered onMounted) before
+      // firing Shift+?. The TopBar help button only exists inside the authenticated shell.
+      await expect(page.getByRole('button', { name: /Open help/ })).toBeVisible();
 
       await page.locator('body').press('Shift+?');
-      const panel = page.getByRole('complementary', { name: 'Help panel' });
       await expect(panel).toBeVisible();
 
       // The mapped article is rendered — its body H1 (matching the title) appears in the article.
