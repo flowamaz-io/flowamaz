@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* Flowamaz brand tokens — Tailwind v4 @theme.
+   Each color maps to FUNCTIONAL.md §2.3 node palette + design system §19. */
+@theme {
+  --color-primary-50: #ecfaf4;
+  --color-primary-100: #d2f2e4;
+  --color-primary-200: #a7e5cb;
+  --color-primary-300: #6fd2ac;
+  --color-primary-400: #38b889;
+  --color-primary-500: #1d9e75;
+  --color-primary-600: #137e5e;
+  --color-primary-700: #11654d;
+  --color-primary-800: #11503f;
+  --color-primary-900: #104235;
+  --color-primary: #1d9e75;
+
+  --color-accent-50: #efeefb;
+  --color-accent-100: #e0def6;
+  --color-accent-200: #c5c1ee;
+  --color-accent-300: #a39ce2;
+  --color-accent-400: #7d73d3;
+  --color-accent-500: #534ab7;
+  --color-accent-600: #4a41a3;
+  --color-accent-700: #3d3685;
+  --color-accent-800: #322d6c;
+  --color-accent-900: #2b2759;
+  --color-accent: #534ab7;
+
+  --color-amber-50: #fef6e7;
+  --color-amber-100: #fdeac4;
+  --color-amber-200: #fbd589;
+  --color-amber-300: #f6bd4e;
+  --color-amber-400: #ef9f27;
+  --color-amber-500: #d9851a;
+  --color-amber-600: #b66614;
+  --color-amber-700: #914c15;
+  --color-amber-800: #783d17;
+  --color-amber-900: #653316;
+  --color-amber: #ef9f27;
+
+  --color-danger-50: #fdecec;
+  --color-danger-100: #fbd6d5;
+  --color-danger-200: #f6b1b0;
+  --color-danger-300: #ef8281;
+  --color-danger-400: #e85b5a;
+  --color-danger-500: #e24b4a;
+  --color-danger-600: #c33433;
+  --color-danger-700: #a32827;
+  --color-danger-800: #872625;
+  --color-danger-900: #712525;
+  --color-danger: #e24b4a;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+/* Help article prose styling — applied by ArticleRenderer (no <style> blocks in components). */
+.fmz-prose {
+  color: var(--color-slate-700);
+  line-height: 1.7;
+}
+.fmz-prose h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-slate-900);
+  margin-bottom: 0.75rem;
+}
+.fmz-prose h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--color-slate-900);
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+.fmz-prose h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-slate-800);
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+.fmz-prose p {
+  margin-bottom: 0.75rem;
+}
+.fmz-prose ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.fmz-prose ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.fmz-prose li {
+  margin-bottom: 0.25rem;
+}
+.fmz-prose a {
+  color: var(--color-primary-600);
+  text-decoration: underline;
+}
+.fmz-prose code {
+  background: var(--color-slate-100);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+}
+.fmz-prose pre {
+  background: var(--color-slate-900);
+  color: var(--color-slate-100);
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+}
+.fmz-prose pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+.fmz-prose mark {
+  background: var(--color-amber-200);
+  padding: 0 0.1rem;
+  border-radius: 0.2rem;
+}

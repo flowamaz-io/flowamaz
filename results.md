@@ -108,3 +108,33 @@ PM Agent appends after every prompt completes. Never overwrite — only append.
 3. PUT settings validates providers against the known provider set (`AiProviders.All`); strict org-allowlist enforcement lives in the dedicated ai-config endpoint as specified.
 4. API-key callers cannot perform role-gated management actions in Phase 1 (handler denies); these endpoints are human-only.
 5. Integration tests run sequentially (`DisableTestParallelization`) — container-backed API tests contend when collections run in parallel; `AuthEndpointTests` migrated onto the shared `api` collection fixture.
+
+---
+
+## Prompt 06 — Frontend Scaffold (Vue 3)  (2026-05-25)
+
+**Status:** Complete · pushed to `develop`
+
+**Built** (under `web/`, 88 source files)
+- Vue 3 + Vite 7 + TypeScript strict + Tailwind v4 (brand tokens via `@theme` in main.css: teal #1D9E75, purple #534AB7, amber #EF9F27, danger #E24B4A).
+- 11 Fm* base components (Button, Input, Badge, Modal, Alert, Spinner, Dropdown, EmptyState, ErrorState, Toast, Pagination); layout (AppShell/Sidebar/TopBar).
+- Auth views (Login, Register w/ slug auto-gen + plan cards), Dashboard (getting-started checklist + metric placeholders + creation-method hero), workspace views (Settings + AI config, Members, ApiKeys w/ one-time plain key), Onboarding wizard (3 steps, localStorage resume).
+- Help system: HelpPanel (Shift+? global), HelpSearch, HelpTooltip (@floating-ui/vue), ArticleRenderer (marked), articleMap.ts, 15 article stubs loaded via `import.meta.glob(?raw, eager)` — real content in prompt 08.
+- Pinia stores (auth — access token in memory only + silent refresh on init; workspace; ui), services (api w/ Bearer + 401 refresh-retry-once + withCredentials; auth; workspace), router + guards, composables, types, utils.
+- Vitest + MSW; 6 unit tests (auth.store, FmEmptyState) green. ESLint config; Playwright config (specs in prompt 09).
+
+**DoD / acceptance checklist**
+- [x] `npm run build` (vue-tsc -b && vite build) — clean, 0 TS errors
+- [x] `npm run typecheck` 0 errors; `npm run test` 6/6; `npm run lint` 0
+- [x] Zero `<style>` blocks in any `.vue`; zero `any` types
+- [x] Access token memory-only; 401 → refresh → retry once
+- [x] Help panel routes to correct article per Phase 1 route; HelpTooltip on form fields
+- [x] Onboarding resumes from last step; getting-started checklist dismissable per org
+- [x] node_modules / dist gitignored
+
+**Deviations**
+1. Tailwind v4 brand tokens + help-article prose styles live in `src/assets/main.css` (the v4-native `@theme` way); `tailwind.config.ts` is a thin tooling stub. `.vue` files remain style-block-free.
+2. ApiKeysView offers environment IDs seen on existing keys (plus a manual UUID field) because Phase 1 has no "list environments" endpoint — flagged for a future endpoint.
+3. TypeScript pinned to 5.9.3 (5.9.4 doesn't exist) for the typescript-eslint peer range.
+4. Help articles are heading + one-sentence stubs (real content is prompt 08, per spec).
+5. Built via a delegated sub-agent; output independently verified (build/typecheck/tests/style-block/any-type scans all pass).
