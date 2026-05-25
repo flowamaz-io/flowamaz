@@ -146,7 +146,10 @@ public sealed class WorkspaceService : IWorkspaceService
         try
         {
             var environments = await _workspaceRepository.GetEnvironmentsAsync(workspaceId, cancellationToken);
-            var ordered = environments.OrderBy(e => e.Name).ToList();
+            // Order by the enum's numeric value (Dev=0, Staging=1, Production=2). The Name column is
+            // persisted as a string, so ordering must stay client-side — a SQL OrderBy would sort
+            // alphabetically (Dev, Production, Staging) and silently break the contract.
+            var ordered = environments.OrderBy(e => (int)e.Name).ToList();
             _logger.LogDebug(
                 "WorkspaceService.GetEnvironmentsAsync exit workspaceId={WorkspaceId} count={Count}", workspaceId, ordered.Count);
             return ordered;

@@ -40,7 +40,7 @@ public class EnvironmentsApiTests : ApiTestBase
         var ownerB = await RegisterOwnerAsync("ws-env-b");
         var get = await ownerB.Client.GetAsync($"/api/v1/workspaces/{workspaceId}/environments");
 
-        // A non-member must not read another workspace's environments (403 from the role filter).
-        ((int)get.StatusCode).Should().BeGreaterThanOrEqualTo(400).And.BeLessThan(500);
+        // Another org's workspace returns 404 (never 403) so its existence is not revealed.
+        get.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 }
