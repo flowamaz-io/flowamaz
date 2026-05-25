@@ -1,7 +1,10 @@
 using Flowamaz.Core.Configuration;
+using Flowamaz.Core.Interfaces.Persistence;
+using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Infrastructure.Identity;
 using Flowamaz.Infrastructure.Persistence;
+using Flowamaz.Infrastructure.Persistence.Repositories;
 using Flowamaz.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -22,6 +25,7 @@ public static class DependencyInjection
     {
         AddOptions(services, configuration);
         AddPersistence(services, configuration);
+        AddRepositories(services);
         AddRedis(services, configuration);
         AddAiServices(services);
         AddEmail(services);
@@ -45,6 +49,14 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history"));
             options.UseLazyLoadingProxies(false); // explicit Include — keeps queries predictable
         });
+    }
+
+    private static void AddRepositories(IServiceCollection services)
+    {
+        services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        services.AddScoped<IPlanRepository, PlanRepository>();
+        services.AddScoped<IOrganisationRepository, OrganisationRepository>();
+        services.AddScoped<IOrgUserRepository, OrgUserRepository>();
     }
 
     private static void AddRedis(IServiceCollection services, IConfiguration configuration)

@@ -3,6 +3,7 @@ using System;
 using Flowamaz.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flowamaz.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FlowAmazDbContext))]
-    partial class FlowAmazDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260525024736_AddPlatformOrganisationSchema")]
+    partial class AddPlatformOrganisationSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

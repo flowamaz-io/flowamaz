@@ -1,7 +1,9 @@
 using System.Linq.Expressions;
 using Flowamaz.Core.Entities;
 using Flowamaz.Core.Entities.Ai;
+using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Infrastructure.Persistence.Configurations;
 using Flowamaz.Infrastructure.Persistence.Seed;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -32,6 +34,12 @@ public class FlowAmazDbContext : DbContext
     public DbSet<WorkspaceAiConfig> WorkspaceAiConfigs => Set<WorkspaceAiConfig>();
     public DbSet<ModelCatalogue> ModelCatalogue => Set<ModelCatalogue>();
 
+    public DbSet<Plan> Plans => Set<Plan>();
+    public DbSet<Organisation> Organisations => Set<Organisation>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<OrgUser> OrgUsers => Set<OrgUser>();
+    public DbSet<UsageAggregate> UsageAggregates => Set<UsageAggregate>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -42,6 +50,9 @@ public class FlowAmazDbContext : DbContext
         ConfigureOrgAiConfig(modelBuilder);
         ConfigureWorkspaceAiConfig(modelBuilder);
         ConfigureModelCatalogue(modelBuilder);
+
+        // Platform & organisation entities use IEntityTypeConfiguration classes (prompt 02).
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(PlanConfiguration).Assembly);
 
         ApplySoftDeleteQueryFilter(modelBuilder);
         ApplySnakeCaseNaming(modelBuilder);
@@ -97,6 +108,9 @@ public class FlowAmazDbContext : DbContext
         StampConfigEntity<OrgAiConfig>(now, b => b.UpdatedAt = now);
         StampConfigEntity<WorkspaceAiConfig>(now, b => b.UpdatedAt = now);
         StampConfigEntity<ModelCatalogue>(now, b => b.UpdatedAt = now);
+        StampConfigEntity<Plan>(now, b => b.UpdatedAt = now);
+        StampConfigEntity<Subscription>(now, b => b.UpdatedAt = now);
+        StampConfigEntity<UsageAggregate>(now, b => b.UpdatedAt = now);
     }
 
     private void StampConfigEntity<T>(DateTime now, Action<T> setUpdated) where T : class

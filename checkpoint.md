@@ -2,24 +2,38 @@
 Phase: 01
 Phase Title: Foundation — Infra, Auth, Org, Workspace, Help System
 Total Prompts This Phase: 9
-Completed: 0
-Current Prompt: GIT_INIT (run once before prompt 01)
-Next Prompt: 01-backend-scaffold
-Phase End Status: not started
+Completed: 2
+Current Prompt: 03-workspace-rbac-entities
+Next Prompt: 04-authentication-endpoints
+Phase End Status: in progress
 Session Tokens: Low
-Last Updated: 2026-05-24
+Last Updated: 2026-05-25
 Notes: |
-  FIRST SESSION ACTIONS (before any prompt):
-  1. Read CLAUDE.md — note git remote URLs
-  2. Read FUNCTIONAL.md — understand full product spec
-  3. Run git initialisation:
-       git init
-       git config user.name "Flowamaz Bot"
-       git config user.email "team@flowamaz.io"
-       git remote add origin https://github.com/flowamaz-io/flowamaz.git
-       git checkout -b develop
-       git add .
-       git commit -m "chore: initial project scaffold — Flowamaz ClaudeCode Foundation"
-       git push -u origin develop
-  4. Update checkpoint: Current Prompt → 01-backend-scaffold
-  5. Begin Phase 1 execution autonomously
+  GIT_INIT complete. Prompt 01-backend-scaffold merged to develop via PR #1
+  (squash, commit 4b39330).
+
+  Prompt 02-platform-org-entities COMPLETE — committed and pushed to develop
+  (force-with-lease, this session's protocol). Platform/Organisation tier built:
+  Plan/Organisation/Subscription/OrgUser/UsageAggregate entities, EF configs,
+  repositories + IUnitOfWork (Core abstractions, Infra impls), OrganisationService
+  (BCrypt cost 12, transactional registration + welcome email) and OrgUserService
+  (credential validation + lockout). Migration AddPlatformOrganisationSchema applied;
+  4 plans seeded. Build 0/0, 29 unit tests pass, Scalar 200. See results.md for the
+  full DoD checklist + documented deviations (DTO placement, repo/UoW abstractions).
+
+  KEY CONTEXT FOR PROMPT 03 (workspace + RBAC):
+  - Services that touch the DB now live in Application and depend on Core repository
+    interfaces + IUnitOfWork (NOT FlowAmazDbContext directly). Follow this pattern.
+  - Workspace-scoped entities MUST inherit WorkspaceEntity and use
+    WorkspaceRepositoryBase to enforce workspace_id isolation (CLAUDE.md rule 1).
+  - ModelResolutionService.ResolveFromOrgAsync is still a stub returning null — the
+    workspace→org link arrives with workspace entities in prompt 03; wire org-level
+    AI config resolution then.
+  - Email is unique PER ORG (composite index on org_users), not globally.
+
+  RESUME ACTIONS (next session, after /clear):
+  1. Read CLAUDE.md — execution constitution
+  2. Read FUNCTIONAL.md — product spec
+  3. Read this checkpoint
+  4. Execute prompt 03-workspace-rbac-entities
+  5. Land per session git protocol

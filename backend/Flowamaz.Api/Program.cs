@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using FluentValidation;
 using Flowamaz.Api.Middleware;
+using Flowamaz.Application;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -49,11 +49,9 @@ builder.Host.UseSerilog((context, services, configuration) =>
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 8. FluentValidation — register validators (assembly scan happens in later prompts
-//    when Application gains DTOs/handlers; for now we just wire up the service).
+// 8. Application layer — services + FluentValidation validators (one assembly scan).
 // ──────────────────────────────────────────────────────────────────────────────
-builder.Services.AddValidatorsFromAssembly(
-    typeof(Flowamaz.Application.Ai.ModelCapabilityValidator).Assembly);
+builder.Services.AddApplication();
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 10. CORS — origin allowlist from CORS_ALLOWED_ORIGINS env var (comma separated).
