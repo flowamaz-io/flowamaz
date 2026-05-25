@@ -70,7 +70,9 @@ public class WorkspaceApiTests : ApiTestBase
             defaultAiModelOverrides = new Dictionary<string, string>(),
             marketplacePolicy = "OfficialAndVerified",
         });
-        ((int)update.StatusCode).Should().BeGreaterThanOrEqualTo(400).And.BeLessThan(500);
+        // ConfigViolationException → 422 Unprocessable Entity (confirmed fix-01): the request is
+        // well-formed but semantically invalid, which is 422, not 400.
+        update.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 
     [Fact]
@@ -101,6 +103,8 @@ public class WorkspaceApiTests : ApiTestBase
                 new { functionId = "copilot", provider = "azure-openai", modelId = "gpt-4o", keySource = "Byok" },
             },
         });
-        ((int)update.StatusCode).Should().BeGreaterThanOrEqualTo(400).And.BeLessThan(500);
+        // ConfigViolationException → 422 Unprocessable Entity (confirmed fix-01): the request is
+        // well-formed but semantically invalid, which is 422, not 400.
+        update.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
 }

@@ -1,5 +1,6 @@
 ---
 title: What is Flowamaz?
+slug: /
 updated: 2026-05-24
 readingTime: "4 min read"
 plans: "All plans"

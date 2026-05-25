@@ -241,6 +241,24 @@ Production:  fmz_live_{workspace_slug}_{env}_{random_32_chars}
 Dev/Staging: fmz_test_{workspace_slug}_{env}_{random_32_chars}
 ```
 
+### 4.8 HTTP Status Codes (confirmed fix-01)
+Business-rule exceptions map to these HTTP status codes. The mapping lives on each
+`AppException` subclass (`HttpStatusCode`) and is emitted verbatim by `GlobalExceptionMiddleware`.
+- `ConfigViolationException` → **422 Unprocessable Entity** (well-formed request, semantically
+  invalid input — e.g. provider not in the org allowlist, model fails a capability gate). 422 is
+  correct here; 400 is reserved for malformed requests.
+- `SelfModificationException` → **409 Conflict** (changing/removing your own role conflicts with
+  the current resource state).
+- `LastAdminException` → **409 Conflict** (removing/demoting the last Admin conflicts with the
+  workspace's invariant of keeping ≥1 Admin).
+- `InsufficientRoleException` → **403 Forbidden**.
+- `InvalidCredentialsException` and `AccountLockedException` → **401 Unauthorized** (no user
+  enumeration; the lockout message differs but the status is the same).
+- `AlreadyMemberException` and `SlugAlreadyExistsException` → **409 Conflict**;
+  `UserNotInOrganisationException` → **404 Not Found**; `RateLimitExceededException` → **429**.
+- Workspace-not-found / wrong-org → **404 Not Found** (never 403, to avoid resource enumeration).
+- FluentValidation failures → **400 Bad Request** (`VALIDATION_ERROR`).
+
 ---
 
 ## 5. AI MODEL GOVERNANCE

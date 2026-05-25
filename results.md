@@ -273,3 +273,57 @@ PM Agent appends after every prompt completes. Never overwrite — only append.
 1. The repository already had `GetEnvironmentsAsync`/`GetEnvironmentByIdAsync` from prompt 02; only the service method, endpoint, DTO and ordering were new.
 2. DTO lives in WorkspaceDtos.cs (codebase convention), not a separate WorkspaceEnvironmentDto.cs as the prompt's file list illustrated.
 3. S11 still stubs the api-keys POST/GET (once-only-reveal is deterministic that way) but now loads real environments — the select is populated from the live endpoint; the test's optional manual-UUID branch is simply skipped since the field no longer renders.
+
+---
+
+## Fix-01-03 — Status Codes, Docusaurus, Docker Stack Smoke  (2026-05-25)
+
+**Status:** Complete
+
+**Decision 1 — HTTP status codes (confirmed, already correct in code):**
+The exception→status mappings were already implemented on each `AppException` subclass and
+emitted verbatim by `GlobalExceptionMiddleware` (no middleware change needed):
+- `ConfigViolationException` → **422**, `SelfModificationException`/`LastAdminException` → **409**,
+  `InsufficientRoleException` → **403**.
+Locked the decisions in:
+- `FUNCTIONAL.md §4.8` — new "HTTP Status Codes (confirmed fix-01)" table.
+- Tightened two lenient integration assertions (`WorkspaceApiTests`) from `>=400 <500` to assert
+  exactly **422** for AI-config / settings provider violations.
+- Added `MemberApiTests.Change_own_role_returns_409_conflict` — PATCH own role → **409**.
+
+**Fix 2 — Docusaurus broken links:**
+- Root cause: the navbar brand auto-links to `/`, but `routeBasePath: '/'` had no document at the
+  root, so all 16 pages reported a broken `/` link. Added `slug: /` to
+  `getting-started/what-is-flowamaz.md` (no inbound links to it, safe).
+- `onBrokenLinks: 'throw'` (and migrated the deprecated `onBrokenMarkdownLinks` →
+  `markdown.hooks.onBrokenMarkdownLinks: 'throw'`).
+- `npm run build` in docs/ → **0 broken links, build succeeds with throw enabled**.
+
+**Fix 3 — Full Docker stack smoke (all 6 checks pass):**
+Brought up `docker-compose.yml` (proxy + web + backend + db + redis). All 6 checks green:
+1. 5 containers up — backend + db report `healthy` (web/redis/proxy have no healthcheck defined).
+2. `GET /health` → `{"status":"healthy","dependencies":{"db":"healthy","redis":"healthy"}}`.
+3. `GET /scalar` → 302 → `/scalar/` → **200** Scalar UI.
+4. `GET /` → **200** Vue SPA (text/html).
+5. `POST /api/v1/auth/register` → **200**, `success:true`, access token returned.
+6. `GET http://…/` → **301** → https.
+
+**Bug found + fixed during the smoke:** `infrastructure/nginx/nginx.conf` used `rate=5r/h` for the
+register zone — nginx only accepts `r/s`/`r/m`, so the proxy crash-looped (`[emerg] invalid rate`).
+Changed to the tightest valid nginx rate `rate=1r/m` (coarse defence-in-depth; the API enforces the
+precise 5/hour/IP register cap). Proxy then booted clean.
+
+**Smoke-run notes / deviations (not committed):**
+- Proxy host ports were remapped to 8081/8444 for the run via a throwaway override
+  (`docker-compose.smoke.yml`, deleted after) because an unrelated project's container was holding
+  80/443 — I did not stop another team's container. The compose file itself is unchanged (80/443).
+- `.env` (gitignored) had empty `DB_PASSWORD`/`JWT_SECRET`; filled with local dev placeholders.
+- **Gap flagged:** the API does not apply EF migrations on startup, so a fresh container DB boots
+  schema-less (migrations are only run by the test fixture). For the smoke I applied them from the
+  host (`dotnet ef database update`). Recommend a startup migrator/seed step or an init job for
+  Docker — tracked for a future fix phase (out of scope here: "no migration changes").
+
+**Results**
+- `dotnet build` 0/0; `dotnet test` **125 unit + 34 integration = 159 pass**.
+- Docs build: 0 broken links with `onBrokenLinks: 'throw'`.
+- Docker: 5/5 containers up, all 6 smoke checks pass.

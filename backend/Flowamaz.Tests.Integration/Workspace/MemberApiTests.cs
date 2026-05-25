@@ -43,6 +43,23 @@ public class MemberApiTests : ApiTestBase
     }
 
     [Fact]
+    public async Task Change_own_role_returns_409_conflict()
+    {
+        // Self-modification is a conflict with the current resource state, not a bad request — 409.
+        var owner = await RegisterOwnerAsync("mem-self");
+        var workspaceId = await CreateWorkspaceAsync(owner.Client, "WS", "self-ws");
+
+        var list = await owner.Client.GetAsync($"/api/v1/workspaces/{workspaceId}/members");
+        var ownerUserId = (await DataAsync(list)).GetProperty("data")[0].GetProperty("orgUserId").GetGuid();
+
+        var patch = await owner.Client.PatchAsJsonAsync(
+            $"/api/v1/workspaces/{workspaceId}/members/{ownerUserId}/role",
+            new { role = WorkspaceRole.Designer });
+
+        patch.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
     public async Task List_members_returns_the_owner_as_admin()
     {
         var owner = await RegisterOwnerAsync("mem-list");
