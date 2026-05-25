@@ -1,3 +1,4 @@
+using Flowamaz.Application.Auth.Services;
 using Flowamaz.Application.Platform.Services;
 using Flowamaz.Application.Workspace.Services;
 using Flowamaz.Core.Interfaces.Services;
@@ -20,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceMemberService, WorkspaceMemberService>();
         services.AddScoped<IWorkspaceApiKeyService, WorkspaceApiKeyService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
+        services.AddScoped<AuthService>();
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;
     }

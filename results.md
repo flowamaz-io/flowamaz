@@ -36,3 +36,38 @@ PM Agent appends after every prompt completes. Never overwrite — only append.
 3. **`KeyPrefix` = first 16 chars** (per "Notes for Executor"), not the 12 shown in the inline entity example.
 4. **`ValidateApiKeyScope` is synchronous** (no I/O) rather than `…Async` — it does not await anything.
 5. Added repository interfaces (`IWorkspaceRepository`, `IWorkspaceMemberRepository`, `IWorkspaceApiKeyRepository`) in `Core` — required by clean architecture; not separately enumerated in the prompt's output list.
+
+---
+
+## Prompt 04 — Authentication (JWT, refresh rotation, endpoints)  (2026-05-25)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- Entity `RefreshToken` (hash-only, computed `IsRevoked`) + migration `AddRefreshTokens`.
+- `IJwtService` + `JwtService` (HS256, 15-min access token with org + workspace claims; 256-bit refresh tokens, hash-only).
+- `AuthService` (Application): register, login (lockout + no enumeration), refresh (rotation in a transaction), logout, /me.
+- DTOs + FluentValidation validators (password ≥8, 1 upper, 1 number).
+- `JwtAuthMiddleware` (Bearer JWT + `fmz_` API-key paths → `HttpContext.Items["CurrentUser"]`; fire-and-forget last-used in a detached scope).
+- `HttpContextCurrentUserService` (in Api) implementing the extended `ICurrentUserService`.
+- `AuthController`: register/login/refresh/logout/me with httpOnly `fmz_refresh` cookie (SameSite=Strict, Path=/api/v1/auth, Secure outside dev).
+- Rate limiting: register 5/h, login 10/min (Redis fixed window). Exceptions: InvalidCredentials(401), AccountLocked(401), RateLimitExceeded(429). Global middleware maps FluentValidation → 400.
+- Tests: JwtServiceTests, AuthServiceTests (unit), AuthEndpointTests (integration, Testcontainers Postgres+Redis). 76 unit + 13 integration green.
+
+**DoD checklist**
+- [x] dotnet build — 0 errors, 0 warnings
+- [x] dotnet test — 76 unit + 13 integration pass
+- [x] No user enumeration — wrong org / email / password all return identical 401 "Invalid credentials" (timing equalised with a dummy bcrypt verify); proven by integration test
+- [x] Lockout — 5 failed attempts → 15-min lock; 6th rejected as locked (no remaining-time disclosed); proven by integration test
+- [x] Refresh rotation — old token revoked atomically with new issue; replayed old cookie rejected; proven by integration test
+- [x] Refresh token only in httpOnly cookie, never body; never logged
+- [x] JWT workspace claims built from live DB memberships at login
+- [x] Serilog entry/exit/error on all new functions
+- [x] Scalar still mapped (no endpoint regressions)
+
+**Deviations**
+1. **`HttpContextCurrentUserService` lives in `Flowamaz.Api/Identity/`, not Infrastructure.** Reading `HttpContext` requires the web framework; keeping it in Api avoids adding a `FrameworkReference`/web dependency to Infrastructure (which broke the build via NU1510 by making prompt-01 packages redundant). `JwtService` (no HttpContext dependency) stays in Infrastructure as specified.
+2. **`GenerateAccessToken` takes an extra `orgSlug` parameter** — `OrgUser` does not carry the org slug, which the `org_slug` claim needs.
+3. **Responses use camelCase** (`accessToken`, `expiresIn`) per the existing ResponseWrapper/Web-JSON house style, not the snake_case shown illustratively in the prompt.
+4. Added `Microsoft.Extensions.Options` to Application and `System.IdentityModel.Tokens.Jwt` 8.0.1 (matching the transitively-resolved version) to Infrastructure.
+5. Replaced the prompt-01 `AnonymousCurrentUserService` stub with the real HttpContext-backed implementation (its own comment said this would happen in prompt 04).

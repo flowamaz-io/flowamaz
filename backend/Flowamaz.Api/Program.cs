@@ -48,6 +48,11 @@ builder.Host.UseSerilog((context, services, configuration) =>
 // ──────────────────────────────────────────────────────────────────────────────
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// CurrentUserService reads the identity JwtAuthMiddleware resolved into HttpContext.Items.
+// Registered here (not Infrastructure) so Infrastructure stays free of the web framework.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<Flowamaz.Core.Interfaces.Services.ICurrentUserService, Flowamaz.Api.Identity.HttpContextCurrentUserService>();
+
 // ──────────────────────────────────────────────────────────────────────────────
 // 8. Application layer — services + FluentValidation validators (one assembly scan).
 // ──────────────────────────────────────────────────────────────────────────────
@@ -149,6 +154,8 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseMiddleware<ResponseWrapperMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+// Resolves JWT/API-key identity into HttpContext.Items for the current-user service.
+app.UseMiddleware<JwtAuthMiddleware>();
 
 app.MapOpenApi();
 app.MapScalarApiReference(options =>

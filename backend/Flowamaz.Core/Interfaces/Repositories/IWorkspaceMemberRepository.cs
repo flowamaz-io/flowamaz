@@ -1,4 +1,5 @@
 using Flowamaz.Core.Entities.Workspaces;
+using Flowamaz.Core.Models;
 
 namespace Flowamaz.Core.Interfaces.Repositories;
 
@@ -10,6 +11,9 @@ public interface IWorkspaceMemberRepository
 {
     Task<WorkspaceMember?> GetAsync(Guid workspaceId, Guid orgUserId, CancellationToken cancellationToken = default);
     Task<List<WorkspaceMember>> GetForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>A user's active memberships across all their workspaces (joined to workspace slug/name) — for JWT claims and /me.</summary>
+    Task<List<WorkspaceMembership>> GetActiveMembershipsForUserAsync(Guid orgUserId, CancellationToken cancellationToken = default);
 
     /// <summary>Count of active Admins in the workspace — used to guard the last-admin rule.</summary>
     Task<int> CountActiveAdminsAsync(Guid workspaceId, CancellationToken cancellationToken = default);

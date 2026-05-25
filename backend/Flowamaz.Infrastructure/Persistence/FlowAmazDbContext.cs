@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Flowamaz.Core.Entities;
 using Flowamaz.Core.Entities.Ai;
+using Flowamaz.Core.Entities.Auth;
 using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Interfaces.Services;
@@ -45,6 +46,8 @@ public class FlowAmazDbContext : DbContext
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
     public DbSet<WorkspaceEnvironment> WorkspaceEnvironments => Set<WorkspaceEnvironment>();
     public DbSet<WorkspaceApiKey> WorkspaceApiKeys => Set<WorkspaceApiKey>();
+
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

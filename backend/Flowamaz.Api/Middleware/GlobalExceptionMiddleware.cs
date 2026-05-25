@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Flowamaz.Core.Exceptions;
+using FluentValidation;
 
 namespace Flowamaz.Api.Middleware;
 
@@ -39,6 +40,19 @@ public sealed class GlobalExceptionMiddleware
                 StatusCode: appEx.HttpStatusCode,
                 Code: appEx.ErrorCode,
                 Message: appEx.Message,
+                CorrelationId: ResolveCorrelationId(context)));
+        }
+        catch (ValidationException validationEx)
+        {
+            // FluentValidation failures → 400 with the first actionable message per CLAUDE.md rule 8.
+            var message = validationEx.Errors.FirstOrDefault()?.ErrorMessage
+                ?? "One or more fields are invalid. Check your input and try again.";
+            _logger.LogWarning("Validation failed — message={Message}", message);
+            await WriteJsonAsync(context, 400, new ErrorResponse(
+                Success: false,
+                StatusCode: 400,
+                Code: "VALIDATION_ERROR",
+                Message: message,
                 CorrelationId: ResolveCorrelationId(context)));
         }
         catch (Exception ex)

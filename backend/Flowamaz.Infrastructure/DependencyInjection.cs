@@ -2,7 +2,6 @@ using Flowamaz.Core.Configuration;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
-using Flowamaz.Infrastructure.Identity;
 using Flowamaz.Infrastructure.Persistence;
 using Flowamaz.Infrastructure.Persistence.Repositories;
 using Flowamaz.Infrastructure.Services;
@@ -28,8 +27,8 @@ public static class DependencyInjection
         AddRepositories(services);
         AddRedis(services, configuration);
         AddAiServices(services);
+        AddAuthServices(services);
         AddEmail(services);
-        AddIdentityStubs(services);
         return services;
     }
 
@@ -60,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
         services.AddScoped<IWorkspaceMemberRepository, WorkspaceMemberRepository>();
         services.AddScoped<IWorkspaceApiKeyRepository, WorkspaceApiKeyRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
     }
 
     private static void AddRedis(IServiceCollection services, IConfiguration configuration)
@@ -78,15 +78,14 @@ public static class DependencyInjection
         services.AddSingleton<IAiTokenMeteringService, AiTokenMeteringService>();
     }
 
+    private static void AddAuthServices(IServiceCollection services)
+    {
+        services.AddSingleton<IJwtService, JwtService>();
+    }
+
     private static void AddEmail(IServiceCollection services)
     {
         services.AddHttpClient(EmailService.HttpClientName);
         services.AddSingleton<IEmailService, EmailService>();
-    }
-
-    private static void AddIdentityStubs(IServiceCollection services)
-    {
-        // Anonymous default until real JWT-backed ICurrentUserService lands in prompt 04.
-        services.TryAddScoped<ICurrentUserService, AnonymousCurrentUserService>();
     }
 }

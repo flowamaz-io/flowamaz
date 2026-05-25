@@ -1,6 +1,7 @@
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Repositories;
+using Flowamaz.Core.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flowamaz.Infrastructure.Persistence.Repositories;
@@ -18,6 +19,13 @@ public sealed class WorkspaceMemberRepository(FlowAmazDbContext db) : IWorkspace
 
     public Task<List<WorkspaceMember>> GetForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>
         db.WorkspaceMembers.AsNoTracking().Where(m => m.WorkspaceId == workspaceId).ToListAsync(cancellationToken);
+
+    public Task<List<WorkspaceMembership>> GetActiveMembershipsForUserAsync(Guid orgUserId, CancellationToken cancellationToken = default) =>
+        (from m in db.WorkspaceMembers.AsNoTracking()
+         where m.OrgUserId == orgUserId && m.IsActive
+         join w in db.Workspaces.AsNoTracking() on m.WorkspaceId equals w.Id
+         select new WorkspaceMembership(w.Id, w.Slug, w.Name, m.Role.ToString(), (int)m.Role))
+        .ToListAsync(cancellationToken);
 
     public Task<int> CountActiveAdminsAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>
         db.WorkspaceMembers.CountAsync(
