@@ -200,4 +200,142 @@ public class ModelResolutionServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.ResolveModelConfigAsync("not-a-real-function", Guid.NewGuid()));
     }
+
+    // ── Platform-default fallback ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Platform_default_used_when_workspace_has_empty_overrides()
+    {
+        var workspaceId = Guid.NewGuid();
+        await using var db = NewDb(nameof(Platform_default_used_when_workspace_has_empty_overrides));
+        db.ModelCatalogue.Add(HaikuModel());
+        db.PlatformAiConfigs.Add(new PlatformAiConfig
+        {
+            FunctionId = AiFunctionIds.Copilot,
+            Provider = AiProviders.Anthropic,
+            ModelId = "claude-haiku-4-5",
+            KeySource = AiKeySource.Platform,
+            IsEnabled = true,
+        });
+        db.WorkspaceAiConfigs.Add(new WorkspaceAiConfig { WorkspaceId = workspaceId, FunctionOverridesJson = "{}" });
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+
+        var result = await service.ResolveModelConfigAsync(AiFunctionIds.Copilot, workspaceId);
+        result.ModelId.Should().Be("claude-haiku-4-5");
+        result.ApiKeySource.Should().Be(AiKeySource.Platform);
+    }
+
+    // ── Platform key resolution violations ───────────────────────────────────────
+
+    [Fact]
+    public async Task Google_with_platform_key_source_throws_byok_only_violation()
+    {
+        await using var db = NewDb(nameof(Google_with_platform_key_source_throws_byok_only_violation));
+        db.ModelCatalogue.Add(new ModelCatalogue
+        {
+            ModelId = "gemini-2-0-flash",
+            Provider = AiProviders.Google,
+            DisplayName = "Gemini 2.0 Flash",
+            HasVision = true,
+            MaxContextTokens = 1_000_000,
+            SupportsJsonMode = true,
+            SupportsStreaming = true,
+            IsEnabled = true,
+        });
+        db.PlatformAiConfigs.Add(new PlatformAiConfig
+        {
+            FunctionId = AiFunctionIds.Copilot,
+            Provider = AiProviders.Google,
+            ModelId = "gemini-2-0-flash",
+            KeySource = AiKeySource.Platform, // Google is BYOK-only — platform key is a violation
+            IsEnabled = true,
+        });
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+
+        var ex = await Assert.ThrowsAsync<ConfigViolationException>(() =>
+            service.ResolveModelConfigAsync(AiFunctionIds.Copilot, Guid.NewGuid()));
+        ex.ErrorCode.Should().Be("AI_PROVIDER_BYOK_ONLY");
+    }
+
+    [Fact]
+    public async Task Anthropic_platform_key_missing_throws_config_violation()
+    {
+        await using var db = NewDb(nameof(Anthropic_platform_key_missing_throws_config_violation));
+        db.ModelCatalogue.Add(HaikuModel());
+        db.PlatformAiConfigs.Add(new PlatformAiConfig
+        {
+            FunctionId = AiFunctionIds.Copilot,
+            Provider = AiProviders.Anthropic,
+            ModelId = "claude-haiku-4-5",
+            KeySource = AiKeySource.Platform,
+            IsEnabled = true,
+        });
+        await db.SaveChangesAsync();
+        // No AnthropicPlatformKey configured on this service.
+        var service = new ModelResolutionService(db,
+            Options.Create(new AiOptions { AnthropicPlatformKey = "" }),
+            NullLogger<ModelResolutionService>.Instance);
+
+        var ex = await Assert.ThrowsAsync<ConfigViolationException>(() =>
+            service.ResolveModelConfigAsync(AiFunctionIds.Copilot, Guid.NewGuid()));
+        ex.ErrorCode.Should().Be("AI_PLATFORM_KEY_MISSING");
+    }
+
+    // ── Malformed override JSON surfaces as ConfigViolation, never a raw parse crash ──
+
+    [Fact]
+    public async Task Override_invalid_json_throws_config_violation_not_json_exception()
+    {
+        var workspaceId = Guid.NewGuid();
+        await using var db = NewDb(nameof(Override_invalid_json_throws_config_violation_not_json_exception));
+        db.ModelCatalogue.Add(HaikuModel());
+        db.WorkspaceAiConfigs.Add(new WorkspaceAiConfig
+        {
+            WorkspaceId = workspaceId,
+            FunctionOverridesJson = "{ this is not valid json",
+        });
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+
+        await Assert.ThrowsAsync<ConfigViolationException>(() =>
+            service.ResolveModelConfigAsync(AiFunctionIds.Copilot, workspaceId));
+    }
+
+    [Fact]
+    public async Task Override_missing_modelId_throws_config_violation()
+    {
+        var workspaceId = Guid.NewGuid();
+        await using var db = NewDb(nameof(Override_missing_modelId_throws_config_violation));
+        db.ModelCatalogue.Add(HaikuModel());
+        db.WorkspaceAiConfigs.Add(new WorkspaceAiConfig
+        {
+            WorkspaceId = workspaceId,
+            FunctionOverridesJson = """{"copilot":{"provider":"anthropic"}}""",
+        });
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+
+        await Assert.ThrowsAsync<ConfigViolationException>(() =>
+            service.ResolveModelConfigAsync(AiFunctionIds.Copilot, workspaceId));
+    }
+
+    [Fact]
+    public async Task Override_invalid_keySource_throws_config_violation()
+    {
+        var workspaceId = Guid.NewGuid();
+        await using var db = NewDb(nameof(Override_invalid_keySource_throws_config_violation));
+        db.ModelCatalogue.Add(HaikuModel());
+        db.WorkspaceAiConfigs.Add(new WorkspaceAiConfig
+        {
+            WorkspaceId = workspaceId,
+            FunctionOverridesJson = """{"copilot":{"provider":"anthropic","modelId":"claude-haiku-4-5","keySource":"NotARealSource"}}""",
+        });
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+
+        await Assert.ThrowsAsync<ConfigViolationException>(() =>
+            service.ResolveModelConfigAsync(AiFunctionIds.Copilot, workspaceId));
+    }
 }

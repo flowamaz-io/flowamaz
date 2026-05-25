@@ -1,16 +1,21 @@
 ## Checkpoint
-Phase: 01
-Phase Title: Foundation — Infra, Auth, Org, Workspace, Help System
-Total Prompts This Phase: 9
-Completed: 9
-Current Prompt: PHASE_COMPLETE
-Next Prompt: awaiting Phase 2 prompts from Chat
-Phase End Status: COMPLETE — awaiting phase report review
+Phase: fix-phase-01
+Phase Title: Phase 1 Fix Phase — Coverage, E2E, Status Codes, Docusaurus, Docker
+Total Prompts This Phase: 3
+Completed: 1
+Current Prompt: fix-01-02-e2e-and-environments
+Next Prompt: fix-01-03-status-codes-docusaurus-docker
+Phase End Status: not started
+Session Tokens: Low
 Last Updated: 2026-05-25
 Notes: |
-  All 9 Phase 1 prompts complete and pushed to develop.
-  Backend: 91 unit + 31 integration tests green; dotnet build 0/0.
-  Web: npm run build green; 17/17 Playwright E2E scenarios pass in a live run (no SPA bugs).
-  Service-layer coverage 66.5% (excl. generated migrations) — below 80% target; gap queued for fix-01.
-  Docker images build; backend boots and serves /health.
-  Phase-end agents + phase-01-report.md follow. Upload phase report to Chat to receive Phase 2 prompts.
+  Phase 01 complete. Fix phase addresses:
+  1. Backend service coverage < 80% (currently 66.5%)
+  2. E2E suite not executed live (17 scenarios written but not run)
+  3. Status code alignment (422 vs 400, 409 vs 400)
+  4. Docusaurus broken link warnings
+  5. Full Docker stack smoke test
+
+  Execution model: continuous — run all 3 fix prompts without stopping.
+  Push to develop after each. Stop only at PHASE_COMPLETE.
+  Phase report: fix-phase-01-report.md

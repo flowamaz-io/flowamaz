@@ -78,6 +78,55 @@ public class AiTokenMeteringServiceTests
         stored.ModelId.Should().Be("claude-haiku-4-5");
     }
 
+    [Fact]
+    public async Task RecordUsage_null_workspace_still_records()
+    {
+        var (service, scopeFactory, _) = BuildService();
+
+        service.RecordUsage(
+            functionId: AiFunctionIds.HelpAssist,
+            modelId: "claude-sonnet-4-6",
+            provider: AiProviders.Anthropic,
+            orgId: null,
+            workspaceId: null, // platform-level call, no workspace
+            tokensInput: 10,
+            tokensOutput: 20,
+            costUsd: 0.0005m);
+
+        await WaitForCondition(async () =>
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+            return await db.AiTokenUsage.AnyAsync(u => u.WorkspaceId == null && u.FunctionId == AiFunctionIds.HelpAssist);
+        }, TimeSpan.FromSeconds(2));
+
+        using var verify = scopeFactory.CreateScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+        (await verifyDb.AiTokenUsage.AnyAsync(u => u.WorkspaceId == null)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RecordUsage_when_db_write_fails_does_not_throw_on_caller_thread()
+    {
+        // A disposed scope factory makes the background DB write blow up. The fire-and-forget
+        // contract says the caller never sees it — RecordUsage must return normally regardless.
+        var dbName = $"meter-fail-{Guid.NewGuid():N}";
+        var services = new ServiceCollection();
+        services.AddDbContext<FlowAmazDbContext>(o => o.UseInMemoryDatabase(dbName));
+        var sp = services.BuildServiceProvider();
+        var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+        var service = new AiTokenMeteringService(scopeFactory, NullLogger<AiTokenMeteringService>.Instance);
+        await sp.DisposeAsync(); // provider gone — background write will throw, must be swallowed
+
+        var act = () => service.RecordUsage(
+            AiFunctionIds.Copilot, "claude-haiku-4-5", AiProviders.Anthropic,
+            null, Guid.NewGuid(), 1, 1, 0.0m);
+
+        act.Should().NotThrow("metering errors are logged on the background task, never propagated");
+        // Give the background task a moment to run and swallow its exception.
+        await Task.Delay(100);
+    }
+
     private static async Task WaitForCondition(Func<Task<bool>> predicate, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;

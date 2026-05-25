@@ -215,3 +215,30 @@ PM Agent appends after every prompt completes. Never overwrite — only append.
 - **Coverage below the 80% target.** Shortfall is concentrated in (a) defensive error-logging `catch` branches across services, and (b) Redis/AI infrastructure services (SemanticCacheService, AiTokenMeteringService, ModelResolutionService, WorkspaceAiConfigService) that are only partially exercised. The high-value business logic is covered; chasing boilerplate catch-branch coverage was deprioritised.
 - **Playwright E2E: 17/17 passing in a live run** (the sub-agent stood up backend + Vite + throwaway Postgres/Redis, installed Chromium, and ran the full suite — stable across two runs, no SPA bugs found). S9/S10/S11/S17 assert real Phase 1 behaviour (no second-org-user API, no environments endpoint, view-wired help articles) via the actionable error path or route-mocking. Note: the run needs a `resetRateLimits()` helper (flushes Redis `ratelimit:*`) because all local traffic shares one IP and trips the 5/hour register cap.
 - **docker compose full smoke** is partial (see prompt 07): images build and the backend boots/serves /health; full health needs a provisioned `.env` (DB_PASSWORD) and a free host port 80.
+
+---
+
+## Fix-01-01 — Backend Service Layer Coverage ≥ 80%  (2026-05-25)
+
+**Status:** Complete
+
+**Issue fixed:** Service-layer line coverage was 66.5% (below 80% DoD). Gap concentrated in AI/Redis infra services and defensive error-logging catch branches.
+
+**Changes**
+- `RepositoryBase.GetByIdAsync` already uses `FirstOrDefaultAsync` (the FindAsync→FirstOrDefaultAsync fix from Copilot review was already applied) — added `RepositoryBaseTests` proving a soft-deleted entity returns null (global query filter honoured).
+- New `SemanticCacheServiceTests` (mocked `IConnectionMultiplexer`/`IDatabase`): ComputeKey determinism + normalisation, GetAsync hit/miss/fail-open, SetAsync success + fail-open. SemanticCacheService → 100%.
+- Extended `AiTokenMeteringServiceTests`: null-workspace records, background-write failure swallowed on caller thread (fire-and-forget contract). AiTokenMeteringService → 100%.
+- Extended `ModelResolutionServiceTests`: platform-default fallback, Google+Platform-key BYOK-only violation, Anthropic platform-key-missing, and the three malformed-override paths (invalid JSON / missing modelId / invalid keySource all surface as `ConfigViolationException`, never a raw parse crash). ModelResolutionService → 97.3%.
+- New `WorkspaceAiConfigServiceTests` (InMemory DB): resolved view (providers/budget/functions), unknown workspace, and the four UpdateAsync gates (provider-not-allowed, unknown-model, provider-mismatch, F3-without-vision) + valid-override persistence. WorkspaceAiConfigService → 94.3%.
+- New `RateLimitServiceUnitTests`: fail-open when Redis throws + argument guards. (Atomic INCR+EXPIRE remains covered by the Testcontainers integration suite.) RateLimitService → 100% combined.
+- New `ServiceErrorBranchTests`: transaction rollback + rethrow on save failure for OrganisationService.RegisterOrganisationAsync, WorkspaceService.CreateWorkspaceAsync, AuthService.RefreshAsync; repository-error propagation for OrgUserService.ValidateCredentialsAsync.
+
+**Results**
+- `dotnet build` — 0 errors, 0 warnings.
+- `dotnet test` — **125 unit + 31 integration = 156 pass** (0 fail, 0 skip).
+- Coverage (Coverlet, merged unit+integration, service classes only — Application `.Services.` + Infrastructure `.Services.`): **88.0%** (1306/1484 lines), up from 66.5%. Per-class: SemanticCache 100%, RateLimit 100%, AiTokenMetering 100%, ModelResolution 97.3%, WorkspaceAiConfig 94.3%, JwtService 95%, OrganisationService 89.2%, AuthService 89.1%, WorkspaceApiKey 88.5%, WorkspaceService 86.9%, MemberService 84.2%, AuthZ 84.4%, OrgUserService 74.6%, EmailService 45.8% (external Resend HTTP IO — out of scope).
+
+**Deviations**
+1. RepositoryBase FindAsync→FirstOrDefaultAsync was already fixed in the codebase; only the proving test was added.
+2. WorkspaceEnvironmentDto/env-endpoint and E2E belong to fix-01-02; not in this commit.
+3. results.md had been truncated to its header in the working tree before this session — restored the full Phase-1 history from HEAD before appending (append-only rule).
