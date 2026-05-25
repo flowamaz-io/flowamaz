@@ -1,7 +1,10 @@
 using Flowamaz.Application.Auth.Services;
 using Flowamaz.Application.Platform.Services;
+using Flowamaz.Application.Workflow.Orchestrator;
 using Flowamaz.Application.Workspace.Services;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Interfaces.Workflow;
+using Flowamaz.Core.Workflow;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,6 +25,11 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceApiKeyService, WorkspaceApiKeyService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
         services.AddScoped<AuthService>();
+
+        // Workflow engine (prompt 02-02). SfgParser is stateless → singleton.
+        services.AddSingleton<SfgParser>();
+        services.AddScoped<IWorkflowOrchestrator, WorkflowOrchestrator>();
+
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;
     }

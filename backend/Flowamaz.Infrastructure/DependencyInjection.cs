@@ -1,10 +1,13 @@
 using Flowamaz.Core.Configuration;
 using Flowamaz.Core.Interfaces.Persistence;
+using Flowamaz.Core.Interfaces.Queue;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Infrastructure.Persistence;
 using Flowamaz.Infrastructure.Persistence.Repositories;
+using Flowamaz.Infrastructure.Queue;
 using Flowamaz.Infrastructure.Services;
+using Flowamaz.Infrastructure.Workers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,6 +29,7 @@ public static class DependencyInjection
         AddPersistence(services, configuration);
         AddRepositories(services);
         AddStartupMigration(services);
+        AddWorkflowEngine(services);
         AddRedis(services, configuration);
         AddAiServices(services);
         AddAuthServices(services);
@@ -65,8 +69,17 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowDefinitionRepository, WorkflowDefinitionRepository>();
         services.AddScoped<IWorkflowVersionRepository, WorkflowVersionRepository>();
         services.AddScoped<IWorkflowInstanceRepository, WorkflowInstanceRepository>();
+        services.AddScoped<IWorkflowNodeStateRepository, WorkflowNodeStateRepository>();
+        services.AddScoped<IWorkflowVariableRepository, WorkflowVariableRepository>();
         services.AddScoped<IWorkflowEventRepository, WorkflowEventRepository>();
         services.AddScoped<IGateDecisionRepository, GateDecisionRepository>();
+    }
+
+    private static void AddWorkflowEngine(IServiceCollection services)
+    {
+        services.AddSingleton<ITaskQueue, RedisTaskQueue>();
+        services.AddScoped<IVariableEvaluationService, VariableEvaluationService>();
+        services.AddHostedService<OrchestratorWorker>();
     }
 
     private static void AddStartupMigration(IServiceCollection services)

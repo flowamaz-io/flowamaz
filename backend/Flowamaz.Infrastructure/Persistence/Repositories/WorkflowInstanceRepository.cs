@@ -16,6 +16,9 @@ public sealed class WorkflowInstanceRepository(FlowAmazDbContext db) : IWorkflow
     public Task<WorkflowInstance?> GetByIdForWorkspaceAsync(Guid id, Guid workspaceId, CancellationToken cancellationToken = default) =>
         db.WorkflowInstances.FirstOrDefaultAsync(i => i.Id == id && i.WorkspaceId == workspaceId, cancellationToken);
 
+    public Task<WorkflowInstance?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+        db.WorkflowInstances.FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
+
     public Task<WorkflowInstance?> GetByIdempotencyKeyAsync(Guid workspaceId, string idempotencyKey, CancellationToken cancellationToken = default) =>
         db.WorkflowInstances.FirstOrDefaultAsync(
             i => i.WorkspaceId == workspaceId && i.IdempotencyKey == idempotencyKey, cancellationToken);
@@ -60,6 +63,21 @@ public sealed class WorkflowInstanceRepository(FlowAmazDbContext db) : IWorkflow
             .IgnoreQueryFilters()
             .AsNoTracking()
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<bool> TryAcquireLeaseAsync(Guid instanceId, string leaseId, CancellationToken cancellationToken = default)
+    {
+        var rows = await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            UPDATE workflow_instances
+            SET worker_lease_id = {leaseId},
+                worker_lease_expires_at = NOW() + INTERVAL '30 seconds',
+                updated_at = NOW()
+            WHERE id = {instanceId}
+              AND (worker_lease_id IS NULL OR worker_lease_id = {leaseId} OR worker_lease_expires_at IS NULL OR worker_lease_expires_at < NOW())
+            """,
+            cancellationToken);
+        return rows > 0;
     }
 
     public async Task<bool> RenewLeaseAsync(Guid instanceId, string leaseId, CancellationToken cancellationToken = default)

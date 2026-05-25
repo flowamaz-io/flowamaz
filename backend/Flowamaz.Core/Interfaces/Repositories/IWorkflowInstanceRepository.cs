@@ -11,6 +11,13 @@ namespace Flowamaz.Core.Interfaces.Repositories;
 public interface IWorkflowInstanceRepository
 {
     Task<WorkflowInstance?> GetByIdForWorkspaceAsync(Guid id, Guid workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Loads an instance by id with no workspace filter — for the trusted worker/orchestrator,
+    /// which has already authorised the work via the queue claim + DB lease. Callers use the
+    /// returned instance's <c>WorkspaceId</c> to scope every follow-on query.
+    /// </summary>
+    Task<WorkflowInstance?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<WorkflowInstance?> GetByIdempotencyKeyAsync(Guid workspaceId, string idempotencyKey, CancellationToken cancellationToken = default);
     Task<List<WorkflowInstance>> GetForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default);
     Task AddAsync(WorkflowInstance instance, CancellationToken cancellationToken = default);
@@ -22,6 +29,13 @@ public interface IWorkflowInstanceRepository
     /// <c>FOR UPDATE SKIP LOCKED</c>; returns the claimed rows. Persists immediately.
     /// </summary>
     Task<List<WorkflowInstance>> GetPendingForWorkerAsync(string leaseId, int batchSize, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stamps the lease for one specific instance if it is free, expired, or already this worker's.
+    /// Used by the worker after a Redis dequeue to bind that instance to its DB lease. Returns false
+    /// if another worker holds a live lease.
+    /// </summary>
+    Task<bool> TryAcquireLeaseAsync(Guid instanceId, string leaseId, CancellationToken cancellationToken = default);
 
     /// <summary>Extends the lease expiry if <paramref name="leaseId"/> still owns the instance. Returns false if lost.</summary>
     Task<bool> RenewLeaseAsync(Guid instanceId, string leaseId, CancellationToken cancellationToken = default);

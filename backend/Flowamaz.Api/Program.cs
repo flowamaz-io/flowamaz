@@ -5,6 +5,8 @@ using Flowamaz.Api.Middleware;
 using Flowamaz.Application;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Infrastructure;
+using Flowamaz.Infrastructure.Jobs;
+using Quartz;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -153,6 +155,20 @@ var redisConnection = ConnectionStringResolver.ResolveRedis(builder.Configuratio
 builder.Services.AddHealthChecks()
     .AddNpgSql(dbConnection, name: "db", tags: ["db"])
     .AddRedis(redisConnection, name: "redis", tags: ["redis"]);
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 12b. Quartz — delayed-queue promoter runs every 5s, moving ready retry/backoff
+//      items back onto their workspace pending queue (prompt 02-02).
+// ──────────────────────────────────────────────────────────────────────────────
+builder.Services.AddQuartz(q =>
+{
+    var jobKey = new JobKey(nameof(DelayedQueuePromoterJob));
+    q.AddJob<DelayedQueuePromoterJob>(jobKey);
+    q.AddTrigger(t => t
+        .ForJob(jobKey)
+        .WithSimpleSchedule(s => s.WithIntervalInSeconds(5).RepeatForever()));
+});
+builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 13. OpenAPI + Scalar at /scalar (always public, no auth).

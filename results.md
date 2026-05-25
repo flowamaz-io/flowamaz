@@ -362,3 +362,38 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 3. Entities use FK Guid columns with **no navigation properties** (matches the Phase-1 repos) — avoids EF required-relationship-vs-query-filter warnings and keeps 0 warnings.
 4. Repositories are silent pass-throughs (no Serilog), matching the Phase-1 repo precedent; Serilog entry/exit/error lives on the service (`StartupMigrationService`).
 5. `idempotency_key` unique index is global (per spec "IdempotencyKey unique"); Postgres treats NULLs as distinct so unkeyed triggers are unaffected.
+
+---
+
+## Prompt 02-02 — Orchestrator + Task Queue (durable execution core)  (2026-05-25)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- **SFG parser** (`Core/Workflow/SfgParser.cs` + `WorkflowGraph.cs`, `NodeType` enum, `SfgParseException`): YamlDotNet-based parse to a typed graph; validates exactly-one-Trigger, ≥1 End, every edge endpoint exists, no orphaned nodes. Node `config` is re-serialised to a `JsonDocument` via YamlDotNet's JSON-compatible serializer.
+- **Orchestrator** (`Application/Workflow/Orchestrator/WorkflowOrchestrator.cs`, `IWorkflowOrchestrator`, `OrchestratorResult`): `TriggerAsync` (idempotency dedup → pin production version → Pending instance → InstanceStarted event → enqueue), `StepAsync` (frontier walk: Trigger auto-complete, Router/IfElse/Switch instant routing, Parallel fan-out, End → InstanceCompleted, HumanGate → NeedsHumanGate, Action/AI/etc → NextNodes), `CompleteNodeAsync` (stores `{node}.output` variable + re-queues), `FailNodeAsync` (retry w/ exponential backoff via delayed queue, else compensation saga or InstanceFailed), `CancelAsync`.
+- **Redis task queue** (`Infrastructure/Queue/RedisTaskQueue.cs`, `ITaskQueue`): per-workspace pending/processing lists (atomic RPOPLPUSH claim), global delayed sorted-set (score = unix execute-after), active-workspaces set.
+- **Worker** (`Infrastructure/Workers/OrchestratorWorker.cs`): BackgroundService, logs worker id on start, `SemaphoreSlim` concurrency (Worker:Concurrency, default 4), per-instance DB lease acquire + 10s renewal (own scope) + release; never throws.
+- **Delayed-queue promoter** (`Infrastructure/Jobs/DelayedQueuePromoterJob.cs`): Quartz job every 5s, registered in `Program.cs`.
+- **Variable evaluation** (`Infrastructure/Services/VariableEvaluationService.cs`, `IVariableEvaluationService`): `{{ name }}` interpolation + `==`/`!=`/truthy condition evaluation against `WorkflowVariable` rows.
+- Added `IWorkflowNodeStateRepository`/`IWorkflowVariableRepository` (+impls), `IWorkflowInstanceRepository.GetByIdAsync`/`TryAcquireLeaseAsync`, `WorkflowNotFoundException` (404), `WorkflowNotPublishedException` (409). Packages: YamlDotNet 16.3.0 (Core); Quartz 3.13.1 + Quartz.Extensions.Hosting + Microsoft.Extensions.Hosting.Abstractions (Infrastructure).
+
+**Tests**
+- Unit: `SfgParserTests` (valid counts, missing trigger, no end, orphan, unknown edge target, unknown type, empty), `WorkflowOrchestratorTests` (trigger creates+enqueues+event, idempotency dedup, parallel fan-out, router branch selection — real parser + mocked repos/queue/varEval).
+- Integration: `RedisTaskQueueTests` (Testcontainers Redis) — round-trip, atomic no-double-claim, return-to-queue, delayed release only when due.
+
+**DoD / acceptance**
+- [x] dotnet build 0/0; dotnet test all pass — **160 unit + 42 integration**
+- [x] YamlDotNet for all YAML — no raw string manipulation
+- [x] Parser validates structure before execution; orphan → exception names the node
+- [x] Idempotency: duplicate trigger returns existing instance, nothing created
+- [x] Atomic claim (RPOPLPUSH) — no double-claim under concurrent dequeue
+- [x] Worker lease 30s renewed every 10s; concurrency via SemaphoreSlim default 4
+- [x] Delayed queue = Redis sorted set, score = unix timestamp; Quartz promoter registered + starts
+
+**Deviations**
+1. StackExchange.Redis does not expose blocking BRPOPLPUSH (multiplexed), so the claim uses atomic **RPOPLPUSH** and the worker polls (1s idle delay). Atomicity / single-claim guarantee is preserved.
+2. `DequeueAsync` returns `Guid?` (not `string?`) for type safety; `TriggerAsync` gained optional `triggerType`/`correlationId` params (defaults preserve the prompt signature).
+3. Node executors (HTTP/AI) arrive in 02-03 — for 02-02 the worker runs one `StepAsync` and acknowledges; `CompleteNodeAsync` re-queues. Predecessor joins use OR-semantics (any satisfied incoming edge); AND-join for Parallel merge is deferred.
+4. Graph is parsed from the pinned version's YAML each step (no caching yet) — correctness over micro-optimisation for Phase 2.
+5. `IWorkflowInstanceRepository.GetByIdAsync` (no workspace filter) is used only by the trusted worker/orchestrator after a queue+lease claim; all follow-on queries scope by the instance's WorkspaceId.
