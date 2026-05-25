@@ -162,11 +162,22 @@ builder.Services.AddHealthChecks()
 // ──────────────────────────────────────────────────────────────────────────────
 builder.Services.AddQuartz(q =>
 {
-    var jobKey = new JobKey(nameof(DelayedQueuePromoterJob));
-    q.AddJob<DelayedQueuePromoterJob>(jobKey);
-    q.AddTrigger(t => t
-        .ForJob(jobKey)
+    var promoterKey = new JobKey(nameof(DelayedQueuePromoterJob));
+    q.AddJob<DelayedQueuePromoterJob>(promoterKey);
+    q.AddTrigger(t => t.ForJob(promoterKey)
         .WithSimpleSchedule(s => s.WithIntervalInSeconds(5).RepeatForever()));
+
+    // Lease-expiry recovery every 15s (prompt 02-03).
+    var leaseKey = new JobKey(nameof(WorkerLeaseExpiryJob));
+    q.AddJob<WorkerLeaseExpiryJob>(leaseKey);
+    q.AddTrigger(t => t.ForJob(leaseKey)
+        .WithSimpleSchedule(s => s.WithIntervalInSeconds(15).RepeatForever()));
+
+    // Gate timeout / escalation every 60s (prompt 02-03).
+    var gateKey = new JobKey(nameof(GateTimeoutJob));
+    q.AddJob<GateTimeoutJob>(gateKey);
+    q.AddTrigger(t => t.ForJob(gateKey)
+        .WithSimpleSchedule(s => s.WithIntervalInSeconds(60).RepeatForever()));
 });
 builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 

@@ -1,6 +1,8 @@
 using Flowamaz.Application.Auth.Services;
 using Flowamaz.Application.Platform.Services;
 using Flowamaz.Application.Workflow.Orchestrator;
+using Flowamaz.Application.Workflow.Saga;
+using Flowamaz.Application.Workflow.Workers;
 using Flowamaz.Application.Workspace.Services;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
@@ -29,6 +31,12 @@ public static class DependencyInjection
         // Workflow engine (prompt 02-02). SfgParser is stateless → singleton.
         services.AddSingleton<SfgParser>();
         services.AddScoped<IWorkflowOrchestrator, WorkflowOrchestrator>();
+
+        // Node workers + saga engine (prompt 02-03).
+        services.AddHttpClient(HttpActionWorker.HttpClientName);
+        services.AddScoped<INodeWorker, HttpActionWorker>();
+        services.AddScoped<INodeWorkerRegistry, NodeWorkerRegistry>();
+        services.AddScoped<ISagaEngine, SagaEngine>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;

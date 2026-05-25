@@ -397,3 +397,34 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 3. Node executors (HTTP/AI) arrive in 02-03 — for 02-02 the worker runs one `StepAsync` and acknowledges; `CompleteNodeAsync` re-queues. Predecessor joins use OR-semantics (any satisfied incoming edge); AND-join for Parallel merge is deferred.
 4. Graph is parsed from the pinned version's YAML each step (no caching yet) — correctness over micro-optimisation for Phase 2.
 5. `IWorkflowInstanceRepository.GetByIdAsync` (no workspace filter) is used only by the trusted worker/orchestrator after a queue+lease claim; all follow-on queries scope by the instance's WorkspaceId.
+
+---
+
+## Prompt 02-03 — HTTP Action Worker + Saga Compensation Engine  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- **INodeWorker** contract (`Core/Interfaces/Workflow/INodeWorker.cs`) with `NodeExecutionContext`/`NodeExecutionResult` (Ok/Retryable/Fatal factories).
+- **HttpActionWorker** (`Application/Workflow/Workers/HttpActionWorker.cs`, SupportedType=Action): `IHttpClientFactory` (named client `workflow-http`), `{{var}}` substitution in url/headers/body via `IVariableEvaluationService`, `X-Idempotency-Key: {instance}-{node}` header, per-node timeout via linked CTS, manual exponential backoff retry on 5xx/timeout/network (no Thread.Sleep), JSON response → node output.
+- **NodeWorkerRegistry** (`INodeWorkerRegistry`): indexes workers by NodeType.
+- **SagaEngine** (`Application/Workflow/Saga/SagaEngine.cs`, `ISagaEngine`, `SagaStrategyType` enum): Backward (compensate completed nodes reverse order, failures logged+skipped, never throw), Forward (reset failed node + re-queue), Pivot (backward-before + forward-pivot); records CompensationStarted → CompensationCompleted/CompensationFailed.
+- **Timer jobs** (Quartz, registered in `Program.cs`): `WorkerLeaseExpiryJob` (15s — re-queues orphaned Running instances via new `IWorkflowInstanceRepository.GetOrphanedAsync`), `GateTimeoutJob` (60s — expired pending gate → Escalated + GateDecided event; no escalation target → `FailNodeAsync`).
+- State machine: added `Compensating → Running` (Forward resume). Package: `Microsoft.Extensions.Http` (Application).
+
+**Tests**
+- Unit: `HttpActionWorkerTests` (success+parse, 503 retries to MaxAttempts, 400 no-retry, timeout→non-retryable — fake `HttpMessageHandler`), `SagaEngineTests` (backward C→B→A order via recording worker, forward reset+requeue), `WorkerLeaseExpiryJobTests` (orphan re-queued, no-orphan no-op).
+
+**DoD / acceptance**
+- [x] dotnet build 0/0; dotnet test all pass — **168 unit + 42 integration**
+- [x] HttpClientFactory (no `new HttpClient()`); idempotency header on every call
+- [x] Timeout via CTS linked to TimeoutPolicy; retry via manual exponential backoff (no Thread.Sleep)
+- [x] 503 → retries up to MaxAttempts with backoff; timeout → ShouldRetry=false; 400 → no retry
+- [x] SagaEngine backward compensates C→B→A; forward re-queues; compensation failures logged, never throw
+- [x] Timer jobs registered with Quartz, start on boot; orphaned instance re-queued; expired gate → Escalated event
+
+**Deviations**
+1. Node-execution wiring into the OrchestratorWorker loop and SagaEngine invocation from `WorkflowOrchestrator.FailNodeAsync` are **deferred to 02-08 (phase integration)** — 02-03 scopes the components + DI + unit tests per the prompt's output list, keeping each prompt's tests green. The components are registered and independently verified.
+2. Forward strategy resets+re-queues the failed node; the "fails again → escalate to Backward" escalation is simplified (a subsequent terminal failure runs Backward) and the second-failure auto-escalation is deferred.
+3. Credential resolution from the vault is Phase 4 — auth headers come from node config for now (per prompt).
+4. The ~16-min one-off integration duration during this prompt was environmental (concurrent background runs + Docker contention); a clean api-collection run is ~10s. No regression.

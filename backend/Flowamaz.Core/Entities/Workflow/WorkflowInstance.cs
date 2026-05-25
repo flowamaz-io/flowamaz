@@ -59,7 +59,8 @@ public class WorkflowInstance : WorkspaceEntity
                 InstanceStatus.Running, InstanceStatus.Failed,
                 InstanceStatus.Cancelled, InstanceStatus.Compensating,
             ],
-            [InstanceStatus.Compensating] = [InstanceStatus.Completed, InstanceStatus.Failed],
+            // Running is reachable from Compensating for the Forward saga strategy (resume execution).
+            [InstanceStatus.Compensating] = [InstanceStatus.Completed, InstanceStatus.Failed, InstanceStatus.Running],
             [InstanceStatus.Completed] = [],
             [InstanceStatus.Failed] = [InstanceStatus.Compensating],
             [InstanceStatus.Cancelled] = [],

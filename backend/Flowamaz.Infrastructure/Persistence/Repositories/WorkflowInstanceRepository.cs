@@ -1,4 +1,5 @@
 using Flowamaz.Core.Entities.Workflow;
+using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -105,4 +106,11 @@ public sealed class WorkflowInstanceRepository(FlowAmazDbContext db) : IWorkflow
             cancellationToken);
         return rows > 0;
     }
+
+    public Task<List<WorkflowInstance>> GetOrphanedAsync(DateTime asOf, CancellationToken cancellationToken = default) =>
+        db.WorkflowInstances.AsNoTracking()
+            .Where(i => i.Status == InstanceStatus.Running
+                        && i.WorkerLeaseExpiresAt != null
+                        && i.WorkerLeaseExpiresAt < asOf)
+            .ToListAsync(cancellationToken);
 }

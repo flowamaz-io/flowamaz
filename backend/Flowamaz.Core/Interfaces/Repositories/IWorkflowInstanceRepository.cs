@@ -42,4 +42,10 @@ public interface IWorkflowInstanceRepository
 
     /// <summary>Clears the lease if <paramref name="leaseId"/> owns the instance. Returns false if not owner.</summary>
     Task<bool> ReleaseLeaseAsync(Guid instanceId, string leaseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Running instances whose worker lease has expired as of <paramref name="asOf"/> — orphaned by a
+    /// worker that died without releasing. The lease-expiry timer re-queues these.
+    /// </summary>
+    Task<List<WorkflowInstance>> GetOrphanedAsync(DateTime asOf, CancellationToken cancellationToken = default);
 }
