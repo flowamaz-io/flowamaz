@@ -2,6 +2,7 @@ import { expect, request, test } from '@playwright/test';
 import {
   createTestOrg,
   loginViaUi,
+  resetRateLimits,
   seedOnboardingComplete,
   setupReadyOrg,
   uniqueSuffix,
@@ -10,6 +11,7 @@ import {
 test.describe('Authentication (S1–S6)', () => {
   // S1: Register new organisation → onboarding wizard appears on first login.
   test('S1: register a new org redirects to the onboarding wizard', async ({ page }) => {
+    await resetRateLimits();
     const suffix = uniqueSuffix();
     const slug = `e2e-${suffix}`;
     const email = `owner-${suffix}@e2e.flowamaz.test`;
@@ -17,11 +19,12 @@ test.describe('Authentication (S1–S6)', () => {
     await page.goto('/register');
     // First plan card is Community; pick Starter so registration creates a hosted trial.
     await page.getByRole('button', { name: /Starter/ }).click();
-    await page.getByLabel('Organisation name').fill(`E2E Org ${suffix}`);
-    await page.getByLabel('Organisation URL').fill(slug);
-    await page.getByLabel('Full name').fill('E2E Owner');
-    await page.getByLabel('Email').fill(email);
-    await page.getByLabel('Password').fill('Sup3rSecret!23');
+    // Target inputs by placeholder — FmInput's help tooltip pollutes the accessible label.
+    await page.getByPlaceholder('Acme Inc.').fill(`E2E Org ${suffix}`);
+    await page.getByPlaceholder('acme').fill(slug);
+    await page.getByPlaceholder('Jane Doe').fill('E2E Owner');
+    await page.getByPlaceholder('jane@acme.com').fill(email);
+    await page.getByPlaceholder('At least 8 characters').fill('Sup3rSecret!23');
     await page.getByRole('button', { name: 'Create organisation' }).click();
 
     await page.waitForURL('**/onboarding');
@@ -45,11 +48,11 @@ test.describe('Authentication (S1–S6)', () => {
     await api.dispose();
 
     await page.goto('/login');
-    await page.getByLabel('Email').fill(org.email);
-    await page.getByLabel('Organisation URL').fill(org.orgSlug);
+    await page.getByPlaceholder('you@company.com').fill(org.email);
+    await page.getByPlaceholder('acme').fill(org.orgSlug);
 
     for (let attempt = 0; attempt < 3; attempt++) {
-      await page.getByLabel('Password').fill(`wrong-${attempt}`);
+      await page.locator('input[type="password"]').fill(`wrong-${attempt}`);
       await page.getByRole('button', { name: 'Sign in' }).click();
       // The backend's actionable message for bad credentials (no user enumeration).
       await expect(page.getByText(/invalid credentials/i)).toBeVisible();
@@ -64,18 +67,18 @@ test.describe('Authentication (S1–S6)', () => {
     await api.dispose();
 
     await page.goto('/login');
-    await page.getByLabel('Email').fill(org.email);
-    await page.getByLabel('Organisation URL').fill(org.orgSlug);
+    await page.getByPlaceholder('you@company.com').fill(org.email);
+    await page.getByPlaceholder('acme').fill(org.orgSlug);
 
     // 5 wrong attempts: each rejected as invalid credentials; the 5th trips the lockout server-side.
     for (let attempt = 0; attempt < 5; attempt++) {
-      await page.getByLabel('Password').fill(`wrong-${attempt}`);
+      await page.locator('input[type="password"]').fill(`wrong-${attempt}`);
       await page.getByRole('button', { name: 'Sign in' }).click();
       await expect(page.getByText(/invalid credentials|temporarily locked/i)).toBeVisible();
     }
 
     // 6th attempt: account is locked — message differs from "invalid credentials".
-    await page.getByLabel('Password').fill('wrong-final');
+    await page.locator('input[type="password"]').fill('wrong-final');
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page.getByText(/temporarily locked/i)).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);

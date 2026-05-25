@@ -1,4 +1,8 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { type APIRequestContext, type Page, request } from '@playwright/test';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Shared E2E fixtures. These talk to the backend API directly (not through the UI) to set up
@@ -38,11 +42,37 @@ function unwrap<T>(body: unknown): T {
   return env.data as T;
 }
 
+/**
+ * Clears the backend's per-IP rate-limit counters so a serial test run can register/login many
+ * times (the API caps registration at 5/hour and login at 10/min per IP, and all local test
+ * traffic shares one IP). Best-effort: flushes the `ratelimit:*` Redis keys via redis-cli inside
+ * the dev Redis container. Override the container/host with E2E_REDIS_CONTAINER, or disable
+ * entirely with E2E_SKIP_RATELIMIT_RESET=1 (e.g. against an environment where you cannot reach
+ * Redis — then keep the run small enough to stay under the limits).
+ */
+export async function resetRateLimits(): Promise<void> {
+  if (process.env.E2E_SKIP_RATELIMIT_RESET === '1') return;
+  const container = process.env.E2E_REDIS_CONTAINER || 'flowamaz-e2e-redis';
+  try {
+    // Delete all ratelimit:* keys (KEYS is fine for a tiny dev dataset).
+    await execFileAsync('docker', [
+      'exec',
+      container,
+      'sh',
+      '-c',
+      "redis-cli --scan --pattern 'ratelimit:*' | xargs -r redis-cli del >/dev/null 2>&1 || true",
+    ]);
+  } catch {
+    // Non-fatal: if docker/redis isn't reachable this way, the run just relies on the real limits.
+  }
+}
+
 /** Registers a brand-new org with a unique slug and returns its owner session. */
 export async function createTestOrg(
   api: APIRequestContext,
   overrides: Partial<{ slug: string; plan: string; email: string }> = {},
 ): Promise<TestOrg> {
+  await resetRateLimits();
   const suffix = uniqueSuffix();
   const orgSlug = overrides.slug ?? `e2e-${suffix}`;
   const email = overrides.email ?? `owner-${suffix}@e2e.flowamaz.test`;
@@ -100,6 +130,7 @@ export async function createTestWorkspace(
  * sign-in time — see JwtService). Returns the fresh access token.
  */
 export async function loginViaApi(api: APIRequestContext, org: TestOrg): Promise<string> {
+  await resetRateLimits();
   const res = await api.post(`${API_URL}/api/v1/auth/login`, {
     data: { email: org.email, password: org.password, orgSlug: org.orgSlug },
   });
@@ -114,10 +145,13 @@ export async function loginViaApi(api: APIRequestContext, org: TestOrg): Promise
  * cookie in the browser). Returns once the post-login navigation has settled.
  */
 export async function loginViaUi(page: Page, org: TestOrg): Promise<void> {
+  await resetRateLimits();
   await page.goto('/login');
-  await page.getByLabel('Email').fill(org.email);
-  await page.getByLabel('Organisation URL').fill(org.orgSlug);
-  await page.getByLabel('Password').fill(org.password);
+  // FmInput labels also expose an aria-label on the inline help tooltip, so target the inputs by
+  // their (unambiguous) placeholders rather than by accessible label.
+  await page.getByPlaceholder('you@company.com').fill(org.email);
+  await page.getByPlaceholder('acme').fill(org.orgSlug);
+  await page.locator('input[type="password"]').fill(org.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
 
