@@ -41,6 +41,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     model_id = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    provider_model_id = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
                     provider = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     display_name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     has_vision = table.Column<bool>(type: "boolean", nullable: false),
@@ -126,19 +127,24 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
 
             migrationBuilder.InsertData(
                 table: "model_catalogue",
-                columns: new[] { "model_id", "created_at", "display_name", "has_vision", "is_enabled", "max_context_tokens", "plan_access", "provider", "supports_json_mode", "supports_streaming", "updated_at" },
+                columns: new[] { "model_id", "created_at", "display_name", "has_vision", "is_enabled", "max_context_tokens", "plan_access", "provider", "provider_model_id", "supports_json_mode", "supports_streaming", "updated_at" },
                 values: new object[,]
                 {
-                    { "claude-haiku-4-5", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Claude Haiku 4.5", false, true, 200000, "[\"community\",\"starter\",\"pro\",\"enterprise\"]", "anthropic", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
-                    { "claude-opus-4-6", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Claude Opus 4.6", true, true, 200000, "[\"community\",\"starter\",\"pro\",\"enterprise\"]", "anthropic", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
-                    { "claude-sonnet-4-6", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Claude Sonnet 4.6", true, true, 200000, "[\"community\",\"starter\",\"pro\",\"enterprise\"]", "anthropic", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
-                    { "gemini-1-5-pro", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Gemini 1.5 Pro", true, true, 1000000, "[\"starter\",\"pro\",\"enterprise\"]", "google", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
-                    { "gemini-2-0-flash", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Gemini 2.0 Flash", true, true, 1000000, "[\"starter\",\"pro\",\"enterprise\"]", "google", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
-                    { "gpt-4o", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "GPT-4o", true, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "azure-openai", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
-                    { "gpt-4o-mini", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "GPT-4o mini", false, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "azure-openai", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
-                    { "mistral-large", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Mistral Large", false, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "mistral", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
-                    { "moonshot-v1-128k", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Moonshot v1 128k", false, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "kimi", true, false, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
-                    { "moonshot-v1-32k", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Moonshot v1 32k", false, true, 32000, "[\"starter\",\"pro\",\"enterprise\"]", "kimi", true, false, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) }
+                    { "claude-haiku-4-5", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Claude Haiku 4.5", false, true, 200000, "[\"community\",\"starter\",\"pro\",\"enterprise\"]", "anthropic", "claude-haiku-4-5", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "claude-opus-4-6", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Claude Opus 4.6", true, true, 200000, "[\"community\",\"starter\",\"pro\",\"enterprise\"]", "anthropic", "claude-opus-4-6", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "claude-sonnet-4-6", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Claude Sonnet 4.6", true, true, 200000, "[\"community\",\"starter\",\"pro\",\"enterprise\"]", "anthropic", "claude-sonnet-4-6", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "gemini-1-5-flash", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Gemini 1.5 Flash", true, true, 1000000, "[\"starter\",\"pro\",\"enterprise\"]", "google", "gemini-1.5-flash", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "gemini-1-5-pro", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Gemini 1.5 Pro", true, true, 1000000, "[\"starter\",\"pro\",\"enterprise\"]", "google", "gemini-1.5-pro", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "gemini-2-0-flash", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Gemini 2.0 Flash", true, true, 1000000, "[\"starter\",\"pro\",\"enterprise\"]", "google", "gemini-2.0-flash", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "gpt-4o", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "GPT-4o", true, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "azure-openai", "gpt-4o", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "gpt-4o-mini", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "GPT-4o mini", false, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "azure-openai", "gpt-4o-mini", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "mistral-large", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Mistral Large", false, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "mistral", "mistral-large", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "mistral-medium", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Mistral Medium", false, true, 32000, "[\"starter\",\"pro\",\"enterprise\"]", "mistral", "mistral-medium", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "mistral-nemo", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Mistral Nemo", false, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "mistral", "mistral-nemo", true, true, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "moonshot-v1-128k", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Moonshot v1 128k", false, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "kimi", "moonshot-v1-128k", true, false, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "moonshot-v1-32k", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Moonshot v1 32k", false, true, 32000, "[\"starter\",\"pro\",\"enterprise\"]", "kimi", "moonshot-v1-32k", true, false, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "moonshot-v1-8k", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Moonshot v1 8k", false, true, 8000, "[\"starter\",\"pro\",\"enterprise\"]", "kimi", "moonshot-v1-8k", true, false, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) },
+                    { "o1-mini", new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "o1-mini", false, true, 128000, "[\"starter\",\"pro\",\"enterprise\"]", "azure-openai", "o1-mini", false, false, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc) }
                 });
 
             migrationBuilder.InsertData(

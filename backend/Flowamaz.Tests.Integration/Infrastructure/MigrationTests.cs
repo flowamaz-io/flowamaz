@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Flowamaz.Infrastructure.Persistence;
+using Flowamaz.Infrastructure.Persistence.Seed;
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 
@@ -42,13 +43,14 @@ public class MigrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Model_catalogue_has_exactly_ten_seeded_rows()
+    public async Task Model_catalogue_seeds_every_catalogue_model()
     {
         await using var db = NewContext();
         await db.Database.MigrateAsync();
 
         var count = await db.ModelCatalogue.CountAsync();
-        count.Should().Be(10, "FUNCTIONAL.md §5.1 declares 10 catalogue entries");
+        count.Should().Be(AiSeedData.Models.Count,
+            "the migration seeds exactly the models defined in AiSeedData (FUNCTIONAL.md §5.1)");
 
         // Spot-check a few capability flags
         var sonnet = await db.ModelCatalogue.SingleAsync(m => m.ModelId == "claude-sonnet-4-6");

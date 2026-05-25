@@ -38,13 +38,7 @@ public static class DependencyInjection
 
     private static void AddPersistence(IServiceCollection services, IConfiguration configuration)
     {
-        // Single-name env var (DB_CONNECTION_STRING) is the documented surface; the standard
-        // binder key (ConnectionStrings:DefaultConnection) is honoured as a fallback so
-        // appsettings.json and ConnectionStrings__DefaultConnection keep working.
-        var connectionString = configuration["DB_CONNECTION_STRING"]
-            ?? configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException(
-                "Database connection string is required (set DB_CONNECTION_STRING or ConnectionStrings__DefaultConnection).");
+        var connectionString = ConnectionStringResolver.ResolveDatabase(configuration);
 
         services.AddDbContext<FlowAmazDbContext>(options =>
         {
@@ -55,10 +49,7 @@ public static class DependencyInjection
 
     private static void AddRedis(IServiceCollection services, IConfiguration configuration)
     {
-        var redisConnection = configuration["REDIS_CONNECTION_STRING"]
-            ?? configuration.GetConnectionString("Redis")
-            ?? throw new InvalidOperationException(
-                "Redis connection string is required (set REDIS_CONNECTION_STRING or ConnectionStrings__Redis).");
+        var redisConnection = ConnectionStringResolver.ResolveRedis(configuration);
 
         services.AddSingleton<IConnectionMultiplexer>(_ =>
             ConnectionMultiplexer.Connect(redisConnection));

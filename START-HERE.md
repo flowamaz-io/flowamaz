@@ -1,46 +1,45 @@
 # Flowamaz — Claude Code Start Instructions
 
-## Paste This Into Claude Code to Begin Phase 1
+## Resume Prompt (use this for every session from prompt 02 onwards)
 
 ```
-Read CLAUDE.md and FUNCTIONAL.md completely before doing anything else.
+Read CLAUDE.md and FUNCTIONAL.md.
+Read checkpoint.md to confirm current prompt.
+Bring up dependencies if not running:
+  docker compose -f infrastructure/docker-compose.dev.yml up -d
 
-Then perform git initialisation:
-  git init (if not already initialised)
-  git config user.name "Flowamaz Bot"
-  git config user.email "team@flowamaz.io"
-  git remote add origin https://github.com/flowamaz-io/flowamaz.git (if not already set)
-  git checkout -b develop (if not already on develop)
+Execute the current prompt from checkpoint.md fully.
+When complete, verify acceptance criteria from the prompt file.
+Then:
+  git checkout -b feat/phase-{NN}-prompt-{NN}-{prompt-slug}
   git add .
-  git commit -m "chore: initial project scaffold — Flowamaz ClaudeCode Foundation"
-  git push -u origin develop
+  git commit -m "feat(scope): [prompt-id] description"
+  git push origin feat/phase-{NN}-prompt-{NN}-{prompt-slug}
+  gh pr create --base develop --title "feat(scope): [prompt-id]" --body "See results.md"
 
-Then update checkpoint.md — set Current Prompt to 01-backend-scaffold.
-
-Then execute Phase 1 autonomously — run all 9 prompts sequentially,
-shallow verify after each, log to results.md, update checkpoint.md,
-commit and push to develop after each prompt, /clear between prompts.
-
-When checkpoint.md shows PHASE_COMPLETE, immediately run all phase-end agents:
-Verifier deep review, UX Agent on applicable prompts, UI Agent on applicable
-prompts, Testing Agent full suite, Security Agent full scan including Trivy.
-Compile phase-01-report.md and trigger notify-phase-complete.sh when done.
-
-Do not stop between prompts. Do not ask for confirmation.
+Log result to results.md and update checkpoint.md.
+Do not proceed to the next prompt — stop here. Human merges the PR.
 ```
 
-## Resume After Unexpected Stop
+## Phase End Prompt (when checkpoint shows PHASE_COMPLETE)
 
 ```
-Read CLAUDE.md and checkpoint.md.
-Resume autonomous execution from where checkpoint.md indicates.
-Do not repeat completed prompts.
-After each prompt: commit and push to develop branch on GitHub.
-Continue until checkpoint.md shows PHASE_COMPLETE, then run all
-phase-end agents and compile phase-01-report.md.
-Do not stop between prompts. Do not ask for confirmation.
+Read CLAUDE.md, FUNCTIONAL.md, checkpoint.md, and results.md.
+All Phase 1 prompts are complete. Run all phase-end agents:
+- Verifier deep review on entire phase output
+- UX Agent on prompts 06 and 08
+- UI Agent on prompt 06
+- Testing Agent full suite (backend + web)
+- Security Agent full scan including Trivy
+Compile phase-01-report.md using templates/phase-report-template.md.
+Trigger notify-phase-complete.sh when done.
 ```
 
-## After Phase 1 Complete
-Upload phase-01-report.md to this ClaudeCode Foundation chat session.
-Chat will generate Phase 2 prompts and fix phase prompts if needed.
+## After Phase Complete
+Upload phase-01-report.md to the ClaudeCode Foundation chat session.
+Chat reviews, generates fix prompts and Phase 2 prompts.
+
+## Git Workflow Note
+develop branch has protection — direct push is rejected.
+Every prompt lands as a separate PR to develop.
+You merge the PR, then start the next session for the next prompt.

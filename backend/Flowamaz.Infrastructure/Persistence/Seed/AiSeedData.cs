@@ -22,25 +22,44 @@ internal static class AiSeedData
 
     public static IReadOnlyList<ModelCatalogue> Models { get; } =
     [
-        Model("claude-haiku-4-5", AiProviders.Anthropic, "Claude Haiku 4.5",
+        // Anthropic — the only platform-managed provider (§5.1). ProviderModelId == ModelId (no dots).
+        Model("claude-haiku-4-5", "claude-haiku-4-5", AiProviders.Anthropic, "Claude Haiku 4.5",
               hasVision: false, ctx: 200_000, jsonMode: true, streaming: true, plans: AllPlans),
-        Model("claude-sonnet-4-6", AiProviders.Anthropic, "Claude Sonnet 4.6",
+        Model("claude-sonnet-4-6", "claude-sonnet-4-6", AiProviders.Anthropic, "Claude Sonnet 4.6",
               hasVision: true,  ctx: 200_000, jsonMode: true, streaming: true, plans: AllPlans),
-        Model("claude-opus-4-6", AiProviders.Anthropic, "Claude Opus 4.6",
+        Model("claude-opus-4-6", "claude-opus-4-6", AiProviders.Anthropic, "Claude Opus 4.6",
               hasVision: true,  ctx: 200_000, jsonMode: true, streaming: true, plans: AllPlans),
-        Model("gpt-4o", AiProviders.AzureOpenAi, "GPT-4o",
+
+        // Azure OpenAI — BYOK only (§5.1).
+        Model("gpt-4o", "gpt-4o", AiProviders.AzureOpenAi, "GPT-4o",
               hasVision: true,  ctx: 128_000, jsonMode: true, streaming: true, plans: ManagedPlans),
-        Model("gpt-4o-mini", AiProviders.AzureOpenAi, "GPT-4o mini",
+        Model("gpt-4o-mini", "gpt-4o-mini", AiProviders.AzureOpenAi, "GPT-4o mini",
               hasVision: false, ctx: 128_000, jsonMode: true, streaming: true, plans: ManagedPlans),
-        Model("gemini-2-0-flash", AiProviders.Google, "Gemini 2.0 Flash",
+        Model("o1-mini", "o1-mini", AiProviders.AzureOpenAi, "o1-mini",
+              hasVision: false, ctx: 128_000, jsonMode: false, streaming: false, plans: ManagedPlans),
+
+        // Google Vertex AI — BYOK only (§5.1). ProviderModelId keeps the dotted provider name.
+        Model("gemini-2-0-flash", "gemini-2.0-flash", AiProviders.Google, "Gemini 2.0 Flash",
               hasVision: true,  ctx: 1_000_000, jsonMode: true, streaming: true, plans: ManagedPlans),
-        Model("gemini-1-5-pro", AiProviders.Google, "Gemini 1.5 Pro",
+        Model("gemini-1-5-pro", "gemini-1.5-pro", AiProviders.Google, "Gemini 1.5 Pro",
               hasVision: true,  ctx: 1_000_000, jsonMode: true, streaming: true, plans: ManagedPlans),
-        Model("moonshot-v1-128k", AiProviders.Kimi, "Moonshot v1 128k",
+        Model("gemini-1-5-flash", "gemini-1.5-flash", AiProviders.Google, "Gemini 1.5 Flash",
+              hasVision: true,  ctx: 1_000_000, jsonMode: true, streaming: true, plans: ManagedPlans),
+
+        // Kimi (Moonshot AI) — BYOK only (§5.1).
+        Model("moonshot-v1-128k", "moonshot-v1-128k", AiProviders.Kimi, "Moonshot v1 128k",
               hasVision: false, ctx: 128_000, jsonMode: true, streaming: false, plans: ManagedPlans),
-        Model("moonshot-v1-32k", AiProviders.Kimi, "Moonshot v1 32k",
+        Model("moonshot-v1-32k", "moonshot-v1-32k", AiProviders.Kimi, "Moonshot v1 32k",
               hasVision: false, ctx: 32_000, jsonMode: true, streaming: false, plans: ManagedPlans),
-        Model("mistral-large", AiProviders.Mistral, "Mistral Large",
+        Model("moonshot-v1-8k", "moonshot-v1-8k", AiProviders.Kimi, "Moonshot v1 8k",
+              hasVision: false, ctx: 8_000, jsonMode: true, streaming: false, plans: ManagedPlans),
+
+        // Mistral AI — BYOK only (§5.1).
+        Model("mistral-large", "mistral-large", AiProviders.Mistral, "Mistral Large",
+              hasVision: false, ctx: 128_000, jsonMode: true, streaming: true, plans: ManagedPlans),
+        Model("mistral-medium", "mistral-medium", AiProviders.Mistral, "Mistral Medium",
+              hasVision: false, ctx: 32_000, jsonMode: true, streaming: true, plans: ManagedPlans),
+        Model("mistral-nemo", "mistral-nemo", AiProviders.Mistral, "Mistral Nemo",
               hasVision: false, ctx: 128_000, jsonMode: true, streaming: true, plans: ManagedPlans),
     ];
 
@@ -56,11 +75,12 @@ internal static class AiSeedData
     ];
 
     private static ModelCatalogue Model(
-        string modelId, string provider, string displayName,
+        string modelId, string providerModelId, string provider, string displayName,
         bool hasVision, int ctx, bool jsonMode, bool streaming, IReadOnlyList<string> plans) =>
         new()
         {
             ModelId = modelId,
+            ProviderModelId = providerModelId,
             Provider = provider,
             DisplayName = displayName,
             HasVision = hasVision,

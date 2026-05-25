@@ -125,14 +125,31 @@ public sealed class ModelResolutionService : IModelResolutionService
         return new ResolvedOverride(cfg.ModelId, cfg.Provider, cfg.KeySource);
     }
 
-    private string? ResolvePlatformKey(string provider) => provider switch
+    private string ResolvePlatformKey(string provider)
     {
-        AiProviders.Anthropic => Empty(_aiOptions.AnthropicPlatformKey),
-        AiProviders.Google    => Empty(_aiOptions.GooglePlatformKey),
-        _ => null,
-    };
+        // FUNCTIONAL.md §5.1: Anthropic is the only platform-managed provider. Every other
+        // provider (Google Vertex AI, Azure OpenAI, Kimi, Mistral, BYOM) is BYOK-only, so a
+        // Platform key source against them is a config violation, not a runtime null.
+        if (provider == AiProviders.Google)
+        {
+            throw new ConfigViolationException(
+                "AI_PROVIDER_BYOK_ONLY",
+                "Google Vertex AI is BYOK-only (FUNCTIONAL.md §5.1) — it has no platform-managed key. " +
+                "Switch this function to a BYOK credential or pick an Anthropic model.");
+        }
 
-    private static string? Empty(string s) => string.IsNullOrWhiteSpace(s) ? null : s;
+        var key = provider == AiProviders.Anthropic ? _aiOptions.AnthropicPlatformKey : null;
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new ConfigViolationException(
+                "AI_PLATFORM_KEY_MISSING",
+                $"No platform-managed API key is configured for provider '{provider}'. " +
+                "Only Anthropic is platform-managed (FUNCTIONAL.md §5.1) — switch this function to BYOK " +
+                "or set the Anthropic platform key.");
+        }
+
+        return key;
+    }
 
     private static ResolvedOverride? ParseOverride(string json, string functionId)
     {

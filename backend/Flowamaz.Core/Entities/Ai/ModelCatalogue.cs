@@ -7,7 +7,12 @@ namespace Flowamaz.Core.Entities.Ai;
 /// </summary>
 public class ModelCatalogue
 {
+    /// <summary>Internal catalogue key — dash-normalised, stable, used as the primary key and in config JSON.</summary>
     public string ModelId { get; set; } = string.Empty;
+
+    /// <summary>The real model identifier sent to the provider API (e.g. "gemini-2.0-flash", not the dash-normalised "gemini-2-0-flash").</summary>
+    public string ProviderModelId { get; set; } = string.Empty;
+
     public string Provider { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public bool HasVision { get; set; }

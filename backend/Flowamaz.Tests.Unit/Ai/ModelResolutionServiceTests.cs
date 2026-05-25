@@ -27,7 +27,6 @@ public class ModelResolutionServiceTests
             Options.Create(new AiOptions
             {
                 AnthropicPlatformKey = "anthropic-key-test",
-                GooglePlatformKey = "google-key-test",
             }),
             NullLogger<ModelResolutionService>.Instance);
 

@@ -163,6 +163,7 @@ public class FlowAmazDbContext : DbContext
         var e = modelBuilder.Entity<ModelCatalogue>();
         e.HasKey(x => x.ModelId);
         e.Property(x => x.ModelId).HasMaxLength(128);
+        e.Property(x => x.ProviderModelId).HasMaxLength(128).IsRequired();
         e.Property(x => x.Provider).HasMaxLength(64).IsRequired();
         e.Property(x => x.DisplayName).HasMaxLength(256).IsRequired();
         e.Property(x => x.PlanAccess).HasColumnType("jsonb");

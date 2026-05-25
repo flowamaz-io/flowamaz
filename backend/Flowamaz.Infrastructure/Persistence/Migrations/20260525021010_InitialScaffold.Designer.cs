@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flowamaz.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FlowAmazDbContext))]
-    [Migration("20260524145712_InitialScaffold")]
+    [Migration("20260525021010_InitialScaffold")]
     partial class InitialScaffold
     {
         /// <inheritdoc />
@@ -142,6 +142,12 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("provider");
 
+                    b.Property<string>("ProviderModelId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("provider_model_id");
+
                     b.Property<bool>("SupportsJsonMode")
                         .HasColumnType("boolean")
                         .HasColumnName("supports_json_mode");
@@ -173,6 +179,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 200000,
                             PlanAccess = "[\"community\",\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "anthropic",
+                            ProviderModelId = "claude-haiku-4-5",
                             SupportsJsonMode = true,
                             SupportsStreaming = true,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -187,6 +194,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 200000,
                             PlanAccess = "[\"community\",\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "anthropic",
+                            ProviderModelId = "claude-sonnet-4-6",
                             SupportsJsonMode = true,
                             SupportsStreaming = true,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -201,6 +209,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 200000,
                             PlanAccess = "[\"community\",\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "anthropic",
+                            ProviderModelId = "claude-opus-4-6",
                             SupportsJsonMode = true,
                             SupportsStreaming = true,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -215,6 +224,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 128000,
                             PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "azure-openai",
+                            ProviderModelId = "gpt-4o",
                             SupportsJsonMode = true,
                             SupportsStreaming = true,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -229,8 +239,24 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 128000,
                             PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "azure-openai",
+                            ProviderModelId = "gpt-4o-mini",
                             SupportsJsonMode = true,
                             SupportsStreaming = true,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            ModelId = "o1-mini",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "o1-mini",
+                            HasVision = false,
+                            IsEnabled = true,
+                            MaxContextTokens = 128000,
+                            PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
+                            Provider = "azure-openai",
+                            ProviderModelId = "o1-mini",
+                            SupportsJsonMode = false,
+                            SupportsStreaming = false,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -243,6 +269,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 1000000,
                             PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "google",
+                            ProviderModelId = "gemini-2.0-flash",
                             SupportsJsonMode = true,
                             SupportsStreaming = true,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -257,6 +284,22 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 1000000,
                             PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "google",
+                            ProviderModelId = "gemini-1.5-pro",
+                            SupportsJsonMode = true,
+                            SupportsStreaming = true,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            ModelId = "gemini-1-5-flash",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Gemini 1.5 Flash",
+                            HasVision = true,
+                            IsEnabled = true,
+                            MaxContextTokens = 1000000,
+                            PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
+                            Provider = "google",
+                            ProviderModelId = "gemini-1.5-flash",
                             SupportsJsonMode = true,
                             SupportsStreaming = true,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -271,6 +314,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 128000,
                             PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "kimi",
+                            ProviderModelId = "moonshot-v1-128k",
                             SupportsJsonMode = true,
                             SupportsStreaming = false,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -285,6 +329,22 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 32000,
                             PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "kimi",
+                            ProviderModelId = "moonshot-v1-32k",
+                            SupportsJsonMode = true,
+                            SupportsStreaming = false,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            ModelId = "moonshot-v1-8k",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Moonshot v1 8k",
+                            HasVision = false,
+                            IsEnabled = true,
+                            MaxContextTokens = 8000,
+                            PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
+                            Provider = "kimi",
+                            ProviderModelId = "moonshot-v1-8k",
                             SupportsJsonMode = true,
                             SupportsStreaming = false,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
@@ -299,6 +359,37 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             MaxContextTokens = 128000,
                             PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
                             Provider = "mistral",
+                            ProviderModelId = "mistral-large",
+                            SupportsJsonMode = true,
+                            SupportsStreaming = true,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            ModelId = "mistral-medium",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Mistral Medium",
+                            HasVision = false,
+                            IsEnabled = true,
+                            MaxContextTokens = 32000,
+                            PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
+                            Provider = "mistral",
+                            ProviderModelId = "mistral-medium",
+                            SupportsJsonMode = true,
+                            SupportsStreaming = true,
+                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            ModelId = "mistral-nemo",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Mistral Nemo",
+                            HasVision = false,
+                            IsEnabled = true,
+                            MaxContextTokens = 128000,
+                            PlanAccess = "[\"starter\",\"pro\",\"enterprise\"]",
+                            Provider = "mistral",
+                            ProviderModelId = "mistral-nemo",
                             SupportsJsonMode = true,
                             SupportsStreaming = true,
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)

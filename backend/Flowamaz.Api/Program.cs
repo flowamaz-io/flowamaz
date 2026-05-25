@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FluentValidation;
@@ -10,6 +11,12 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
+
+// Bootstrap logger — captures startup-time logs (e.g. the JWT secret warning below) before
+// the host's Serilog pipeline is built. Replaced by the full configuration in UseSerilog.
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console(new Serilog.Formatting.Compact.RenderedCompactJsonFormatter())
+    .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,6 +82,28 @@ builder.Services.AddCors(options =>
 // ──────────────────────────────────────────────────────────────────────────────
 var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
 var jwtOptions = jwtSection.Get<JwtOptions>() ?? new JwtOptions();
+
+SymmetricSecurityKey signingKey;
+if (!string.IsNullOrEmpty(jwtOptions.Secret))
+{
+    signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret));
+}
+else if (builder.Environment.IsDevelopment())
+{
+    // No deterministic placeholder: a random per-process key means leaked source can't be used to
+    // mint tokens, and developers are nudged to set a real secret. Tokens won't survive a restart.
+    Log.Warning(
+        "JWT signing secret is not configured. Generating a RANDOM EPHEMERAL key for this Development " +
+        "process only — tokens will be invalidated on restart. Set Jwt__Secret (JWT_SECRET) for stable auth.");
+    signingKey = new SymmetricSecurityKey(RandomNumberGenerator.GetBytes(64));
+}
+else
+{
+    throw new InvalidOperationException(
+        "JWT signing secret is not configured. Set Jwt__Secret (env var JWT_SECRET) to a value of at " +
+        "least 32 bytes before starting outside the Development environment.");
+}
+
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -89,12 +118,7 @@ builder.Services
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtOptions.Issuer,
             ValidAudience = jwtOptions.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(string.IsNullOrEmpty(jwtOptions.Secret)
-                    // Bootstrap-only placeholder: lets the app start without a key, but every
-                    // protected endpoint will 401 until JWT_SECRET is set. Prompt 04 hardens this.
-                    ? new string('x', 64)
-                    : jwtOptions.Secret)),
+            IssuerSigningKey = signingKey,
             ClockSkew = TimeSpan.FromMinutes(1),
         };
     });
@@ -103,8 +127,8 @@ builder.Services.AddAuthorization();
 // ──────────────────────────────────────────────────────────────────────────────
 // 12. Health checks — Postgres + Redis dependency probes.
 // ──────────────────────────────────────────────────────────────────────────────
-var dbConnection = builder.Configuration.GetConnectionString("DefaultConnection") ?? "";
-var redisConnection = builder.Configuration.GetConnectionString("Redis") ?? "";
+var dbConnection = ConnectionStringResolver.ResolveDatabase(builder.Configuration);
+var redisConnection = ConnectionStringResolver.ResolveRedis(builder.Configuration);
 builder.Services.AddHealthChecks()
     .AddNpgSql(dbConnection, name: "db", tags: ["db"])
     .AddRedis(redisConnection, name: "redis", tags: ["redis"]);
