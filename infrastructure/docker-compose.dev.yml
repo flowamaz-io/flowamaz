@@ -1,0 +1,40 @@
+# Dev-only Postgres + Redis. The app itself runs locally on the host via `dotnet run` —
+# the full app/proxy/web stack lands in prompt 07.
+#
+# Usage:
+#   docker compose -f infrastructure/docker-compose.dev.yml up -d
+#   docker compose -f infrastructure/docker-compose.dev.yml down
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: flowamaz-dev-db
+    environment:
+      POSTGRES_DB: flowamaz
+      POSTGRES_USER: flowamaz
+      POSTGRES_PASSWORD: flowamaz_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowamaz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: flowamaz-dev-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:

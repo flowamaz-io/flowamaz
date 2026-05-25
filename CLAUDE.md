@@ -45,18 +45,21 @@ git push -u origin develop
 ### Commit Convention (every prompt)
 After every prompt completes and before /clear:
 ```bash
+git checkout -b feat/phase-{NN}-prompt-{NN}-{short-description}
 git add .
 git commit -m "feat(scope): description [prompt-id]"
-git push origin develop
+git push origin feat/phase-{NN}-prompt-{NN}-{short-description}
+gh pr create --base develop --title "feat(scope): description [prompt-id]" --body "Prompt {id} output. See results.md for DoD checklist and deviations."
 ```
 
-Commit types: feat, fix, chore, docs, test, refactor, security
-Scopes: api, core, infra, web, auth, workspace, ai, docker, docs, help
+Note: develop branch has protection — direct push rejected. Every prompt lands as a PR.
+PRs are merged by you after review. Next session resumes from checkpoint.md after merge.
 
-### Branch Strategy
-- `develop` — all Phase 1 work lands here
-- `main` — only touched at phase end (release branch → main)
-- Never commit directly to main
+### Branch Naming Convention
+feat/phase-01-prompt-02-platform-org-entities
+feat/phase-01-prompt-03-workspace-rbac-entities
+feat/phase-01-prompt-04-authentication-endpoints
+(pattern: feat/phase-{NN}-prompt-{NN}-{prompt-id-slug})
 
 ### Git Author (from environment)
 ```bash
