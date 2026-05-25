@@ -16,7 +16,7 @@ Phase Type: Regular
 | Skipped (with reason) | 0 |
 | Unresolved blockers | 0 |
 
-All 9 prompts (01–09) are committed and pushed to `develop`. Backend builds 0/0; **91 unit + 31 integration tests pass**; web builds clean. Two real bugs were found and fixed during execution (see Verifier notes). Container images build and scan clean. The phase is functionally complete with two quality gaps queued for a fix-01 phase (coverage < 80%, E2E suite not executed live).
+All 9 prompts (01–09) are committed and pushed to `develop`. Backend builds 0/0; **91 unit + 31 integration tests pass**; web builds clean; **17/17 Playwright E2E scenarios pass in a live run** (no SPA bugs). Three real bugs were found and fixed during execution (see Verifier notes). Container images build and scan clean (Trivy 0 HIGH/CRITICAL). The phase is functionally complete with one quality gap queued for a fix-01 phase: backend service-layer coverage < 80%.
 
 ---
 
@@ -120,12 +120,18 @@ SEVERITY: (positive) — 15 real articles (~5,500 words), articleMap covers all 
 tooltips on form fields, Edit-on-GitHub footers.
 ```
 ```
-ISSUE: UX not visually verified in a live browser this session
-SCREEN/FLOW: All
-SEVERITY: Medium
-FINDING: The SPA was built and type-checks/builds, and 17 E2E scenarios are written, but the
-E2E suite was not executed against a running stack in this autonomous session.
-FIX REQUIRED: Run the Playwright suite (S1–S17) against the dev stack in fix-01 and capture screenshots.
+ISSUE: SPA exercised end-to-end via the live E2E run
+SCREEN/FLOW: All Phase 1 flows
+SEVERITY: (positive) — 17/17 Playwright scenarios passed against the running SPA (register,
+onboarding, dashboard checklist, members, API keys, help panel, error states). No SPA bugs found.
+```
+```
+ISSUE: FmInput help tooltip pollutes the field's accessible label
+FILE: web/src/components/common/FmInput.vue
+SEVERITY: Low
+FINDING: E2E had to target inputs by placeholder because the inline help-tooltip text leaks into
+the accessible name (getByLabel). Minor a11y nit, not a functional bug.
+FIX REQUIRED: Associate the tooltip via aria-describedby so the label stays clean (fix-01).
 ```
 
 ---
@@ -165,8 +171,12 @@ Coverage acceptable (>=80%): N/A (scaffold)
 N/A — mobile is Year 2 (Flutter).
 
 ### E2E (Playwright)
-Tests: 17 written (S1–S17) | **not executed live this session** | 0 failing
-Note: well-formed against the real SPA; require `npm run dev` + backend + `npx playwright install chromium`.
+Tests: 17 total (S1–S17) | **17 passing (live run)** | 0 failing
+Executed live against the real SPA (Chromium) with backend + Vite + throwaway Postgres/Redis;
+stable across two consecutive full runs, **no SPA bugs found**. S9/S10/S11/S17 assert real
+Phase 1 behaviour (no second-org-user API; no environments endpoint; views wire explicit help
+articles) via the actionable error path or route-mocking. Serial runs need `resetRateLimits()`
+(shared test IP trips the register cap).
 
 ### Load Tests (k6)
 Not in scope for Phase 1.
@@ -200,7 +210,6 @@ Blockers: none.
 ### Must Fix Before Next Phase (Critical + High)
 
 1. [Testing] Application + Infrastructure services — raise service-layer coverage to ≥ 80% (currently 66.5% excl. generated); focus on AI/Redis services + error branches.
-2. [Testing/UX] Playwright — execute the 17 E2E scenarios green against a live dev stack; capture evidence.
 
 ### Travel Forward (Medium + Low)
 
@@ -208,15 +217,16 @@ Blockers: none.
 2. [Verifier/UI] Add `GET /workspaces/{id}/environments` and a proper environment selector in ApiKeysView.
 3. [Verifier] Self-modification / last-admin guards return 409 vs 400 — confirm intended code.
 4. [Infra] Complete the full `docker compose up` smoke once a real `.env` (DB_PASSWORD) + free port 80 are available; the JWT_SECRET binding fix is in place and the backend boots/serves /health.
-5. [Docs] Docusaurus emits ~9 broken-relative-link warnings (cross-article links under `routeBasePath: '/'`); `onBrokenLinks: warn` keeps the build green.
+5. [UI/a11y] FmInput's help tooltip leaks into the accessible label — associate via aria-describedby.
+6. [Docs] Docusaurus emits ~9 broken-relative-link warnings (cross-article links under `routeBasePath: '/'`); `onBrokenLinks: warn` keeps the build green.
 
 ---
 
 ## Next Phase Readiness
 
-Fix phase required: **YES** (fix-01) — quality gates, not blockers.
-Critical + High issues requiring fix phase: 2 (coverage, live E2E).
-Blockers preventing next phase: **none** — no Critical correctness or security issues.
+Fix phase required: **YES** (fix-01) — a single quality gate, not a blocker.
+Critical + High issues requiring fix phase: 1 (service-layer coverage < 80%).
+Blockers preventing next phase: **none** — no Critical correctness or security issues; 17/17 E2E pass.
 
 ---
 
@@ -224,9 +234,8 @@ Blockers preventing next phase: **none** — no Critical correctness or security
 
 Fix phase (fix-01) should address:
 1. Backend service-layer test coverage to ≥ 80% (AI/Redis services + error paths).
-2. Execute Playwright S1–S17 against the dev stack; fix any selector/behaviour gaps surfaced.
-3. Add the workspace environments endpoint + selector; confirm the 422/409 vs 400 status-code choices.
-4. Full Docker-stack smoke with a provisioned `.env`.
+2. Add the workspace environments endpoint + selector; confirm the 422/409 vs 400 status-code choices.
+3. Full Docker-stack smoke with a provisioned `.env`; fix the FmInput aria-describedby a11y nit.
 
 Then Phase 2 (Workflow Engine — durable execution + observability) can proceed.
 
