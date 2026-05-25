@@ -10,6 +10,7 @@ import type {
   MemberResponse,
   UpdateAiConfigRequest,
   UpdateWorkspaceSettingsRequest,
+  WorkspaceEnvironment,
   WorkspaceListItem,
   WorkspaceResponse,
   WorkspaceRole,
@@ -23,6 +24,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const currentWorkspace = ref<WorkspaceResponse | null>(null);
   const members = ref<MemberResponse[]>([]);
   const apiKeys = ref<ApiKeyResponse[]>([]);
+  const environments = ref<WorkspaceEnvironment[]>([]);
   const aiConfig = ref<AiConfigView | null>(null);
 
   const current = computed<WorkspaceListItem | null>(
@@ -49,6 +51,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     // Invalidate per-workspace caches so views reload fresh.
     members.value = [];
     apiKeys.value = [];
+    environments.value = [];
     aiConfig.value = null;
     currentWorkspace.value = null;
   }
@@ -96,6 +99,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     members.value = members.value.filter((m) => m.orgUserId !== userId);
   }
 
+  // ── Environments ───────────────────────────────────────────────────────────
+  async function loadEnvironments(): Promise<void> {
+    if (!currentWorkspaceId.value) return;
+    environments.value = await workspaceService.getEnvironments(currentWorkspaceId.value);
+  }
+
   // ── API keys ─────────────────────────────────────────────────────────────
   async function loadApiKeys(): Promise<void> {
     if (!currentWorkspaceId.value) return;
@@ -134,6 +143,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentWorkspace,
     members,
     apiKeys,
+    environments,
     aiConfig,
     current,
     loadWorkspaces,
@@ -145,6 +155,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     inviteMember,
     updateMemberRole,
     removeMember,
+    loadEnvironments,
     loadApiKeys,
     createApiKey,
     revokeApiKey,

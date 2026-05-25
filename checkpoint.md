@@ -2,9 +2,9 @@
 Phase: fix-phase-01
 Phase Title: Phase 1 Fix Phase — Coverage, E2E, Status Codes, Docusaurus, Docker
 Total Prompts This Phase: 3
-Completed: 1
-Current Prompt: fix-01-02-e2e-and-environments
-Next Prompt: fix-01-03-status-codes-docusaurus-docker
+Completed: 2
+Current Prompt: fix-01-03-status-codes-docusaurus-docker
+Next Prompt: phase-end (compile fix-phase-01-report.md)
 Phase End Status: not started
 Session Tokens: Low
 Last Updated: 2026-05-25

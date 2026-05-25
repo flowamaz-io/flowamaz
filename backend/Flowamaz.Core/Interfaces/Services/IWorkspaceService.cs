@@ -16,6 +16,10 @@ public interface IWorkspaceService
     Task<Workspace?> GetByIdAsync(Guid workspaceId, Guid orgId, CancellationToken cancellationToken = default);
 
     Task<List<Workspace>> GetForOrgAsync(Guid orgId, CancellationToken cancellationToken = default);
+
+    /// <summary>The workspace's three environments, ordered Dev → Staging → Production.</summary>
+    Task<List<WorkspaceEnvironment>> GetEnvironmentsAsync(Guid workspaceId, CancellationToken cancellationToken = default);
+
     Task UpdateSettingsAsync(Guid workspaceId, WorkspaceSettings settings, CancellationToken cancellationToken = default);
     Task SoftDeleteAsync(Guid workspaceId, CancellationToken cancellationToken = default);
 }

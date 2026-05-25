@@ -36,6 +36,14 @@ export interface CreateWorkspaceRequest {
   slug: string;
 }
 
+/** GET /api/v1/workspaces/{id}/environments item. Name is Dev / Staging / Production. */
+export interface WorkspaceEnvironment {
+  id: string;
+  name: string;
+  workspaceId: string;
+  createdAt: string;
+}
+
 export interface UpdateWorkspaceSettingsRequest {
   maxConcurrentRuns: number;
   runRetentionDays: number;

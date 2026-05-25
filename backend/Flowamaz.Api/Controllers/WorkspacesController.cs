@@ -65,6 +65,17 @@ public sealed class WorkspacesController : ControllerBase
         return workspace is null ? NotFound() : Ok(ToResponse(workspace));
     }
 
+    [HttpGet("{id:guid}/environments")]
+    [RequireWorkspaceRole(WorkspaceRole.Viewer)]
+    public async Task<ActionResult<IReadOnlyList<WorkspaceEnvironmentResponse>>> GetEnvironments(Guid id, CancellationToken cancellationToken)
+    {
+        var environments = await _workspaceService.GetEnvironmentsAsync(id, cancellationToken);
+        var response = environments
+            .Select(e => new WorkspaceEnvironmentResponse(e.Id, e.Name.ToString(), e.WorkspaceId, e.CreatedAt))
+            .ToList();
+        return Ok(response);
+    }
+
     [HttpPut("{id:guid}/settings")]
     [RequireWorkspaceRole(WorkspaceRole.Admin)]
     public async Task<ActionResult<WorkspaceResponse>> UpdateSettings(

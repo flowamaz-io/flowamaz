@@ -29,6 +29,8 @@ public sealed record FunctionOverrideRequest(string FunctionId, string Provider,
 
 public sealed record WorkspaceResponse(Guid Id, Guid OrgId, string Name, string Slug, WorkspaceSettings Settings, DateTime CreatedAt);
 
+public sealed record WorkspaceEnvironmentResponse(Guid Id, string Name, Guid WorkspaceId, DateTime CreatedAt);
+
 public sealed record WorkspaceListItem(Guid Id, string Name, string Slug, string Role);
 
 public sealed record MemberResponse(Guid OrgUserId, string Email, string Name, WorkspaceRole Role, DateTime JoinedAt, bool IsActive);

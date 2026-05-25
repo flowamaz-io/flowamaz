@@ -11,6 +11,7 @@ import type {
   UpdateAiConfigRequest,
   UpdateRoleRequest,
   UpdateWorkspaceSettingsRequest,
+  WorkspaceEnvironment,
   WorkspaceListItem,
   WorkspaceResponse,
 } from '@/types';
@@ -38,6 +39,11 @@ export const workspaceService = {
 
   async remove(id: string): Promise<void> {
     await http.delete(`/api/v1/workspaces/${id}`);
+  },
+
+  async getEnvironments(id: string): Promise<WorkspaceEnvironment[]> {
+    const res = await http.get<ApiEnvelope<WorkspaceEnvironment[]>>(`/api/v1/workspaces/${id}/environments`);
+    return unwrap(res);
   },
 
   // ── AI config ────────────────────────────────────────────────────────────

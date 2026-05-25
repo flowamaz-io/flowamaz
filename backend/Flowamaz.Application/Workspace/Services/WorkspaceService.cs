@@ -139,6 +139,25 @@ public sealed class WorkspaceService : IWorkspaceService
         }
     }
 
+    public async Task<List<WorkspaceEnvironment>> GetEnvironmentsAsync(
+        Guid workspaceId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("WorkspaceService.GetEnvironmentsAsync enter workspaceId={WorkspaceId}", workspaceId);
+        try
+        {
+            var environments = await _workspaceRepository.GetEnvironmentsAsync(workspaceId, cancellationToken);
+            var ordered = environments.OrderBy(e => e.Name).ToList();
+            _logger.LogDebug(
+                "WorkspaceService.GetEnvironmentsAsync exit workspaceId={WorkspaceId} count={Count}", workspaceId, ordered.Count);
+            return ordered;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "WorkspaceService.GetEnvironmentsAsync error workspaceId={WorkspaceId}", workspaceId);
+            throw;
+        }
+    }
+
     public async Task UpdateSettingsAsync(
         Guid workspaceId, WorkspaceSettings settings, CancellationToken cancellationToken = default)
     {

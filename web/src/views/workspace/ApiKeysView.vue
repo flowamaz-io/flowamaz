@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { KeyRound, Copy, Check } from 'lucide-vue-next';
 import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
@@ -34,19 +34,17 @@ const copied = ref(false);
 const revokeTarget = ref<ApiKeyResponse | null>(null);
 const revoking = ref(false);
 
-// Phase 1 exposes no environments list endpoint, so we offer environment IDs already seen on
-// existing keys plus a manual entry. (Deviation documented in results.md.)
-const knownEnvironments = computed(() =>
-  Array.from(new Set(ws.apiKeys.value.map((k) => k.environmentId))),
-);
+// Environments come from GET /workspaces/{id}/environments (Dev / Staging / Production).
+const environmentName = (id: string): string =>
+  ws.environments.value.find((e) => e.id === id)?.name ?? 'Unknown';
 
 async function load(): Promise<void> {
   loading.value = true;
   loadError.value = '';
   try {
-    await ws.loadApiKeys();
-    if (!environmentId.value && knownEnvironments.value.length > 0) {
-      environmentId.value = knownEnvironments.value[0]!;
+    await Promise.all([ws.loadApiKeys(), ws.loadEnvironments()]);
+    if (!environmentId.value && ws.environments.value.length > 0) {
+      environmentId.value = ws.environments.value[0]!.id;
     }
   } catch (e) {
     loadError.value = toUserFacingError(e).message;
@@ -205,6 +203,9 @@ async function confirmRevoke(): Promise<void> {
               Prefix
             </th>
             <th class="px-4 py-3">
+              Environment
+            </th>
+            <th class="px-4 py-3">
               Scopes
             </th>
             <th class="px-4 py-3">
@@ -228,6 +229,11 @@ async function confirmRevoke(): Promise<void> {
             </td>
             <td class="px-4 py-3">
               <code class="text-xs text-slate-500">{{ k.keyPrefix }}…</code>
+            </td>
+            <td class="px-4 py-3">
+              <FmBadge variant="slate">
+                {{ environmentName(k.environmentId) }}
+              </FmBadge>
             </td>
             <td class="px-4 py-3">
               <div class="flex flex-wrap gap-1">
@@ -276,26 +282,26 @@ async function confirmRevoke(): Promise<void> {
           help-article="workspaces/api-keys"
         />
         <div>
-          <label class="mb-1 block text-sm font-medium text-slate-700">Environment</label>
+          <label
+            for="api-key-environment"
+            class="mb-1 block text-sm font-medium text-slate-700"
+          >Environment</label>
           <select
-            v-if="knownEnvironments.length > 0"
+            id="api-key-environment"
             v-model="environmentId"
             class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
           >
             <option
-              v-for="env in knownEnvironments"
-              :key="env"
-              :value="env"
+              v-for="env in ws.environments.value"
+              :key="env.id"
+              :value="env.id"
             >
-              {{ env }}
+              {{ env.name }}
             </option>
           </select>
-          <FmInput
-            v-else
-            v-model="environmentId"
-            placeholder="Environment ID (UUID)"
-            hint="Paste the environment ID this key belongs to."
-          />
+          <p class="mt-1 text-xs text-slate-500">
+            Production keys are minted as <code>fmz_live_*</code>; Dev and Staging as <code>fmz_test_*</code>.
+          </p>
         </div>
         <div>
           <label class="mb-1 block text-sm font-medium text-slate-700">Scopes</label>

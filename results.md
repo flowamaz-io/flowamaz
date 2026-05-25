@@ -242,3 +242,34 @@ PM Agent appends after every prompt completes. Never overwrite — only append.
 1. RepositoryBase FindAsync→FirstOrDefaultAsync was already fixed in the codebase; only the proving test was added.
 2. WorkspaceEnvironmentDto/env-endpoint and E2E belong to fix-01-02; not in this commit.
 3. results.md had been truncated to its header in the working tree before this session — restored the full Phase-1 history from HEAD before appending (append-only rule).
+
+---
+
+## Fix-01-02 — Environments Endpoint + Live E2E 17/17  (2026-05-25)
+
+**Status:** Complete
+
+**Issues fixed**
+1. ApiKeysView used an environment-ID workaround (IDs scraped off existing keys + manual UUID entry) — no real environments list endpoint existed.
+2. The 17 Playwright scenarios had not been re-run live after the fix-phase changes.
+
+**Backend**
+- `GET /api/v1/workspaces/{id}/environments` added to `WorkspacesController` — `[RequireWorkspaceRole(Viewer)]`, returns the 3 environments ordered Dev → Staging → Production.
+- `IWorkspaceService.GetEnvironmentsAsync` + `WorkspaceService.GetEnvironmentsAsync` (delegates to the existing `IWorkspaceRepository.GetEnvironmentsAsync`, orders by `Name`, Serilog entry/exit/error).
+- `WorkspaceEnvironmentResponse(Id, Name, WorkspaceId, CreatedAt)` DTO (added to WorkspaceDtos.cs to match the one-file-of-records convention rather than a standalone file).
+- Integration test `EnvironmentsApiTests`: returns 3 in Dev/Staging/Production order with the correct workspaceId; a non-member org gets 4xx.
+
+**Frontend**
+- `workspace.service.ts` → `getEnvironments(id)`; store `environments` ref + `loadEnvironments()` action (cleared on workspace switch); exposed via `useWorkspace`.
+- `WorkspaceEnvironment` type added.
+- `ApiKeysView.vue`: environments loaded from the API on mount (alongside keys), the manual-UUID field replaced with a real `<select>` of Dev/Staging/Production by name, and a new "Environment" column shows the environment name (looked up by id) in the keys table. Loading/error states reuse the existing `load()` try/catch.
+
+**Results**
+- `dotnet build` 0/0; `dotnet test` **125 unit + 33 integration = 158 pass**.
+- Web: `vue-tsc` typecheck clean, `npm run build` green, vitest 6/6.
+- Playwright (Chromium, live stack — dev Postgres+Redis, `dotnet run` API on :5000, Vite on :5173): **17/17 passed (29.9s)**. HTML report generated at `web/playwright-report/` (gitignored, not committed). Ran with `E2E_REDIS_CONTAINER=flowamaz-dev-redis` so `resetRateLimits()` flushes the dev Redis between registrations.
+
+**Deviations**
+1. The repository already had `GetEnvironmentsAsync`/`GetEnvironmentByIdAsync` from prompt 02; only the service method, endpoint, DTO and ordering were new.
+2. DTO lives in WorkspaceDtos.cs (codebase convention), not a separate WorkspaceEnvironmentDto.cs as the prompt's file list illustrated.
+3. S11 still stubs the api-keys POST/GET (once-only-reveal is deterministic that way) but now loads real environments — the select is populated from the live endpoint; the test's optional manual-UUID branch is simply skipped since the field no longer renders.

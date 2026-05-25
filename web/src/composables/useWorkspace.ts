@@ -16,6 +16,7 @@ export function useWorkspace() {
     inviteMember: store.inviteMember,
     updateMemberRole: store.updateMemberRole,
     removeMember: store.removeMember,
+    loadEnvironments: store.loadEnvironments,
     loadApiKeys: store.loadApiKeys,
     createApiKey: store.createApiKey,
     revokeApiKey: store.revokeApiKey,
