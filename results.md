@@ -168,3 +168,29 @@ PM Agent appends after every prompt completes. Never overwrite — only append.
 2. Backend Dockerfile restores the **API project** (not the .sln, which references test projects whose csproj files aren't in the image context).
 3. `version:` key omitted from compose (obsolete in modern Compose; avoids the deprecation warning).
 4. **Not fully smoke-tested in this session:** the proxy couldn't bind host port 80 (already in use on this machine), and the full `/health` showed `db: unhealthy` because the local `.env` has an empty `DB_PASSWORD` (template not filled). Both are deployment-time provisioning concerns documented in DEPLOYMENT.md, not config bugs — Redis (same service-name wiring) is healthy, proving the network wiring.
+
+---
+
+## Prompt 08 — Help Content + docs.flowamaz.io  (2026-05-25)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- 15 complete Phase 1 help articles (~5,500 words) at the canonical paths: getting-started/ (6), workspaces/ (5), billing/ (4). Each has frontmatter (title, updated 2026-05-24, readingTime, plans badge), real content sourced from FUNCTIONAL.md (§13.2 limits table, §4.5 permission map, §1.6 editions, §15 CLI), and a "Was this helpful? / Edit on GitHub ↗" footer. No placeholder text.
+- Reorganised the prompt-06 stubs to canonical names (plans/ → billing/, fixed two getting-started filenames).
+- Docusaurus 3.x site under `docs/` (config, sidebars, package.json, README, custom.css, logo) with the 15 articles mirrored byte-identically to `docs/docs/`; `npm install` + `npx docusaurus build` succeed. `docs/.gitignore` excludes node_modules/build/.docusaurus. The prompt-07 DEVELOPMENT.md/DEPLOYMENT.md are untouched.
+- `articleMap.ts`: 7 route mappings + `errorArticleMap` (401/403/404/429) + error-code map (workspace_not_found/api_key_invalid/plan_limit_exceeded) + `articleForError()`.
+- `FmErrorState` accepts optional statusCode/errorCode and resolves a help article via the map (explicit helpArticle wins). `articleLoader`/`ArticleRenderer` now parse frontmatter and render a coloured plan badge.
+
+**DoD / acceptance checklist**
+- [x] 15 articles exist with complete content; placeholder scan (lorem/coming soon/TBD/placeholder) clean
+- [x] 15 mirrored to docs/docs; Docusaurus builds with `npx docusaurus build`
+- [x] `web` build green; vitest green; no `<style>` blocks
+- [x] articleMap covers all 7 Phase 1 routes; FmErrorState wired to error→article map
+- [x] Edit-on-GitHub footer links use the docs repo path format
+
+**Deviations**
+1. Article loader strips YAML frontmatter and exposes `plans`/`readingTime`; ArticleRenderer renders the plan badge (needed so frontmatter doesn't show as literal text — aligns with the spec's "render a coloured badge").
+2. Two articles' `<url>` autolinks converted to markdown links/inline code so Docusaurus 3 (MDX) compiles; content stays identical between web and docs.
+3. Docusaurus emits ~9 broken-relative-link warnings (cross-article links under `routeBasePath: '/'`); `onBrokenLinks: 'warn'` keeps the build green and in-app navigation (slug-based) is unaffected.
+4. Content written via a delegated sub-agent; independently verified (15 canonical paths, build/test green, placeholder scan clean, content spot-checked).

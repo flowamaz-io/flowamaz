@@ -10,12 +10,33 @@ const rawModules = import.meta.glob('./articles/**/*.md', {
 export interface HelpArticle {
   /** Slug without extension, e.g. "getting-started/cloud-signup". */
   slug: string;
-  /** First level-1 heading, used as the display title. */
+  /** Article title (frontmatter `title`, falling back to the first H1). */
   title: string;
   /** Section path derived from the folder, e.g. "Getting Started". */
   section: string;
-  /** Raw markdown body. */
+  /** Markdown body with the YAML frontmatter stripped. */
   content: string;
+  /** Plan badge from frontmatter: "All plans" | "Cloud only" | "Enterprise". */
+  plans?: string;
+  /** Reading-time estimate from frontmatter, e.g. "3 min read". */
+  readingTime?: string;
+}
+
+interface ParsedMarkdown {
+  data: Record<string, string>;
+  body: string;
+}
+
+/** Minimal YAML frontmatter parser — handles the flat string keys our articles use. */
+function parseFrontmatter(md: string): ParsedMarkdown {
+  const match = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!match) return { data: {}, body: md };
+  const data: Record<string, string> = {};
+  for (const line of match[1]!.split(/\r?\n/)) {
+    const kv = line.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
+    if (kv) data[kv[1]!] = kv[2]!.trim().replace(/^["']|["']$/g, '');
+  }
+  return { data, body: md.slice(match[0].length) };
 }
 
 function titleFromMarkdown(md: string, fallback: string): string {
@@ -26,7 +47,7 @@ function titleFromMarkdown(md: string, fallback: string): string {
 const SECTION_LABELS: Record<string, string> = {
   'getting-started': 'Getting Started',
   workspaces: 'Organisations & Workspaces',
-  plans: 'Plans & Billing',
+  billing: 'Plans & Billing',
 };
 
 function buildArticles(): Record<string, HelpArticle> {
@@ -35,11 +56,14 @@ function buildArticles(): Record<string, HelpArticle> {
     // path looks like "./articles/getting-started/cloud-signup.md"
     const slug = path.replace('./articles/', '').replace(/\.md$/, '');
     const folder = slug.split('/')[0] ?? '';
+    const { data, body } = parseFrontmatter(content);
     out[slug] = {
       slug,
-      title: titleFromMarkdown(content, slug),
+      title: data.title ?? titleFromMarkdown(body, slug),
       section: SECTION_LABELS[folder] ?? folder,
-      content,
+      content: body,
+      plans: data.plans,
+      readingTime: data.readingTime,
     };
   }
   return out;

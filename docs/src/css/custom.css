@@ -1,0 +1,15 @@
+/* Flowamaz docs theme. Brand purple from the SFG Trigger node colour (FUNCTIONAL.md §2.3). */
+:root {
+  --ifm-color-primary: #534ab7;
+  --ifm-color-primary-dark: #4a42a5;
+  --ifm-color-primary-darker: #463e9b;
+  --ifm-color-primary-darkest: #393380;
+  --ifm-color-primary-light: #6259c4;
+  --ifm-color-primary-lighter: #6b62c8;
+  --ifm-color-primary-lightest: #8a83d4;
+  --ifm-code-font-size: 95%;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #8a83d4;
+}

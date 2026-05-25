@@ -14,6 +14,18 @@ const feedback = ref<'up' | 'down' | null>(null);
 const html = computed(() => marked.parse(props.article.content, { async: false }) as string);
 const editUrl = computed(() => `${DOCS_GITHUB_BASE}/${props.article.slug}.md`);
 
+// Plan badge colour by tier (FUNCTIONAL.md §1.6 editions).
+const planBadgeClass = computed(() => {
+  switch (props.article.plans) {
+    case 'Cloud only':
+      return 'bg-primary-50 text-primary-700';
+    case 'Enterprise':
+      return 'bg-amber-50 text-amber-700';
+    default:
+      return 'bg-slate-100 text-slate-600';
+  }
+});
+
 function rate(value: 'up' | 'down'): void {
   feedback.value = value;
   toast.success(value === 'up' ? 'Thanks for the feedback!' : 'Thanks — we will improve this article.');
@@ -22,6 +34,23 @@ function rate(value: 'up' | 'down'): void {
 
 <template>
   <article>
+    <div
+      v-if="article.plans || article.readingTime"
+      class="mb-4 flex items-center gap-2 text-xs"
+    >
+      <span
+        v-if="article.plans"
+        :class="['inline-flex items-center rounded-full px-2 py-0.5 font-medium', planBadgeClass]"
+      >
+        {{ article.plans }}
+      </span>
+      <span
+        v-if="article.readingTime"
+        class="text-slate-400"
+      >
+        {{ article.readingTime }}
+      </span>
+    </div>
     <!-- Content is bundled, trusted markdown (our own docs) — safe to render. -->
     <div
       class="fmz-prose"

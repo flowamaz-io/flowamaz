@@ -1,22 +1,33 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { AlertTriangle } from 'lucide-vue-next';
 import FmButton from './FmButton.vue';
 import { useHelp } from '@/composables/useHelp';
+import { articleForError } from '@/help/articleMap';
 
 // FmErrorState NEVER renders "Something went wrong" — it states what happened, why, and the
-// next step, plus an optional help article (CLAUDE.md rule 8).
+// next step, plus an optional help article (CLAUDE.md rule 8). The article can be set
+// explicitly via `helpArticle`, or resolved automatically from an HTTP `statusCode` /
+// API `errorCode` (errorArticleMap). An explicit `helpArticle` always wins.
 const props = defineProps<{
   title: string;
   description: string;
   actionLabel?: string;
   helpArticle?: string;
+  statusCode?: number;
+  errorCode?: string;
 }>();
 
 defineEmits<{ action: [] }>();
 
 const help = useHelp();
+
+const resolvedArticle = computed<string | null>(
+  () => props.helpArticle ?? articleForError(props.statusCode, props.errorCode),
+);
+
 function openHelp(): void {
-  if (props.helpArticle) help.openArticle(props.helpArticle);
+  if (resolvedArticle.value) help.openArticle(resolvedArticle.value);
 }
 </script>
 
@@ -40,7 +51,7 @@ function openHelp(): void {
         {{ actionLabel }}
       </FmButton>
       <button
-        v-if="helpArticle"
+        v-if="resolvedArticle"
         type="button"
         class="text-sm font-medium text-primary-600 hover:text-primary-700"
         @click="openHelp"
