@@ -15,6 +15,7 @@ public sealed class CurrentUserContext
     public string? OrgSlug { get; init; }
     public string? Email { get; init; }
     public string? Name { get; init; }
+    public bool IsOrgOwner { get; init; }
 
     public bool IsApiKey { get; init; }
     public IReadOnlyList<WorkspaceMembership> WorkspaceMemberships { get; init; } = [];

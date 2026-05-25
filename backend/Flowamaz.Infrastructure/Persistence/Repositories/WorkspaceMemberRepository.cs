@@ -20,11 +20,27 @@ public sealed class WorkspaceMemberRepository(FlowAmazDbContext db) : IWorkspace
     public Task<List<WorkspaceMember>> GetForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>
         db.WorkspaceMembers.AsNoTracking().Where(m => m.WorkspaceId == workspaceId).ToListAsync(cancellationToken);
 
-    public Task<List<WorkspaceMembership>> GetActiveMembershipsForUserAsync(Guid orgUserId, CancellationToken cancellationToken = default) =>
+    public async Task<List<WorkspaceMembership>> GetActiveMembershipsForUserAsync(Guid orgUserId, CancellationToken cancellationToken = default)
+    {
+        // Project Role client-side: the column is stored as text, so a SQL "(int)Role" cast would
+        // try to parse e.g. "Viewer" as an integer and fail (Postgres 22P02).
+        var rows = await (
+            from m in db.WorkspaceMembers.AsNoTracking()
+            where m.OrgUserId == orgUserId && m.IsActive
+            join w in db.Workspaces.AsNoTracking() on m.WorkspaceId equals w.Id
+            select new { w.Id, w.Slug, w.Name, m.Role })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(r => new WorkspaceMembership(r.Id, r.Slug, r.Name, r.Role.ToString(), (int)r.Role))
+            .ToList();
+    }
+
+    public Task<List<WorkspaceMemberDetailDto>> GetDetailedMembersAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>
         (from m in db.WorkspaceMembers.AsNoTracking()
-         where m.OrgUserId == orgUserId && m.IsActive
-         join w in db.Workspaces.AsNoTracking() on m.WorkspaceId equals w.Id
-         select new WorkspaceMembership(w.Id, w.Slug, w.Name, m.Role.ToString(), (int)m.Role))
+         where m.WorkspaceId == workspaceId
+         join u in db.OrgUsers.AsNoTracking() on m.OrgUserId equals u.Id
+         select new WorkspaceMemberDetailDto(m.OrgUserId, u.Email, u.Name, m.Role, m.JoinedAt, m.IsActive))
         .ToListAsync(cancellationToken);
 
     public Task<int> CountActiveAdminsAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>

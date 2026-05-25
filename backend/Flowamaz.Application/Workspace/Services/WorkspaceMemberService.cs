@@ -172,6 +172,22 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
         }
     }
 
+    public async Task<List<WorkspaceMemberDetailDto>> GetDetailedMembersAsync(Guid workspaceId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("WorkspaceMemberService.GetDetailedMembersAsync enter workspaceId={WorkspaceId}", workspaceId);
+        try
+        {
+            var members = await _memberRepository.GetDetailedMembersAsync(workspaceId, cancellationToken);
+            _logger.LogDebug("WorkspaceMemberService.GetDetailedMembersAsync exit workspaceId={WorkspaceId} count={Count}", workspaceId, members.Count);
+            return members;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "WorkspaceMemberService.GetDetailedMembersAsync error workspaceId={WorkspaceId}", workspaceId);
+            throw;
+        }
+    }
+
     public async Task<WorkspaceRole?> GetMemberRoleAsync(Guid workspaceId, Guid orgUserId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("WorkspaceMemberService.GetMemberRoleAsync enter workspaceId={WorkspaceId} orgUserId={OrgUserId}", workspaceId, orgUserId);

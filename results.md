@@ -71,3 +71,40 @@ PM Agent appends after every prompt completes. Never overwrite — only append.
 3. **Responses use camelCase** (`accessToken`, `expiresIn`) per the existing ResponseWrapper/Web-JSON house style, not the snake_case shown illustratively in the prompt.
 4. Added `Microsoft.Extensions.Options` to Application and `System.IdentityModel.Tokens.Jwt` 8.0.1 (matching the transitively-resolved version) to Infrastructure.
 5. Replaced the prompt-01 `AnonymousCurrentUserService` stub with the real HttpContext-backed implementation (its own comment said this would happen in prompt 04).
+
+---
+
+## Prompt 05 — Workspace & Member Management API  (2026-05-25)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- `WorkspacesController` (list/create/get/settings/delete + ai-config GET/PUT), `WorkspaceMembersController` (list/add/update-role/remove), `WorkspaceApiKeysController` (list/create/revoke).
+- `RequireWorkspaceRoleAttribute` + `WorkspaceAuthorizationHandler` (TypeFilter): resolves workspaceId from route, 404s wrong-org workspaces (never 403), enforces minimum role via DB; `RequireOrgOwnerAttribute` + handler (is_org_owner claim).
+- `IWorkspaceAiConfigService` + impl: resolved per-function view (workspace/platform level) without resolving keys; updates validate provider against the org allowlist (OrgAiConfig → plan fallback) and model capability gates.
+- `is_org_owner` claim added to JWT → CurrentUserContext → ICurrentUserService.
+- Member-detail query (email/name) + service method; member DTOs/validators; `PagedResult<T>` pagination on all list endpoints.
+- Global `JsonStringEnumConverter` for controllers (string enums in/out).
+- Exceptions: `UserNotInOrganisationException` (404), `AlreadyMemberException` (409).
+- Tests: WorkspaceApiTests, MemberApiTests, ApiKeyTests (integration). Total now 76 unit + 26 integration green.
+
+**Bugs found & fixed during this prompt**
+- **Login 500 for any user with workspace memberships:** `GetActiveMembershipsForUserAsync` projected `(int)Role` in LINQ → EF emitted a SQL `role::int` cast, but the role column is text, so Postgres failed parsing `"Viewer"` as int. Now materialised then projected client-side. (Caught by the Viewer RBAC integration test.)
+- Enums serialised as integers by default → string-enum request binding (e.g. `marketplacePolicy:"AllowAll"`) failed and role responses were numbers. Fixed with a global `JsonStringEnumConverter`.
+
+**DoD / acceptance checklist**
+- [x] dotnet build 0/0; 76 unit + 26 integration pass
+- [x] Unknown email on add-member → 404 with "must register first"
+- [x] GET api-keys → PlainKey null in every item; POST api-keys → PlainKey present + `X-Plain-Key-One-Time: true`
+- [x] Viewer → POST members → 403 (integration test seeds a Viewer and logs in)
+- [x] Wrong org's workspace → 404 (not 403)
+- [x] AI config: Azure model when org allows only Anthropic → rejected (4xx)
+- [x] Pagination on all list endpoints
+- [x] Workspace isolation: role filter confirms org ownership before role check; service queries workspace-scoped
+
+**Deviations**
+1. Workspace request/response DTOs and `PagedResult<T>` are in `Application/Workspace/DTOs`; AI-config view types and `WorkspaceMemberDetailDto` are in `Core/Models` (Core service interfaces return them — clean architecture).
+2. AI-config validation failures surface as **422** (`ConfigViolationException`, reused from prompt 01) rather than the prompt's illustrative 400. Self-modification / last-admin return **409** (conflict) not 400.
+3. PUT settings validates providers against the known provider set (`AiProviders.All`); strict org-allowlist enforcement lives in the dedicated ai-config endpoint as specified.
+4. API-key callers cannot perform role-gated management actions in Phase 1 (handler denies); these endpoints are human-only.
+5. Integration tests run sequentially (`DisableTestParallelization`) — container-backed API tests contend when collections run in parallel; `AuthEndpointTests` migrated onto the shared `api` collection fixture.

@@ -22,6 +22,7 @@ public sealed class HttpContextCurrentUserService(IHttpContextAccessor accessor)
     public string? OrgSlug => Context?.OrgSlug;
     public string? Email => Context?.Email;
     public bool IsAuthenticated => Context is not null;
+    public bool IsOrgOwner => Context?.IsOrgOwner ?? false;
     public bool IsHumanUser => Context is { IsApiKey: false };
     public bool IsApiKey => Context is { IsApiKey: true };
     public IReadOnlyList<WorkspaceMembership> WorkspaceMemberships => Context?.WorkspaceMemberships ?? [];

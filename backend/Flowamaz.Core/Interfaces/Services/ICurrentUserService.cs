@@ -18,6 +18,9 @@ public interface ICurrentUserService
     string? Email { get; }
     bool IsAuthenticated { get; }
 
+    /// <summary>True when the JWT carries the is_org_owner claim — the org's single owner.</summary>
+    bool IsOrgOwner { get; }
+
     /// <summary>True for a human (JWT) caller. False for an API key or anonymous request.</summary>
     bool IsHumanUser { get; }
 

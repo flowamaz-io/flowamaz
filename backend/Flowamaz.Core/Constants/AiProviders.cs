@@ -11,4 +11,7 @@ public static class AiProviders
     public const string Kimi = "kimi";
     public const string Mistral = "mistral";
     public const string Byom = "byom";
+
+    /// <summary>Every recognised provider id — used to validate provider lists.</summary>
+    public static readonly IReadOnlyList<string> All = [Anthropic, AzureOpenAi, Google, Kimi, Mistral, Byom];
 }

@@ -3,87 +3,20 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Flowamaz.Infrastructure.Persistence;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.TestHost;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
-using StackExchange.Redis;
-using Testcontainers.PostgreSql;
-using Testcontainers.Redis;
+using Flowamaz.Tests.Integration.Common;
 
 namespace Flowamaz.Tests.Integration.Auth;
 
 /// <summary>
-/// Boots the real API against throwaway Postgres + Redis containers, applies all migrations, and
-/// exercises the auth endpoints end to end. Shared across the test class; each test resets Redis
-/// (rate-limit counters) and uses a fresh cookie-aware client.
+/// Exercises the auth endpoints end to end against the shared API fixture (real Postgres + Redis).
+/// Each test resets Redis (rate-limit counters) and uses a fresh cookie-aware client.
 /// </summary>
-public sealed class AuthApiFixture : IAsyncLifetime
+[Collection("api")]
+public class AuthEndpointTests
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine").WithDatabase("flowamaz_auth_test")
-        .WithUsername("flowamaz").WithPassword("flowamaz_test_pw").Build();
+    private readonly IntegrationApiFixture _fixture;
 
-    private readonly RedisContainer _redis = new RedisBuilder().WithImage("redis:7-alpine").Build();
-
-    private WebApplicationFactory<Flowamaz.Api.Program> _factory = null!;
-    private ConnectionMultiplexer _redisClient = null!;
-
-    public async Task InitializeAsync()
-    {
-        await _postgres.StartAsync();
-        await _redis.StartAsync();
-        _redisClient = await ConnectionMultiplexer.ConnectAsync($"{_redis.GetConnectionString()},allowAdmin=true");
-
-        _factory = new WebApplicationFactory<Flowamaz.Api.Program>().WithWebHostBuilder(builder =>
-        {
-            builder.UseEnvironment("Development"); // Secure=false cookies + a configured Jwt:Secret
-            // Swap persistence/cache registrations to the throwaway containers. Done in
-            // ConfigureTestServices (runs after the app's own registration) because in-memory
-            // configuration does not reliably override appsettings under WebApplicationFactory.
-            builder.ConfigureTestServices(services =>
-            {
-                services.RemoveAll<DbContextOptions<FlowAmazDbContext>>();
-                services.RemoveAll<DbContextOptions>();
-                services.AddDbContext<FlowAmazDbContext>(options => options.UseNpgsql(_postgres.GetConnectionString()));
-
-                services.RemoveAll<IConnectionMultiplexer>();
-                services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(_redis.GetConnectionString()));
-            });
-        });
-
-        using var scope = _factory.Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>().Database.MigrateAsync();
-    }
-
-    public async Task DisposeAsync()
-    {
-        await _redisClient.DisposeAsync();
-        await _factory.DisposeAsync();
-        await _redis.DisposeAsync();
-        await _postgres.DisposeAsync();
-    }
-
-    public HttpClient NewClient() =>
-        _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
-
-    /// <summary>Clears Redis rate-limit counters so each test starts with a clean window.</summary>
-    public async Task ResetRedisAsync()
-    {
-        var endpoint = _redisClient.GetEndPoints()[0];
-        await _redisClient.GetServer(endpoint).FlushDatabaseAsync();
-    }
-}
-
-public class AuthEndpointTests : IClassFixture<AuthApiFixture>
-{
-    private readonly AuthApiFixture _fixture;
-
-    public AuthEndpointTests(AuthApiFixture fixture) => _fixture = fixture;
+    public AuthEndpointTests(IntegrationApiFixture fixture) => _fixture = fixture;
 
     private static object RegisterBody(string slug, string email = "owner@acme.test", string password = "Sup3rSecret!") => new
     {
@@ -155,14 +88,12 @@ public class AuthEndpointTests : IClassFixture<AuthApiFixture>
             new { email = "flow@acme.test", password = "Sup3rSecret!", orgSlug = "acme-flow" });
         login.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // Cookie from login lets us refresh without a body.
         var refresh = await client.PostAsync("/api/v1/auth/refresh", null);
         refresh.StatusCode.Should().Be(HttpStatusCode.OK);
         (await DataAsync(refresh)).GetProperty("accessToken").GetString().Should().NotBeNullOrEmpty();
 
         (await client.PostAsync("/api/v1/auth/logout", null)).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // After logout the cookie is cleared, so a further refresh is unauthorized.
         var afterLogout = await client.PostAsync("/api/v1/auth/refresh", null);
         afterLogout.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -174,14 +105,12 @@ public class AuthEndpointTests : IClassFixture<AuthApiFixture>
         var client = _fixture.NewClient();
         await client.PostAsJsonAsync("/api/v1/auth/register", RegisterBody("acme-rotate", "rotate@acme.test"));
 
-        // Capture the first refresh cookie value, rotate once, then replay the old cookie.
         var login = await client.PostAsJsonAsync("/api/v1/auth/login",
             new { email = "rotate@acme.test", password = "Sup3rSecret!", orgSlug = "acme-rotate" });
         var oldCookie = ExtractRefreshCookie(login);
 
         (await client.PostAsync("/api/v1/auth/refresh", null)).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // Replay the pre-rotation cookie on a fresh client → must be rejected.
         var replayClient = _fixture.NewClient();
         var replay = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
         replay.Headers.Add("Cookie", $"fmz_refresh={oldCookie}");
@@ -220,7 +149,6 @@ public class AuthEndpointTests : IClassFixture<AuthApiFixture>
             bad.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
 
-        // 6th attempt — even with the correct password — is rejected as locked.
         var locked = await client.PostAsJsonAsync("/api/v1/auth/login",
             new { email = "lock@acme.test", password = "Sup3rSecret!", orgSlug = "acme-lock" });
         locked.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -230,7 +158,7 @@ public class AuthEndpointTests : IClassFixture<AuthApiFixture>
     private static string ExtractRefreshCookie(HttpResponseMessage response)
     {
         var setCookie = response.Headers.GetValues("Set-Cookie").First(c => c.StartsWith("fmz_refresh="));
-        var firstSegment = setCookie.Split(';')[0]; // fmz_refresh=<value>
+        var firstSegment = setCookie.Split(';')[0];
         return firstSegment["fmz_refresh=".Length..];
     }
 }

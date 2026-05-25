@@ -65,6 +65,7 @@ public sealed class JwtService : IJwtService
             new(JwtRegisteredClaimNames.Email, user.Email),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("name", user.Name),
+            new("is_org_owner", user.IsOrgOwner.ToString().ToLowerInvariant()),
             new(OrgIdClaim, user.OrgId.ToString()),
             new(OrgSlugClaim, orgSlug),
             // Stored as a plain JSON string (not JsonArray) so it stays a single claim and round-trips

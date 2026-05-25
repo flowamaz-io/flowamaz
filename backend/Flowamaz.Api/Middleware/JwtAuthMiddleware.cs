@@ -66,6 +66,7 @@ public sealed class JwtAuthMiddleware
             OrgSlug = principal.FindFirst("org_slug")?.Value,
             Email = principal.FindFirst(JwtRegisteredClaimNames.Email)?.Value,
             Name = principal.FindFirst("name")?.Value,
+            IsOrgOwner = principal.FindFirst("is_org_owner")?.Value == "true",
             IsApiKey = false,
             WorkspaceMemberships = jwtService.ExtractWorkspaceMemberships(principal),
         };

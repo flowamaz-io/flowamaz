@@ -20,6 +20,9 @@ public interface IWorkspaceMemberService
         Guid workspaceId, Guid targetUserId, Guid requestingUserId, CancellationToken cancellationToken = default);
 
     Task<List<WorkspaceMemberDto>> GetMembersAsync(Guid workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>Members enriched with email + name — for the members list view.</summary>
+    Task<List<WorkspaceMemberDetailDto>> GetDetailedMembersAsync(Guid workspaceId, CancellationToken cancellationToken = default);
     Task<WorkspaceRole?> GetMemberRoleAsync(Guid workspaceId, Guid orgUserId, CancellationToken cancellationToken = default);
     Task<bool> IsMemberAsync(Guid workspaceId, Guid orgUserId, CancellationToken cancellationToken = default);
 }

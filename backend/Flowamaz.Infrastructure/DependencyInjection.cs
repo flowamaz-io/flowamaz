@@ -73,6 +73,7 @@ public static class DependencyInjection
     private static void AddAiServices(IServiceCollection services)
     {
         services.AddScoped<IModelResolutionService, ModelResolutionService>();
+        services.AddScoped<IWorkspaceAiConfigService, WorkspaceAiConfigService>();
         services.AddSingleton<IRateLimitService, RateLimitService>();
         services.AddSingleton<ISemanticCacheService, SemanticCacheService>();
         services.AddSingleton<IAiTokenMeteringService, AiTokenMeteringService>();
