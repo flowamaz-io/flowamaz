@@ -1,0 +1,6 @@
+*.pem
+*.crt
+*.key
+!generate-dev-cert.sh
+!README.md
+!.gitignore

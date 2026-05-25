@@ -25,6 +25,24 @@ var builder = WebApplication.CreateBuilder(args);
 // ──────────────────────────────────────────────────────────────────────────────
 builder.Configuration.AddEnvironmentVariables();
 
+// The documented single-name JWT_* env vars (FUNCTIONAL.md §22 / .env.example) don't bind to the
+// Jwt:* keys the app reads (.NET would expect Jwt__Secret). Map them on, mirroring how
+// ConnectionStringResolver prefers DB_CONNECTION_STRING/REDIS_CONNECTION_STRING. Added last so they win.
+var jwtEnvMap = new Dictionary<string, string?>();
+foreach (var (envVar, configKey) in new[]
+{
+    ("JWT_SECRET", "Jwt:Secret"),
+    ("JWT_ISSUER", "Jwt:Issuer"),
+    ("JWT_AUDIENCE", "Jwt:Audience"),
+    ("JWT_ACCESS_TOKEN_EXPIRY_MINUTES", "Jwt:AccessTokenExpiryMinutes"),
+    ("JWT_REFRESH_TOKEN_EXPIRY_DAYS", "Jwt:RefreshTokenExpiryDays"),
+})
+{
+    var value = builder.Configuration[envVar];
+    if (!string.IsNullOrWhiteSpace(value)) jwtEnvMap[configKey] = value;
+}
+if (jwtEnvMap.Count > 0) builder.Configuration.AddInMemoryCollection(jwtEnvMap);
+
 // ──────────────────────────────────────────────────────────────────────────────
 // 2. Serilog — JSON to console + rolling file, CorrelationId enricher from LogContext.
 // ──────────────────────────────────────────────────────────────────────────────

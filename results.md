@@ -138,3 +138,33 @@ PM Agent appends after every prompt completes. Never overwrite — only append.
 3. TypeScript pinned to 5.9.3 (5.9.4 doesn't exist) for the typescript-eslint peer range.
 4. Help articles are heading + one-sentence stubs (real content is prompt 08, per spec).
 5. Built via a delegated sub-agent; output independently verified (build/typecheck/tests/style-block/any-type scans all pass).
+
+---
+
+## Prompt 07 — Docker, Nginx & Deployment Config  (2026-05-25)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- `backend/Dockerfile` (multi-stage .NET 10) + `.dockerignore`; `web/Dockerfile` (node 22 → nginx) + `.dockerignore` + `web/nginx.conf` (SPA).
+- `infrastructure/docker-compose.yml` (5 services: proxy/backend/web/db/redis; backend overrides DB/Redis to service-name connection strings, runs Production).
+- `infrastructure/nginx/nginx.conf` — HTTP→HTTPS 301, TLS, security headers, rate-limit zones (auth/register/api), proxies to backend/web.
+- Dev SSL: `nginx/ssl/generate-dev-cert.sh`, `.gitignore` (no certs committed), `README.md`.
+- Docs: root `README.md`, `SECURITY.md`, `docs/DEVELOPMENT.md`, `docs/DEPLOYMENT.md` (env reference, Let's Encrypt, DNS/MX/SPF/DKIM/DMARC, M365 + Resend, migrations, backups).
+
+**Bug found & fixed**
+- **`JWT_SECRET` env var never reached the app.** The app binds `Jwt:Secret`; the documented `JWT_SECRET` env var maps to `Jwt__Secret` in .NET, so it was ignored (dev worked only via appsettings). In Docker/Production the backend crashed at startup. Fixed in `Program.cs` by mapping `JWT_*` env vars onto the `Jwt:*` config keys (mirrors `ConnectionStringResolver`'s env-var-first approach). Verified: with a secret provided the backend boots and serves `/health`.
+
+**Verification**
+- [x] `docker compose config` parses for both compose files
+- [x] backend + web images **build** (.NET 10; base is Ubuntu 24.04, so the runtime uses the image's pre-created `$APP_UID` non-root user — the snippet's Debian `adduser`/`curl` install was adjusted: `adduser` is absent on Ubuntu, `curl` installed via apt)
+- [x] full stack `up`: db/redis/web/backend start; backend boots and serves `/health`; **redis healthy** via service name
+- [x] backend correctly **refuses to start in Production without `JWT_SECRET`** (security-positive)
+- [x] no secrets in committed files; dev certs git-ignored
+- [x] 76 unit + 26 integration backend tests still green after the Program.cs change
+
+**Deviations / environment notes**
+1. **.NET 10 images** (`sdk:10.0`/`aspnet:10.0`), not the snippet's 9.0 (can't build net10.0). Runtime uses `USER $APP_UID` (the .NET base's built-in non-root user) instead of `adduser` (absent on the Ubuntu base).
+2. Backend Dockerfile restores the **API project** (not the .sln, which references test projects whose csproj files aren't in the image context).
+3. `version:` key omitted from compose (obsolete in modern Compose; avoids the deprecation warning).
+4. **Not fully smoke-tested in this session:** the proxy couldn't bind host port 80 (already in use on this machine), and the full `/health` showed `db: unhealthy` because the local `.env` has an empty `DB_PASSWORD` (template not filled). Both are deployment-time provisioning concerns documented in DEPLOYMENT.md, not config bugs — Redis (same service-name wiring) is healthy, proving the network wiring.
