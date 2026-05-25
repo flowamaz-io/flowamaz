@@ -3,6 +3,7 @@ using Flowamaz.Core.Entities;
 using Flowamaz.Core.Entities.Ai;
 using Flowamaz.Core.Entities.Auth;
 using Flowamaz.Core.Entities.Platform;
+using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Infrastructure.Persistence.Configurations;
@@ -48,6 +49,14 @@ public class FlowAmazDbContext : DbContext
     public DbSet<WorkspaceApiKey> WorkspaceApiKeys => Set<WorkspaceApiKey>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    public DbSet<WorkflowDefinition> WorkflowDefinitions => Set<WorkflowDefinition>();
+    public DbSet<WorkflowVersion> WorkflowVersions => Set<WorkflowVersion>();
+    public DbSet<WorkflowInstance> WorkflowInstances => Set<WorkflowInstance>();
+    public DbSet<WorkflowEvent> WorkflowEvents => Set<WorkflowEvent>();
+    public DbSet<WorkflowNodeState> WorkflowNodeStates => Set<WorkflowNodeState>();
+    public DbSet<WorkflowVariable> WorkflowVariables => Set<WorkflowVariable>();
+    public DbSet<GateDecision> GateDecisions => Set<GateDecision>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -327,3 +327,38 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 - `dotnet build` 0/0; `dotnet test` **125 unit + 34 integration = 159 pass**.
 - Docs build: 0 broken links with `onBrokenLinks: 'throw'`.
 - Docker: 5/5 containers up, all 6 smoke checks pass.
+
+---
+
+## Prompt 02-01 — Workflow & Instance Entities + Event Log + Startup Migration  (2026-05-25)
+
+**Status:** Complete · pushed to `develop` · Phase 02 begins
+
+**Built**
+- 10 enums (`Flowamaz.Core/Enums`): WorkflowStatus, WorkflowCreatedByMethod, WorkflowTriggerType, InstanceStatus, InstanceTriggerType, SagaState, NodeStatus, GateDecisionStatus, GateDeliveryChannel, GateDeliveryStatus — all stored as string columns.
+- 7 entities (`Core/Entities/Workflow`): WorkflowDefinition, WorkflowVersion, WorkflowInstance (with a guarded state machine: `CanTransitionTo`/`TransitionTo`), WorkflowEvent (immutable — NOT a BaseEntity, so no soft delete / no UpdatedAt), WorkflowNodeState, WorkflowVariable, GateDecision.
+- 7 EF configurations + DbSets; snake_case + jsonb honoured by the existing global conventions.
+- Repositories: definition, version, instance, event (append-only), gate. `WorkflowInstanceRepository.GetPendingForWorkerAsync` uses a raw `FOR UPDATE SKIP LOCKED` data-modifying CTE (top-level, `IgnoreQueryFilters().AsNoTracking()` so EF never wraps the CTE in a subquery); `RenewLeaseAsync`/`ReleaseLeaseAsync` are ownership-checked `ExecuteSqlInterpolated` updates (30s lease).
+- `IStartupMigrationService` + `StartupMigrationService` (with an `IMigrationRunner` seam for unit-testing) — logs "Applying N pending migrations…" → names → complete; 2-min configurable timeout (`StartupMigrationTimeoutSeconds`); re-throws on failure. Wired into `Program.cs` in a service scope before `app.Run()` → travel-forward item from fix-01 (Docker now self-bootstraps its schema).
+- Migration `20260525124915_AddWorkflowSchema`.
+
+**Tests**
+- Unit: `WorkflowInstanceTests` (valid/invalid/terminal transitions), `WorkflowEventTests` (sequence increments + per-instance isolation on InMemory), `StartupMigrationServiceTests` (no-op / applies-once / re-throws via mocked runner).
+- Integration: `WorkerLeaseTests` (Testcontainers Postgres) — batch claim stamps lease, never reclaims live-leased rows, renew/release respect ownership, duplicate `idempotency_key` → `DbUpdateException`.
+
+**DoD / acceptance checklist**
+- [x] dotnet build 0/0
+- [x] dotnet test all pass — **149 unit + 38 integration**
+- [x] Migration applies cleanly on fresh Postgres (Testcontainers)
+- [x] WorkflowEvent: AppendAsync + reads only — no update/delete on repo
+- [x] SKIP LOCKED claim works (integration test)
+- [x] Startup migration: `docker compose up` applies migrations automatically (block before app.Run)
+- [x] IdempotencyKey unique — duplicate insert throws (integration test)
+- [x] All workspace-scoped reads filter by WorkspaceId
+
+**Deviations**
+1. The decision-value enum is named **`GateDecisionStatus`** (prompt listed it as `GateDecision`) to avoid colliding with the `GateDecision` entity.
+2. WorkflowVersion/NodeState/Variable/GateDecision inherit `WorkspaceEntity`, so they also carry `updated_at`/`is_deleted` (consistent with the Phase-1 convention). WorkflowEvent deliberately does not, to stay immutable.
+3. Entities use FK Guid columns with **no navigation properties** (matches the Phase-1 repos) — avoids EF required-relationship-vs-query-filter warnings and keeps 0 warnings.
+4. Repositories are silent pass-throughs (no Serilog), matching the Phase-1 repo precedent; Serilog entry/exit/error lives on the service (`StartupMigrationService`).
+5. `idempotency_key` unique index is global (per spec "IdempotencyKey unique"); Postgres treats NULLs as distinct so unkeyed triggers are unaffected.

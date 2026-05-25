@@ -194,6 +194,17 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 
 app.MapControllers();
 
+// ──────────────────────────────────────────────────────────────────────────────
+// 15. Apply pending EF Core migrations on boot so `docker compose up` self-bootstraps
+//     the schema — no manual `dotnet ef database update`. Failure stops startup.
+// ──────────────────────────────────────────────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var migrationService = scope.ServiceProvider
+        .GetRequiredService<Flowamaz.Core.Interfaces.Services.IStartupMigrationService>();
+    await migrationService.RunAsync(app.Lifetime.ApplicationStopping);
+}
+
 try
 {
     Log.Information("Flowamaz.Api starting — environment={Environment}", app.Environment.EnvironmentName);

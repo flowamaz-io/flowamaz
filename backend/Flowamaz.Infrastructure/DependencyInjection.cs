@@ -25,6 +25,7 @@ public static class DependencyInjection
         AddOptions(services, configuration);
         AddPersistence(services, configuration);
         AddRepositories(services);
+        AddStartupMigration(services);
         AddRedis(services, configuration);
         AddAiServices(services);
         AddAuthServices(services);
@@ -60,6 +61,18 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceMemberRepository, WorkspaceMemberRepository>();
         services.AddScoped<IWorkspaceApiKeyRepository, WorkspaceApiKeyRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+
+        services.AddScoped<IWorkflowDefinitionRepository, WorkflowDefinitionRepository>();
+        services.AddScoped<IWorkflowVersionRepository, WorkflowVersionRepository>();
+        services.AddScoped<IWorkflowInstanceRepository, WorkflowInstanceRepository>();
+        services.AddScoped<IWorkflowEventRepository, WorkflowEventRepository>();
+        services.AddScoped<IGateDecisionRepository, GateDecisionRepository>();
+    }
+
+    private static void AddStartupMigration(IServiceCollection services)
+    {
+        services.AddScoped<IMigrationRunner, EfMigrationRunner>();
+        services.AddScoped<IStartupMigrationService, StartupMigrationService>();
     }
 
     private static void AddRedis(IServiceCollection services, IConfiguration configuration)
