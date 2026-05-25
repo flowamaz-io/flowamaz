@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Flowamaz.Core.Entities;
 using Flowamaz.Core.Entities.Ai;
 using Flowamaz.Core.Entities.Platform;
+using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Infrastructure.Persistence.Configurations;
 using Flowamaz.Infrastructure.Persistence.Seed;
@@ -39,6 +40,11 @@ public class FlowAmazDbContext : DbContext
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<OrgUser> OrgUsers => Set<OrgUser>();
     public DbSet<UsageAggregate> UsageAggregates => Set<UsageAggregate>();
+
+    public DbSet<Workspace> Workspaces => Set<Workspace>();
+    public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
+    public DbSet<WorkspaceEnvironment> WorkspaceEnvironments => Set<WorkspaceEnvironment>();
+    public DbSet<WorkspaceApiKey> WorkspaceApiKeys => Set<WorkspaceApiKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

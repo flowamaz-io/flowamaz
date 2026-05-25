@@ -1,4 +1,5 @@
 using Flowamaz.Application.Platform.Services;
+using Flowamaz.Application.Workspace.Services;
 using Flowamaz.Core.Interfaces.Services;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +16,10 @@ public static class DependencyInjection
     {
         services.AddScoped<IOrganisationService, OrganisationService>();
         services.AddScoped<IOrgUserService, OrgUserService>();
+        services.AddScoped<IWorkspaceService, WorkspaceService>();
+        services.AddScoped<IWorkspaceMemberService, WorkspaceMemberService>();
+        services.AddScoped<IWorkspaceApiKeyService, WorkspaceApiKeyService>();
+        services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;
     }

@@ -57,6 +57,9 @@ public static class DependencyInjection
         services.AddScoped<IPlanRepository, PlanRepository>();
         services.AddScoped<IOrganisationRepository, OrganisationRepository>();
         services.AddScoped<IOrgUserRepository, OrgUserRepository>();
+        services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
+        services.AddScoped<IWorkspaceMemberRepository, WorkspaceMemberRepository>();
+        services.AddScoped<IWorkspaceApiKeyRepository, WorkspaceApiKeyRepository>();
     }
 
     private static void AddRedis(IServiceCollection services, IConfiguration configuration)

@@ -1,0 +1,21 @@
+using Flowamaz.Core.Entities.Workspaces;
+using Flowamaz.Core.Models;
+
+namespace Flowamaz.Core.Interfaces.Services;
+
+/// <summary>
+/// Workspace lifecycle. <see cref="CreateWorkspaceAsync"/> atomically provisions a workspace, its
+/// three environments (Dev/Staging/Production) and the creator as Admin.
+/// </summary>
+public interface IWorkspaceService
+{
+    Task<Workspace> CreateWorkspaceAsync(
+        Guid orgId, string name, string slug, Guid createdByUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>Org-ownership checked: returns null when the workspace belongs to a different org.</summary>
+    Task<Workspace?> GetByIdAsync(Guid workspaceId, Guid orgId, CancellationToken cancellationToken = default);
+
+    Task<List<Workspace>> GetForOrgAsync(Guid orgId, CancellationToken cancellationToken = default);
+    Task UpdateSettingsAsync(Guid workspaceId, WorkspaceSettings settings, CancellationToken cancellationToken = default);
+    Task SoftDeleteAsync(Guid workspaceId, CancellationToken cancellationToken = default);
+}
