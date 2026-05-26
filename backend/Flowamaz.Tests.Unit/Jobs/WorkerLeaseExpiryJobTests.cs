@@ -58,4 +58,29 @@ public class WorkerLeaseExpiryJobTests
 
         queue.Verify(q => q.EnqueueAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task Requeue_failure_is_logged_and_does_not_propagate()
+    {
+        var instances = new Mock<IWorkflowInstanceRepository>();
+        var queue = new Mock<ITaskQueue>();
+        instances.Setup(r => r.GetOrphanedAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WorkflowInstance
+            {
+                Id = Guid.NewGuid(),
+                WorkspaceId = Guid.NewGuid(),
+                Status = InstanceStatus.Running,
+                WorkerLeaseExpiresAt = DateTime.UtcNow.AddSeconds(-60),
+            }]);
+        queue.Setup(q => q.EnqueueAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("redis down"));
+
+        var job = new WorkerLeaseExpiryJob(instances.Object, queue.Object, NullLogger<WorkerLeaseExpiryJob>.Instance);
+        var context = new Mock<IJobExecutionContext>();
+        context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
+
+        var act = async () => await job.Execute(context.Object);
+
+        await act.Should().NotThrowAsync();
+    }
 }

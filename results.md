@@ -579,3 +579,30 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 2. Playwright S18–S25 are written to match the Phase-1 e2e patterns but require a live full stack + worker enabled (+ platform key for CEO) to execute — to be run in a Docker/CI environment, not in this build session.
 3. SagaTests assert the DB outcome (Failed + compensation events / Forward reset) over real Postgres; reverse compensation *ordering* is asserted by the `SagaEngine` unit test (recording worker) since the integration registry has no non-HTTP node worker.
 4. Coverage (Coverlet ≥80%) and Trivy image scan are run as part of the phase-end Testing/Security pass (see phase-02-report.md).
+
+---
+
+## Prompt fix-02-01 — Infrastructure/Workers + Jobs Coverage  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Built (tests only — no production code changed)**
+- `Tests.Unit/Workers/OrchestratorWorkerTests.cs` (10 tests): internal `ProcessInstanceAsync` — lease-not-acquired ack-only, step Complete ack+release, human-gate skips node execution, Continue→node success completes node, node failure fails node, node throw fails node without propagating, no executor registered skips node; plus the `BackgroundService` loop via Start/Stop — dequeue→dispatch→acknowledge, no-active-workspaces poll, queue-throws backoff without crash.
+- `Tests.Unit/Jobs/DelayedQueuePromoterJobTests.cs` (3): no ready items, promotes each ready item, enqueue-throws does not propagate.
+- `Tests.Unit/Jobs/GateTimeoutJobTests.cs` (4): no expired gates, expired+escalation-target sets Escalated (no FailNode), expired+no-target fails gate node, append-throws does not propagate.
+- `Tests.Unit/Jobs/ProcessIntelligenceJobWrapperTests.cs` (2): wrapper runs the service, service-throws does not propagate.
+- `Tests.Unit/Jobs/WorkerLeaseExpiryJobTests.cs` extended (+1): requeue-failure logged and not propagated.
+
+**Coverage (Coverlet, cobertura)**
+- `OrchestratorWorker`: 32/32 lines = **100%** (gate: Infrastructure/Workers ≥80% ✓)
+- `Infrastructure/Jobs`: 246/246 = **100%** — DelayedQueuePromoterJob 10/10, WorkerLeaseExpiryJob 18/18, GateTimeoutJob 26/26, ProcessIntelligenceJob 10/10 (gate ≥80% ✓)
+
+**DoD / acceptance**
+- [x] dotnet build 0 errors / 0 warnings
+- [x] dotnet test — **203 unit pass** (22 new), 0 fail
+- [x] Infrastructure/Workers ≥80% (100%), Infrastructure/Jobs ≥80% (100%)
+
+**Deviations from prompt text**
+1. Prompt named worker tests `ProcessNextAsync_*`; the real worker exposes internal `ProcessInstanceAsync` + the `ExecuteAsync` loop. Tests target the actual API (covered via `[InternalsVisibleTo]`, already present).
+2. Prompt's "promotion/requeue fails → first & third still processed" does not match the code: each job wraps its whole loop in one try/catch (a thrown enqueue stops the batch but never escapes the job). Tests assert the real resilience contract — failure is logged and does not propagate — rather than per-item continuation.
+3. `WorkerLeaseExpiryJob` re-queues orphans (no per-instance `LeaseExpired` event in the implementation); `ProcessIntelligenceJob` is a thin wrapper, so rich metric/SLA/AI/cache assertions live in `ProcessIntelligenceJobTests` (service) — the wrapper test only proves delegation + error-swallowing.

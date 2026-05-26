@@ -1,35 +1,20 @@
 ## Checkpoint
-Phase: 02
-Phase Title: Workflow Engine — Durable Execution + Observability
-Total Prompts This Phase: 8
-Completed: 8
-Current Prompt: 02-08-phase2-integration
-Next Prompt: PHASE_COMPLETE
-Phase End Status: PHASE_COMPLETE
+Phase: fix-phase-02
+Phase Title: Phase 2 Fix — Worker/Jobs Coverage, AI Wired, SLA Threshold, E2E, Trivy
+Total Prompts This Phase: 3
+Completed: 1
+Current Prompt: fix-02-02-workflow-service-coverage-ai-sla
+Next Prompt: fix-02-03-e2e-trivy-rescan
+Phase End Status: not started
 Session Tokens: Low
 Last Updated: 2026-05-26
 Notes: |
-  Phase 01 and fix-01 complete. Phase 02 in progress.
-  02-01: workflow/instance entities, event log, SKIP LOCKED claim, StartupMigrationService.
-  02-02: SfgParser, WorkflowOrchestrator, RedisTaskQueue, OrchestratorWorker, DelayedQueuePromoterJob, VariableEvaluationService.
-  02-03: HttpActionWorker (INodeWorker) + NodeWorkerRegistry, SagaEngine (Backward/Forward/Pivot),
-  WorkerLeaseExpiryJob (15s) + GateTimeoutJob (60s).
-  02-04: WorkflowDefinitions/Instances/Gates controllers + WorkflowService/InstanceService/GateService,
-  InstanceStatusWebSocketHandler (/ws, polling, ?token= JWT).
-  02-05: WorkflowInterpreterService (CEO/Auditor/Developer), AiCompletionService seam, enriched timeline,
-  StepDebuggerService (Dev/Staging-only, Redis state).
-  02-06: Vue views (Workflow list/detail, Instance list/detail), FmRunTimeline, FmInterpreterPanel,
-  TriggerModal, useInstanceWebSocket, workflow.store + services.
-  02-07: Analytics entities + migration, ProcessIntelligenceService (hourly job), WorkflowWeatherService,
-  InsightService, weather/insights controllers, FmWorkflowWeather + dashboard real data.
-  02-08: end-to-end wiring (FailNode→SagaEngine, worker executes nodes via registry); Phase2 lifecycle/
-  saga/concurrency integration tests; Playwright S18-S25; PHASE_COMPLETE.
-  Backend build 0/0; 183 unit + 56 integration. Web build 0 TS errors, 13 vitest.
-  PHASE 02 COMPLETE — phase-end done: 183 unit + 56 integration green; Trivy 0 CRITICAL/0 HIGH;
-  phase-02-report.md compiled; notify hook fired. fix-02 recommended (coverage on worker/jobs +
-  workflow-service read paths to clear >=80%; run Playwright S18-S25 in CI). Awaiting human review.
-  Background worker + Quartz gated by Worker:Enabled (off in integration tests via Worker__Enabled=false).
-  DEFERRED to 02-08: wire node executors into OrchestratorWorker loop, invoke SagaEngine from
-  WorkflowOrchestrator.FailNodeAsync, and have the worker honour debugger pause points (full E2E loop).
-  Execution model: continuous — run all 8 prompts without stopping. Push to develop after each.
-  Stop only at PHASE_COMPLETE after prompt 08. Phase report: phase-02-report.md
+  Phase 02 complete. Fix phase addresses:
+  1. Infrastructure/Workers 0% + Infrastructure/Jobs 20% coverage
+  2. Application/Workflow 73% coverage (read paths + orchestrator methods)
+  3. Wire real Anthropic.SDK in AiCompletionService
+  4. Add SlaThresholdMs to WorkflowDefinition
+  5. Execute Playwright S18-S25 live (25 total)
+  6. Trivy rescan after Phase 2 NuGet additions
+
+  Fix phase report: fix-phase-02-report.md
