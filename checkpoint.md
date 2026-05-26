@@ -2,9 +2,9 @@
 Phase: 02
 Phase Title: Workflow Engine — Durable Execution + Observability
 Total Prompts This Phase: 8
-Completed: 5
-Current Prompt: 02-06-frontend-workflow-views
-Next Prompt: 02-07-process-intelligence
+Completed: 6
+Current Prompt: 02-07-process-intelligence
+Next Prompt: 02-08-phase2-integration
 Phase End Status: not started
 Session Tokens: Low
 Last Updated: 2026-05-26
@@ -17,7 +17,10 @@ Notes: |
   02-04: WorkflowDefinitions/Instances/Gates controllers + WorkflowService/InstanceService/GateService,
   InstanceStatusWebSocketHandler (/ws, polling, ?token= JWT).
   02-05: WorkflowInterpreterService (CEO/Auditor/Developer), AiCompletionService seam, enriched timeline,
-  StepDebuggerService (Dev/Staging-only, Redis state). Build 0/0; 174 unit + 50 integration green.
+  StepDebuggerService (Dev/Staging-only, Redis state).
+  02-06: Vue views (Workflow list/detail, Instance list/detail), FmRunTimeline, FmInterpreterPanel,
+  TriggerModal, useInstanceWebSocket, workflow.store + services. web build 0 TS errors, 13 vitest pass.
+  Backend: build 0/0; 174 unit + 50 integration green.
   Background worker + Quartz gated by Worker:Enabled (off in integration tests via Worker__Enabled=false).
   DEFERRED to 02-08: wire node executors into OrchestratorWorker loop, invoke SagaEngine from
   WorkflowOrchestrator.FailNodeAsync, and have the worker honour debugger pause points (full E2E loop).

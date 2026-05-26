@@ -1,6 +1,7 @@
 export * from './api';
 export * from './auth';
 export * from './workspace';
+export * from './workflow';
 
 export interface Toast {
   id: number;

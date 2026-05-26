@@ -491,3 +491,32 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 2. Download returns markdown (not PDF) — "keep it simple for Phase 2"; PDF rendering deferrable.
 3. Worker honouring pause points (the worker consulting `IDebugStateStore` before each step) is **deferred to 02-08** with the full execution-loop wiring; 02-05 ships the store + service + 403 gate, unit-tested.
 4. Added `EnvironmentType` to `WorkflowInstance` (default Dev) so the debugger's Production gate is enforceable; triggers default to Dev (per-environment triggering arrives with API-key environment context later).
+
+---
+
+## Prompt 02-06 — Frontend: Workflow + Instance Views, Timeline, Interpreter  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Built (Vue 3, Composition API, TS strict, zero style blocks)**
+- **Views:** `WorkflowListView` (search/status filter, health-score colour band, trigger modal, creation-method icons in empty state), `WorkflowDetailView` (Overview/Instances/Versions/YAML tabs + Publish), `InstanceListView` (status/date filters, live badge updates via per-instance WebSocket, "Live · N" indicator), `InstanceDetailView` (Timeline/Nodes/Variables/Events/Narrative tabs, Cancel/Retry, live status).
+- **Components:** `FmRunTimeline` (waterfall — bar `left%`=offset/total, `width%`=duration/total), `FmInterpreterPanel` (CEO/Auditor/Developer tabs, markdown render, download; CEO enabled only when Completed), `TriggerModal` (workflow select + JSON payload validation + idempotency-key generate).
+- **Composable:** `useInstanceWebSocket` (ws:// from BASE_URL, `?token=` JWT, exponential backoff reconnect capped 30s / 5 retries → `lost`, reactive state + frame callback).
+- **Store/services/types:** `workflow.store` (workflows/instances/timeline + `applyStatusUpdate` for live), `workflow.service` + `instance.service`, `types/workflow.ts`, `utils/workflow.util.ts` (badge variants, health colour, duration). Routes + Sidebar nav (Workflows, Instances) wired.
+
+**Tests**
+- `FmRunTimeline.test.ts` (bar positioning relative to total, zero-total safe), `useInstanceWebSocket.test.ts` (connect→live→frame, backoff reconnect, lost after max retries, disconnect stops reconnect).
+
+**DoD / acceptance**
+- [x] `npm run build` — 0 TypeScript errors; `npm run test` — **13 passing** (incl. 2 existing)
+- [x] Zero `<style>` blocks; Composition API; TS strict (no `any`)
+- [x] Run Timeline bars positioned by offset_ms / total_duration_ms
+- [x] WebSocket reconnect: exponential backoff, max 5 retries → "lost"
+- [x] Sensitive variables display the backend-masked `***` (never requested unmasked)
+- [x] All list views have loading / empty (FmEmptyState) / error (FmErrorState) states
+
+**Deviations**
+1. Payload + YAML editors use a `<textarea>`/`<pre>` (JSON validated on submit) rather than CodeMirror — the CodeMirror editor lands with the Phase 3 canvas; kept simple for Phase 2.
+2. Developer narrative renders the backend's markdown (the backend produces markdown, not a JSON tree) — same panel as CEO/Auditor.
+3. `InstanceListView` live updates open one WebSocket per non-terminal instance (capped at 20). A single workspace-level stream would scale better and is a sensible future improvement.
+4. No functional "create workflow" UI — creation methods are Phase 3 (the empty state previews the six methods, greyed).
