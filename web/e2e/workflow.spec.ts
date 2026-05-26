@@ -34,9 +34,16 @@ test.describe('Workflows (S18–S20)', () => {
     await page.goto('/workflows');
     // Top "Trigger run" opens the modal; the modal's "Trigger run" submits.
     await page.getByRole('button', { name: 'Trigger run' }).first().click();
+    // Wait for the trigger POST to finish before navigating — otherwise the goto below aborts the
+    // in-flight request and no instance is created.
+    const triggered = page.waitForResponse(
+      (r) => new URL(r.url()).pathname.endsWith('/instances') && r.request().method() === 'POST',
+    );
     await page.getByRole('button', { name: 'Trigger run' }).last().click();
+    await triggered;
 
     await page.goto('/instances');
-    await expect(page.getByText(/Pending|Running|Completed/).first()).toBeVisible();
+    // Scope to the table body — the status filter <select> has matching (hidden) <option>s.
+    await expect(page.locator('tbody').getByText(/Pending|Running|Completed/).first()).toBeVisible();
   });
 });

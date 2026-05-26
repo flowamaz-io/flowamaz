@@ -1,10 +1,12 @@
 using System.Net;
 using System.Text;
 using FluentAssertions;
+using Flowamaz.Core.Configuration;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Models;
 using Flowamaz.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 
 namespace Flowamaz.Tests.Unit.Ai;
@@ -20,6 +22,9 @@ public class AiCompletionServiceTests
     private static ModelConfig Config(string? apiKey) =>
         new("claude-haiku-4-5", "anthropic", AiKeySource.Platform, apiKey, false, 200_000, true, true);
 
+    private static IOptions<AiOptions> Options(bool useStub = false) =>
+        Microsoft.Extensions.Options.Options.Create(new AiOptions { UseStubCompletion = useStub });
+
     private static (Mock<IHttpClientFactory> factory, RecordingHandler handler) FactoryReturning(
         HttpStatusCode status, string body)
     {
@@ -34,7 +39,7 @@ public class AiCompletionServiceTests
     {
         var factory = new Mock<IHttpClientFactory>();
         var logger = new Mock<ILogger<AiCompletionService>>();
-        var service = new AiCompletionService(factory.Object, logger.Object);
+        var service = new AiCompletionService(factory.Object, Options(), logger.Object);
 
         var result = await service.CompleteAsync(Config(apiKey: ""), "system", "Order total is 47500.");
 
@@ -54,7 +59,7 @@ public class AiCompletionServiceTests
               "usage": { "input_tokens": 11, "output_tokens": 7 } }
             """;
         var (factory, handler) = FactoryReturning(HttpStatusCode.OK, body);
-        var service = new AiCompletionService(factory.Object, NullLogger());
+        var service = new AiCompletionService(factory.Object, Options(), NullLogger());
 
         var result = await service.CompleteAsync(Config("sk-ant-test"), "system", "summarise this run");
 
@@ -70,11 +75,23 @@ public class AiCompletionServiceTests
     public async Task ProviderReturnsError_PropagatesException()
     {
         var (factory, _) = FactoryReturning(HttpStatusCode.InternalServerError, "{\"error\":\"overloaded\"}");
-        var service = new AiCompletionService(factory.Object, NullLogger());
+        var service = new AiCompletionService(factory.Object, Options(), NullLogger());
 
         var act = async () => await service.CompleteAsync(Config("sk-ant-test"), "system", "user");
 
         await act.Should().ThrowAsync<HttpRequestException>();
+    }
+
+    [Fact]
+    public async Task UseStubCompletion_ForcesStubEvenWithKey()
+    {
+        var factory = new Mock<IHttpClientFactory>();
+        var service = new AiCompletionService(factory.Object, Options(useStub: true), NullLogger());
+
+        var result = await service.CompleteAsync(Config("sk-ant-test"), "system", "Order total is 47500.");
+
+        result.Text.Should().Contain("47500");
+        factory.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never); // no provider call despite key
     }
 
     private static ILogger<AiCompletionService> NullLogger() =>

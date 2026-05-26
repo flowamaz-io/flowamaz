@@ -56,6 +56,7 @@ test.describe('Instance detail (S21–S23)', () => {
     await page.goto(`/instances/${instanceId}`);
     await page.getByRole('button', { name: 'narrative' }).click();
     await page.getByRole('button', { name: 'Auditor' }).click();
-    await expect(page.getByText(/Compliance Record|InstanceStarted/)).toBeVisible();
+    // The Auditor narrative is the deterministic compliance record (unique heading + event log).
+    await expect(page.getByRole('heading', { name: /Compliance Record/ })).toBeVisible();
   });
 });

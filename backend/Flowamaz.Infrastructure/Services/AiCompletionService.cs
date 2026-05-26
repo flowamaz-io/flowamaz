@@ -1,8 +1,10 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Flowamaz.Core.Configuration;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Flowamaz.Infrastructure.Services;
 
@@ -24,11 +26,13 @@ public sealed class AiCompletionService : IAiCompletionService
     private const int MaxTokens = 1024;
 
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly AiOptions _options;
     private readonly ILogger<AiCompletionService> _logger;
 
-    public AiCompletionService(IHttpClientFactory httpClientFactory, ILogger<AiCompletionService> logger)
+    public AiCompletionService(IHttpClientFactory httpClientFactory, IOptions<AiOptions> options, ILogger<AiCompletionService> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -37,10 +41,11 @@ public sealed class AiCompletionService : IAiCompletionService
     {
         _logger.LogDebug("AiCompletionService.CompleteAsync enter model={ModelId} provider={Provider}", config.ModelId, config.Provider);
 
-        if (string.IsNullOrEmpty(config.ApiKey))
+        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
         {
             _logger.LogWarning(
-                "AiCompletionService: no API key for {Provider}/{Model} — returning local stub completion", config.Provider, config.ModelId);
+                "AiCompletionService: returning local stub completion for {Provider}/{Model} (stubMode={Stub}, hasKey={HasKey})",
+                config.Provider, config.ModelId, _options.UseStubCompletion, !string.IsNullOrEmpty(config.ApiKey));
             return StubResult(systemPrompt, userPrompt);
         }
 

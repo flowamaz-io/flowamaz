@@ -647,3 +647,45 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 1. Prompt prescribed wiring the `Anthropic.SDK` NuGet with a `MessageCreateParams`/`client.Messages.CreateAsync` shape. Implemented the same behaviour via a direct Anthropic **Messages REST call over the injected HttpClient** instead: keeps the build hermetic (no unverified external API surface under Infrastructure's `TreatWarningsAsErrors`), avoids a real-key dependency, and makes the provider call unit-testable with a mock transport. `IAiCompletionService` stays provider-agnostic — swapping in the SDK later is a one-class change. Metering stays in the caller (`ProcessIntelligenceService`/`WorkflowInterpreterService`) as in the existing architecture, not inside `CompleteAsync` as the prompt sketch showed.
 2. Prompt listed `InstanceService.CancelAsync` (409 on completed); cancel actually lives on the orchestrator, so those cases are covered in `WorkflowOrchestratorTests` (CancelAsync no-op on a terminal instance). `GetEventsAsync` has no pagination in the codebase — tested as full return + null-when-missing instead.
 3. Added `WorkflowServiceTests` + `GateServiceTests` + `WorkflowValidatorsTests` beyond the prompt's named list to clear the Application/Workflow coverage gate (WorkflowService/GateService were the remaining 0% services dragging the aggregate).
+
+---
+
+## Prompt fix-02-03 — E2E Live (S1–S25) + Trivy Rescan  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Live stack**
+- Dependencies: `flowamaz-dev-db` (Postgres 16) + `flowamaz-dev-redis` already up via docker-compose.dev.yml.
+- Backend: ran `Flowamaz.Api.dll` on :5000, `Development`, **worker enabled**, dev DB/redis, `Ai__AnthropicPlatformKey=test-platform-key` + `Ai__UseStubCompletion=true` (F5 resolves; CEO narrative returns the local stub — no billed call). Startup migration applied `AddWorkflowSlaThreshold` to the dev DB cleanly.
+- Frontend: Vite dev server on :5173 (`VITE_API_BASE_URL=http://localhost:5000`).
+
+**Playwright — 25/25 passed (S1–S25), 0 failed**
+- S1–S17 (auth, workspace, onboarding, help) — no regressions.
+- S18–S25 (workflow list/trigger, instance timeline/CEO+Auditor narrative, dashboard cards + Workflow Weather) — all green.
+- Two S18–S25 scenarios needed **test-only** fixes (app behaviour was correct):
+  - **S20**: after the trigger-modal submit, `page.goto('/instances')` aborted the in-flight trigger POST → no instance. Fixed by awaiting the trigger `POST …/instances` response before navigating; status assertion scoped to `tbody` (the status-filter `<select>` had matching hidden `<option>`s).
+  - **S23**: regex matched both the `<h1>Compliance Record</h1>` and `<strong>InstanceStarted</strong>` (strict-mode violation). Fixed by asserting the unique Auditor heading `Compliance Record`.
+- New affordance to run keyless: `Ai:UseStubCompletion` flag on `AiOptions` forces the local stub even when a key is configured (so F5 model resolution succeeds without a billed call). Integration fixture switched from a DI stub override to this flag. Unit test added (`UseStubCompletion_ForcesStubEvenWithKey`).
+
+**Trivy 0.70.0 — 0 Critical / 0 High on all three scans**
+- `trivy fs ./backend` (NuGet deps, incl. Phase-2 Quartz.NET + YamlDotNet): **0** across every `*.deps.json`.
+- `trivy image flowamaz-backend:phase2-fix` (ubuntu 24.04 + .NET 10.0.8 ASP.NET/runtime): **0**.
+- `trivy image flowamaz-web:phase2-fix` (alpine 3.23.4 nginx): **0**.
+- No package bumps required.
+
+**DoD / acceptance**
+- [x] Full dev stack (postgres, redis, backend+worker, frontend) running during E2E
+- [x] `npx playwright test` → **25 passed, 0 failed** (S1–S25); S18–S25 green; S1–S17 no regressions
+- [x] Trivy backend image 0 HIGH/CRITICAL; web image 0 HIGH/CRITICAL; `fs ./backend` 0 HIGH/CRITICAL
+- [x] dotnet build 0/0; 256 unit + 56 integration pass
+
+**Deviations from prompt text**
+1. The prompt anticipated the Phase-2 "stub always" completion and said S22 should accept any non-empty CEO narrative. Since fix-02-02 wired a real call gated on a key, a keyless live run is achieved with the new `Ai:UseStubCompletion` flag (dummy key for F5 resolution + forced stub), keeping S22/S23 deterministic without a billed call or a real key.
+2. Images tagged `:phase2-fix` (not `:phase2`) to avoid clobbering the earlier phase-2 tag. Backend base image is `ubuntu 24.04` (the Dockerfile's chosen .NET runtime image), web is `alpine` nginx — both scanned clean.
+3. No `Anthropic.SDK` NuGet was added (see fix-02-02 deviation 1), so the "rescan after Anthropic.SDK" concern is moot; Quartz.NET + YamlDotNet (the real Phase-2 additions) scanned clean.
+
+---
+
+## Phase fix-02 — PHASE COMPLETE  (2026-05-26)
+
+All 3 fix prompts complete. Phase-end gates: unit 256 + integration 56 = **312 tests pass**; Infrastructure/Workers + Jobs 100%; Workflow services ≥92%; AI completion 98.5%; 25/25 Playwright E2E green; Trivy 0 Critical/High on backend image, web image, and backend NuGet deps. See `fix-phase-02-report.md`.
