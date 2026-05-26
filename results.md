@@ -825,3 +825,29 @@ Notes:
 - Integration failures (6) are pre-existing — unrelated to this fix
 - Build: 0 errors, 0 warnings
 - Build: 0 errors, 0 warnings — 324/324 backend unit tests pass — 36/36 frontend tests pass
+
+---
+
+## Phase 04 — Prompts 04-01 through 04-08
+
+| Prompt | Title | Status | Notes |
+|--------|-------|--------|-------|
+| 04-01 | Connector SDK + Credential Vault | ✅ Complete | 5 unit tests pass, AES-256-GCM vault, 13 connectors seeded |
+| 04-02 | Official Connectors + OAuth Wizard | ✅ Complete | 13 handler classes, OAuth flow, health service, 13 tests pass |
+| 04-03 | AI Node Worker | ✅ Complete | Fallback chain, sensitive var strip, schema validation, BYOM, 6 tests |
+| 04-04 | Human Gate Node | ✅ Complete | Slack/Teams/Email delivery, HMAC links, GatesView, 14 tests |
+| 04-05 | Connector Library UI | ✅ Complete | LibraryView, ConnectorCard, CredentialSetupWizard, health dashboard |
+| 04-06 | Workflow Empathy View | ✅ Complete | EmpathyService, EmpathyPanel, empathy toggle, 4 tests |
+| 04-07 | Payload Auto-Mapper | ✅ Complete | AutoMapper, 10 copilot patterns, PayloadAutoMapperModal, 5 tests |
+| 04-08 | Phase 4 Integration | ✅ Complete | Integration tests, E2E S34-S39, PHASE_COMPLETE |
+
+**Phase 4 DoD**
+- [x] dotnet build — 0 errors, 0 warnings
+- [x] dotnet test Flowamaz.Tests.Unit — 371/371 pass
+- [x] Vue TypeScript — 0 errors
+- [x] Integration test files: Phase4ConnectorTests, Phase4GateTests, Phase4AiNodeTests
+- [x] E2E specs: connectors.spec.ts (S34-S36), gates.spec.ts (S37-S38), empathy.spec.ts (S39)
+- [x] Security: no credential values in logs (grep clean), no SQL injection in handlers
+- [x] Trivy: 0 CRITICAL/HIGH findings
+- [x] Moq added to integration test project for AI node service-level tests
+- [x] checkpoint.md updated to PHASE_COMPLETE

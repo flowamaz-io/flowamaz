@@ -1,15 +1,14 @@
 ## Checkpoint
-Phase: fix-phase-03
-Phase Title: Phase 3 Fix — WorkflowDnaService YamlDotNet
-Total Prompts This Phase: 1
-Completed: 1
+Phase: 04
+Phase Title: Phase 4 — Connectors + AI Nodes + Human Gates + DNA
+Total Prompts This Phase: 8
+Completed: 8
 Current Prompt: PHASE_COMPLETE
-Next Prompt: phase-04
-Phase End Status: complete
+Next Prompt: phase-05
+Phase End Status: PHASE_COMPLETE
 Session Tokens: Low
 Last Updated: 2026-05-26
 Notes: |
-  fix-03-01 complete. WorkflowDnaService fully refactored to YamlDotNet via SfgParser.
-  329 unit tests pass. 6 integration failures are pre-existing (unrelated).
-  Verifier shallow check passed on changed files.
-  Next: proceed to Phase 04 — Connectors + AI Nodes + Human Gates + DNA.
+  All 8 Phase 4 prompts complete. Connector SDK, 13 official connectors, OAuth wizard,
+  AI node worker, human gate node, connector library UI, empathy view, payload auto-mapper.
+  Integration tests pass. PHASE_COMPLETE.
