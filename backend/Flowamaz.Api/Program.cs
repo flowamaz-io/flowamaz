@@ -185,6 +185,13 @@ if (backgroundWorkersEnabled)
         q.AddJob<GateTimeoutJob>(gateKey);
         q.AddTrigger(t => t.ForJob(gateKey)
             .WithSimpleSchedule(s => s.WithIntervalInSeconds(60).RepeatForever()));
+
+        // Process Intelligence hourly, with up to 5min jitter to avoid a thundering herd (prompt 02-07).
+        var intelKey = new JobKey(nameof(ProcessIntelligenceJob));
+        q.AddJob<ProcessIntelligenceJob>(intelKey);
+        q.AddTrigger(t => t.ForJob(intelKey)
+            .StartAt(DateBuilder.FutureDate(Random.Shared.Next(0, 300), IntervalUnit.Second))
+            .WithSimpleSchedule(s => s.WithIntervalInHours(1).RepeatForever()));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 }

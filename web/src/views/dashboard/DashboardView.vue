@@ -1,22 +1,43 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import { storeToRefs } from 'pinia';
 import GettingStartedChecklist from '@/components/onboarding/GettingStartedChecklist.vue';
+import FmWorkflowWeather from '@/components/dashboard/FmWorkflowWeather.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useWorkspace } from '@/composables/useWorkspace';
+import { useWorkflowStore } from '@/stores/workflow.store';
+import { analyticsService } from '@/services/analytics.service';
 import { CREATION_METHODS } from '@/utils/constants';
+import type { WeatherResponse } from '@/types';
 
 const { user } = useAuth();
 const ws = useWorkspace();
+const workflowStore = useWorkflowStore();
+const { workflows } = storeToRefs(workflowStore);
+const { members } = ws;
 
-const metrics = [
-  { label: 'Total workflows', value: '--' },
-  { label: 'Active instances', value: '--' },
-  { label: 'Runs this month', value: '--' },
-  { label: 'Team members', value: '--' },
-];
+const weather = ref<WeatherResponse | null>(null);
 
-onMounted(() => {
-  ws.loadMembers().catch(() => undefined);
+const metrics = computed(() => [
+  { label: 'Total workflows', value: workflows.value.length.toString() },
+  { label: 'Active instances', value: (weather.value?.activeInstances ?? 0).toString() },
+  { label: 'Runs this month', value: (weather.value?.runsThisMonth ?? 0).toString() },
+  { label: 'Team members', value: members.value.length.toString() },
+]);
+
+onMounted(async () => {
+  await Promise.allSettled([
+    ws.loadMembers(),
+    workflowStore.loadWorkflows(),
+  ]);
+  const wsId = ws.currentWorkspaceId.value;
+  if (wsId) {
+    try {
+      weather.value = await analyticsService.weather(wsId);
+    } catch {
+      weather.value = null;
+    }
+  }
 });
 </script>
 
@@ -43,11 +64,13 @@ onMounted(() => {
         <p class="text-sm text-slate-500">
           {{ m.label }}
         </p>
-        <p class="mt-2 text-3xl font-semibold text-slate-300">
+        <p class="mt-2 text-3xl font-semibold text-slate-900">
           {{ m.value }}
         </p>
       </div>
     </div>
+
+    <FmWorkflowWeather :workflows="weather?.workflows ?? []" />
 
     <!-- Creation hero -->
     <section class="rounded-xl border border-slate-200 bg-white p-6">
@@ -55,7 +78,7 @@ onMounted(() => {
         What would you like to automate?
       </h2>
       <p class="mt-1 text-sm text-slate-500">
-        Workflow creation unlocks in Phase 2 — the engine is being built.
+        Drawing-board creation methods unlock in Phase 3 — the engine and runs are live now.
       </p>
       <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div

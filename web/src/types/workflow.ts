@@ -176,3 +176,38 @@ export interface InterpreterNarrative {
   content: string;
   generatedAt: string;
 }
+
+export type WeatherStatus = 'green' | 'yellow' | 'orange' | 'red';
+
+export interface WorkflowWeather {
+  workflowId: string;
+  workflowName: string;
+  status: WeatherStatus;
+  activeInstances: number;
+  failedLastHour: number;
+  slaCompliancePct: number;
+  pendingInsights: number;
+  latestInsight: string | null;
+}
+
+export interface WeatherResponse {
+  generatedAt: string;
+  totalWorkflows: number;
+  activeInstances: number;
+  runsThisMonth: number;
+  workflows: WorkflowWeather[];
+}
+
+export interface InsightResponse {
+  id: string;
+  workflowDefinitionId: string;
+  instanceId: string | null;
+  insightType: string;
+  severity: string;
+  message: string;
+  data: string;
+  isAcknowledged: boolean;
+  acknowledgedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}

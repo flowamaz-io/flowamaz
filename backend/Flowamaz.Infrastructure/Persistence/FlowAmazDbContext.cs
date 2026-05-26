@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Flowamaz.Core.Entities;
 using Flowamaz.Core.Entities.Ai;
+using Flowamaz.Core.Entities.Analytics;
 using Flowamaz.Core.Entities.Auth;
 using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Entities.Workflow;
@@ -57,6 +58,9 @@ public class FlowAmazDbContext : DbContext
     public DbSet<WorkflowNodeState> WorkflowNodeStates => Set<WorkflowNodeState>();
     public DbSet<WorkflowVariable> WorkflowVariables => Set<WorkflowVariable>();
     public DbSet<GateDecision> GateDecisions => Set<GateDecision>();
+
+    public DbSet<WorkflowMetric> WorkflowMetrics => Set<WorkflowMetric>();
+    public DbSet<WorkflowInsight> WorkflowInsights => Set<WorkflowInsight>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

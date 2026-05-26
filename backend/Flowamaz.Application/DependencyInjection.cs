@@ -1,3 +1,4 @@
+using Flowamaz.Application.Analytics;
 using Flowamaz.Application.Auth.Services;
 using Flowamaz.Application.Platform.Services;
 using Flowamaz.Application.Workflow.Debugger;
@@ -49,6 +50,11 @@ public static class DependencyInjection
         // Interpreter + step debugger (prompt 02-05).
         services.AddScoped<IWorkflowInterpreterService, WorkflowInterpreterService>();
         services.AddScoped<IStepDebuggerService, StepDebuggerService>();
+
+        // Process Intelligence + Workflow Weather (prompt 02-07).
+        services.AddScoped<ProcessIntelligenceService>();
+        services.AddScoped<WorkflowWeatherService>();
+        services.AddScoped<InsightService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;

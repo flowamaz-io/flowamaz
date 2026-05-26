@@ -520,3 +520,33 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 2. Developer narrative renders the backend's markdown (the backend produces markdown, not a JSON tree) — same panel as CEO/Auditor.
 3. `InstanceListView` live updates open one WebSocket per non-terminal instance (capped at 20). A single workspace-level stream would scale better and is a sensible future improvement.
 4. No functional "create workflow" UI — creation methods are Phase 3 (the empty state previews the six methods, greyed).
+
+---
+
+## Prompt 02-07 — Process Intelligence + Workflow Weather  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- **Entities** (`Core/Entities/Analytics`): `WorkflowMetric` (per-hour rollup), `WorkflowInsight`; enums `InsightType`, `InsightSeverity`; configs + migration `AddAnalyticsSchema`.
+- **Repos:** `WorkflowMetricRepository` (upsert by workflow+hour, latest-per-workflow, month run count), `WorkflowInsightRepository` (list/filter, **ReplaceUnacknowledged** soft-deletes prior same-type then inserts → no duplicates), `WorkflowAnalyticsRepository` (aggregations: durations, bottleneck node, active count, failed-since).
+- **ProcessIntelligenceService** (Application): hourly pass — builds last-hour metric (counts, avg, p95/p99, bottleneck), deterministic `EvaluateSlaRisk` (no AI), AI insights via F5 (`IModelResolutionService` + `IAiCompletionService`, metered, **semantic-cached** on metric hash, parsed JSON array → insights). Thin Quartz wrapper `ProcessIntelligenceJob` (Infrastructure, hourly + ≤5min jitter).
+- **WorkflowWeatherService** (Application): server-side status (`ComputeStatus`, pure) + per-workflow card assembly; **InsightService** (list/acknowledge). Controllers: `WorkflowWeatherController` (GET weather), `WorkflowInsightsController` (list + acknowledge).
+- **Frontend:** `FmWorkflowWeather.vue` (status-dot card grid → workflow detail); `DashboardView` rewired — Total workflows / Active instances / Runs this month / Team members all from real APIs, plus the weather grid. `analytics.service.ts` + weather/insight types.
+
+**Tests**
+- Backend unit (`Analytics/`): `EvaluateSlaRisk` (fires >80% threshold, silent under / no-SLA), `BuildMetric` counts+avg, `Percentile` ranks, `ReplaceUnacknowledged` replaces-not-duplicates (InMemory); `WorkflowWeatherTests` (`ComputeStatus` red/orange/yellow/green).
+- Frontend: existing 13 vitest still pass; build 0 TS errors.
+
+**DoD / acceptance**
+- [x] backend build 0/0; **183 unit + 50 integration**; web build 0 TS errors, 13 vitest
+- [x] PI job uses F5 via IModelResolutionService (not hardcoded); AI tokens metered; semantic-cached on metric hash
+- [x] SLA breach detection deterministic (no AI)
+- [x] Quartz job hourly + 5min jitter (gated by Worker:Enabled)
+- [x] Weather status computed server-side; red on 3+ failures / critical / SLA<60
+- [x] Dashboard "Active instances" (and the other 3 cards) wired to real API data
+
+**Deviations**
+1. No per-workflow SLA-threshold source in the schema yet, so `WorkflowMetric.SlaThresholdMs` is null at runtime (SLA-risk fires only when a threshold is present — proven by the unit test). A workflow SLA setting is a future addition.
+2. The Phase-2 local `AiCompletionService` doesn't return a JSON array, so AI-generated insights are effectively none at runtime (parse-guarded, skipped); metering + semantic cache still exercise correctly. Real insights arrive with the live provider call.
+3. `ProcessIntelligenceJob` is a thin Quartz wrapper in Infrastructure over `ProcessIntelligenceService` in Application — keeps Quartz out of the Application layer (clean architecture) while matching the prompt's intent.
