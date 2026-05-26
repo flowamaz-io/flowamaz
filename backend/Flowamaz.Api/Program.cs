@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Flowamaz.Api.Middleware;
+using Flowamaz.Api.WebSockets;
 using Flowamaz.Application;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Infrastructure;
@@ -72,6 +73,9 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Registered here (not Infrastructure) so Infrastructure stays free of the web framework.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Flowamaz.Core.Interfaces.Services.ICurrentUserService, Flowamaz.Api.Identity.HttpContextCurrentUserService>();
+
+// Live instance-status WebSocket handler (prompt 02-04). Uses IServiceScopeFactory internally.
+builder.Services.AddSingleton<InstanceStatusWebSocketHandler>();
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 8. Application layer — services + FluentValidation validators (one assembly scan).
@@ -202,6 +206,7 @@ app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseCors(CorsPolicyName);
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseMiddleware<ResponseWrapperMiddleware>();
+app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
 // Resolves JWT/API-key identity into HttpContext.Items for the current-user service.
@@ -220,6 +225,12 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 }).AllowAnonymous();
 
 app.MapControllers();
+
+// Live instance status stream (prompt 02-04). Anonymous endpoint — the handler validates the
+// ?token= JWT itself, since browsers cannot set Authorization headers on a WebSocket.
+app.Map("/ws/v1/workspaces/{workspaceId:guid}/instances/{id:guid}",
+    (HttpContext ctx, Guid workspaceId, Guid id, InstanceStatusWebSocketHandler handler) =>
+        handler.HandleAsync(ctx, workspaceId, id));
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 15. Apply pending EF Core migrations on boot so `docker compose up` self-bootstraps

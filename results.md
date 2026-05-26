@@ -428,3 +428,35 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 2. Forward strategy resets+re-queues the failed node; the "fails again → escalate to Backward" escalation is simplified (a subsequent terminal failure runs Backward) and the second-failure auto-escalation is deferred.
 3. Credential resolution from the vault is Phase 4 — auth headers come from node config for now (per prompt).
 4. The ~16-min one-off integration duration during this prompt was environmental (concurrent background runs + Docker contention); a clean api-collection run is ~10s. No regression.
+
+---
+
+## Prompt 02-04 — Workflow Definition + Instance REST API  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- **WorkflowDefinitionsController** (`/api/v1/workspaces/{workspaceId}/workflows`): list [Viewer], create/update/publish [Designer], get/versions [Viewer], delete [Admin]. YAML validated via SfgParser before save (invalid → 422); delete 409 if active instances; publish snapshots a production `WorkflowVersion`.
+- **WorkflowInstancesController** (`/instances`): list (status/workflow/date filters) + trigger + cancel + retry [Operator], detail/events/variables [Operator], timeline [Viewer]. Trigger idempotent on idempotency_key; variables masked.
+- **WorkflowGatesController** (`/gates`): list pending + get + decide [Operator]; approve→`CompleteNodeAsync`, reject→`FailNodeAsync`, GateDecided event appended.
+- **InstanceStatusWebSocketHandler** (`/ws/v1/workspaces/{workspaceId}/instances/{id}`): `?token=` JWT validated + membership-checked before accept; sends snapshot then polls (fresh scope/tick) pushing `{event_type,status,node_id,timestamp}` (snake_case); per-workspace cap (default 100). `app.UseWebSockets()` + anonymous `app.Map` endpoint; `/ws` added to response-wrapper skip list.
+- **Application services** (concrete, AuthService-style): `WorkflowService`, `InstanceService` (masks sensitive vars, retry = fresh instance from pinned version), `GateService`. DTOs + FluentValidation validators under `Application/Workflow/{DTOs,Validators}`. Repo additions: `GateDecisionRepository.GetPendingForWorkspaceAsync`, `WorkflowInstanceRepository.HasActiveInstancesAsync`, `WorkflowVersionRepository.Update`. Exceptions: `WorkflowSlugExistsException` (409), `WorkflowHasActiveInstancesException` (409), `GateAlreadyDecidedException` (409).
+
+**Tests**
+- Integration: `WorkflowApiTests` (lifecycle create→publish→trigger→read, invalid YAML→422, duplicate idempotency→same instance, cancel→Cancelled, sensitive var masked), `GateApiTests` (approve→Approved, reject→Rejected, list pending).
+
+**DoD / acceptance**
+- [x] dotnet build 0/0; dotnet test all pass — **168 unit + 50 integration**
+- [x] SfgParser validates YAML before any create/update save (422 on invalid)
+- [x] Duplicate idempotency_key → 200 same instance_id
+- [x] Cancel → instance.status = Cancelled
+- [x] Sensitive variables masked as "***"
+- [x] Pagination metadata on list responses; soft-deleted workflows → 404
+- [x] WebSocket: JWT (?token=) validated + membership-checked before accept; per-workspace cap
+
+**Deviations**
+1. Workflow application services are concrete classes (no Core interface), matching the Phase-1 `AuthService` precedent, returning Application DTOs directly (Api→Application→Core preserved).
+2. WebSocket pushes via 1s DB polling (fresh scope/tick) rather than orchestrator pub/sub — self-contained, no coupling; no automated WS test (not in the prompt's output list; verified by construction).
+3. `/{id}/timeline` returns a basic node-state timeline; the Workflow Interpreter (02-05) enriches it.
+4. Publish uses a placeholder commit SHA (`Guid N`); real Git SHAs arrive in Phase 5 (WorkspaceGitService).
+5. Instance list filtering is in-memory over the workspace's instances (Phase 2 scale); a query-level filter can come later.

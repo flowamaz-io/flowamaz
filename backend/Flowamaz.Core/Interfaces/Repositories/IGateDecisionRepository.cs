@@ -12,6 +12,9 @@ public interface IGateDecisionRepository
     Task<GateDecision?> GetByNodeAsync(Guid instanceId, string nodeId, CancellationToken cancellationToken = default);
     Task<List<GateDecision>> GetForInstanceAsync(Guid instanceId, Guid workspaceId, CancellationToken cancellationToken = default);
 
+    /// <summary>Pending gates across a workspace — backs the portal approval queue.</summary>
+    Task<List<GateDecision>> GetPendingForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default);
+
     /// <summary>Pending gates whose <c>ExpiresAt</c> is at or before <paramref name="asOf"/> (timer scanner).</summary>
     Task<List<GateDecision>> GetExpiredAsync(DateTime asOf, CancellationToken cancellationToken = default);
     Task AddAsync(GateDecision gate, CancellationToken cancellationToken = default);

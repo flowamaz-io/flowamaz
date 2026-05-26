@@ -12,4 +12,5 @@ public interface IWorkflowVersionRepository
     Task<List<WorkflowVersion>> GetForDefinitionAsync(Guid workflowDefinitionId, Guid workspaceId, CancellationToken cancellationToken = default);
     Task<WorkflowVersion?> GetProductionAsync(Guid workflowDefinitionId, Guid workspaceId, CancellationToken cancellationToken = default);
     Task AddAsync(WorkflowVersion version, CancellationToken cancellationToken = default);
+    void Update(WorkflowVersion version);
 }

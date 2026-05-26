@@ -12,7 +12,7 @@ namespace Flowamaz.Api.Middleware;
 public sealed class ResponseWrapperMiddleware
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly string[] SkipPathPrefixes = ["/scalar", "/health", "/openapi"];
+    private static readonly string[] SkipPathPrefixes = ["/scalar", "/health", "/openapi", "/ws"];
 
     private readonly RequestDelegate _next;
 

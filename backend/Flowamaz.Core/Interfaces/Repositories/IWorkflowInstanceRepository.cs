@@ -20,6 +20,9 @@ public interface IWorkflowInstanceRepository
     Task<WorkflowInstance?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<WorkflowInstance?> GetByIdempotencyKeyAsync(Guid workspaceId, string idempotencyKey, CancellationToken cancellationToken = default);
     Task<List<WorkflowInstance>> GetForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>True if the definition has any non-terminal instance (Pending/Running/Waiting/Compensating).</summary>
+    Task<bool> HasActiveInstancesAsync(Guid workflowDefinitionId, Guid workspaceId, CancellationToken cancellationToken = default);
     Task AddAsync(WorkflowInstance instance, CancellationToken cancellationToken = default);
     void Update(WorkflowInstance instance);
 

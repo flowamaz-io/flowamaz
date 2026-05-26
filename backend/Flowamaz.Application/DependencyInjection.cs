@@ -2,6 +2,7 @@ using Flowamaz.Application.Auth.Services;
 using Flowamaz.Application.Platform.Services;
 using Flowamaz.Application.Workflow.Orchestrator;
 using Flowamaz.Application.Workflow.Saga;
+using Flowamaz.Application.Workflow.Services;
 using Flowamaz.Application.Workflow.Workers;
 using Flowamaz.Application.Workspace.Services;
 using Flowamaz.Core.Interfaces.Services;
@@ -37,6 +38,11 @@ public static class DependencyInjection
         services.AddScoped<INodeWorker, HttpActionWorker>();
         services.AddScoped<INodeWorkerRegistry, NodeWorkerRegistry>();
         services.AddScoped<ISagaEngine, SagaEngine>();
+
+        // Workflow API services (prompt 02-04).
+        services.AddScoped<WorkflowService>();
+        services.AddScoped<InstanceService>();
+        services.AddScoped<GateService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;
