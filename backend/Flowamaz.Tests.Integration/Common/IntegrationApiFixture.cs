@@ -36,6 +36,9 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
         // Disable the background worker + Quartz jobs for tests — the live polling loop would race
         // API writes (sequence numbers / node states). The full execution loop is exercised in 02-08.
         Environment.SetEnvironmentVariable("Worker__Enabled", "false");
+        // A dummy platform key so F5 model resolution succeeds for the interpreter (the Phase-2 local
+        // AiCompletionService never actually uses it).
+        Environment.SetEnvironmentVariable("Ai__AnthropicPlatformKey", "test-platform-key");
 
         await _postgres.StartAsync();
         await _redis.StartAsync();

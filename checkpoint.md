@@ -2,10 +2,10 @@
 Phase: 02
 Phase Title: Workflow Engine — Durable Execution + Observability
 Total Prompts This Phase: 8
-Completed: 7
+Completed: 8
 Current Prompt: 02-08-phase2-integration
 Next Prompt: PHASE_COMPLETE
-Phase End Status: not started
+Phase End Status: PHASE_COMPLETE
 Session Tokens: Low
 Last Updated: 2026-05-26
 Notes: |
@@ -22,7 +22,10 @@ Notes: |
   TriggerModal, useInstanceWebSocket, workflow.store + services.
   02-07: Analytics entities + migration, ProcessIntelligenceService (hourly job), WorkflowWeatherService,
   InsightService, weather/insights controllers, FmWorkflowWeather + dashboard real data.
-  Backend build 0/0; 183 unit + 50 integration. Web build 0 TS errors, 13 vitest.
+  02-08: end-to-end wiring (FailNode→SagaEngine, worker executes nodes via registry); Phase2 lifecycle/
+  saga/concurrency integration tests; Playwright S18-S25; PHASE_COMPLETE.
+  Backend build 0/0; 183 unit + 56 integration. Web build 0 TS errors, 13 vitest.
+  PHASE 02 COMPLETE — pending phase-end agents (Verifier/UX/UI/Testing/Security) + phase-02-report.md.
   Background worker + Quartz gated by Worker:Enabled (off in integration tests via Worker__Enabled=false).
   DEFERRED to 02-08: wire node executors into OrchestratorWorker loop, invoke SagaEngine from
   WorkflowOrchestrator.FailNodeAsync, and have the worker honour debugger pause points (full E2E loop).

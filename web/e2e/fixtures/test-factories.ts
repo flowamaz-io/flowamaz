@@ -158,6 +158,60 @@ export async function loginViaUi(page: Page, org: TestOrg): Promise<void> {
   await page.waitForURL((url) => !/\/login$/.test(new URL(url).pathname));
 }
 
+/** A minimal trigger→end workflow that completes in a single step (no external calls). */
+export const E2E_WORKFLOW_YAML = [
+  'workflow: { id: e2e, version: v1, name: E2E }',
+  'nodes:',
+  '  - { id: start, type: Trigger }',
+  '  - { id: done, type: End }',
+  'edges:',
+  '  - { id: e1, from: start, to: done }',
+].join('\n');
+
+/** Creates a workflow definition via the API. Returns its id. */
+export async function createTestWorkflow(
+  api: APIRequestContext,
+  token: string,
+  workspaceId: string,
+  name = `WF ${uniqueSuffix()}`,
+  yamlContent = E2E_WORKFLOW_YAML,
+): Promise<string> {
+  const res = await api.post(`${API_URL}/api/v1/workspaces/${workspaceId}/workflows`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { name, slug: `wf-${uniqueSuffix()}`, yamlContent, createdByMethod: 'NaturalLanguage' },
+  });
+  if (!res.ok()) throw new Error(`createTestWorkflow failed (${res.status()}): ${await res.text()}`);
+  return unwrap<{ id: string }>(await res.json()).id;
+}
+
+export async function publishWorkflow(
+  api: APIRequestContext,
+  token: string,
+  workspaceId: string,
+  workflowId: string,
+): Promise<void> {
+  const res = await api.post(`${API_URL}/api/v1/workspaces/${workspaceId}/workflows/${workflowId}/publish`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {},
+  });
+  if (!res.ok()) throw new Error(`publishWorkflow failed (${res.status()}): ${await res.text()}`);
+}
+
+/** Triggers an instance via the API and returns its id. */
+export async function triggerInstance(
+  api: APIRequestContext,
+  token: string,
+  workspaceId: string,
+  workflowId: string,
+): Promise<string> {
+  const res = await api.post(`${API_URL}/api/v1/workspaces/${workspaceId}/instances`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { workflowDefinitionId: workflowId },
+  });
+  if (!res.ok()) throw new Error(`triggerInstance failed (${res.status()}): ${await res.text()}`);
+  return unwrap<{ instanceId: string }>(await res.json()).instanceId;
+}
+
 /**
  * Marks onboarding complete for an org in localStorage so the router's requiresOnboarding
  * guard lets the dashboard / settings routes render. Mirrors useOnboarding's storage shape.

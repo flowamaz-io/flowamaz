@@ -550,3 +550,32 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 1. No per-workflow SLA-threshold source in the schema yet, so `WorkflowMetric.SlaThresholdMs` is null at runtime (SLA-risk fires only when a threshold is present — proven by the unit test). A workflow SLA setting is a future addition.
 2. The Phase-2 local `AiCompletionService` doesn't return a JSON array, so AI-generated insights are effectively none at runtime (parse-guarded, skipped); metering + semantic cache still exercise correctly. Real insights arrive with the live provider call.
 3. `ProcessIntelligenceJob` is a thin Quartz wrapper in Infrastructure over `ProcessIntelligenceService` in Application — keeps Quartz out of the Application layer (clean architecture) while matching the prompt's intent.
+
+---
+
+## Prompt 02-08 — Phase 2 Integration + PHASE_COMPLETE  (2026-05-26)
+
+**Status:** Complete · pushed to `develop` · **PHASE 02 COMPLETE**
+
+**End-to-end wiring (deferred items from 02-03/02-05 completed here)**
+- `WorkflowOrchestrator.FailNodeAsync` now invokes `ISagaEngine` when a node has a compensation block (saga injected as an optional ctor param — DI supplies it at runtime; unit tests still construct without it).
+- `OrchestratorWorker` now executes the next Action/AI nodes via `INodeWorkerRegistry` after each step (loads the pinned version graph), calling `CompleteNodeAsync`/`FailNodeAsync` — completing a node re-queues the instance, so each queue message is one step+execute cycle until the run ends or hits a gate.
+
+**Built**
+- Integration tests (`Tests.Integration/Phase2/`): `Phase2LifecycleTests` (create→validate→publish→trigger→idempotent→drive-to-Completed→timeline→CEO+Auditor narrative→cancel; invalid YAML→422), `SagaTests` (Backward → Failed + CompensationStarted/Completed events; Forward → failed node reset to Pending + instance Running), `WorkerConcurrencyTests` (10 instances, two concurrent SKIP-LOCKED claims never overlap; expired-lease Running instance recoverable).
+- Playwright specs S18–S25: `workflow.spec.ts` (empty state, list, trigger), `instance.spec.ts` (timeline, CEO + Auditor narrative), `dashboard.spec.ts` (real metric cards, weather widget) + e2e factory helpers (create/publish/trigger).
+- Test infra: integration fixture sets a dummy `Ai__AnthropicPlatformKey` so F5 model resolution succeeds for the interpreter.
+
+**DoD / acceptance**
+- [x] backend build 0/0; **183 unit + 56 integration** (incl. 6 new Phase 2)
+- [x] Full lifecycle test passes (trigger → Completed → timeline → narrative)
+- [x] Backward saga → Failed + compensation events; Forward → node reset + resume (order asserted in SagaEngine unit test)
+- [x] 10 concurrent claims, 0 double-claims (SKIP LOCKED); lease-expiry recovery
+- [x] web build 0 TS errors; 13 vitest pass
+- [x] checkpoint.md → PHASE_COMPLETE; all 8 prompts logged in results.md
+
+**Deviations**
+1. Phase 2 integration tests drive the run by invoking the orchestrator directly (the background worker is disabled in the shared test host to avoid races); the worker's own execute-loop is wired for production and is what runs the same code at runtime.
+2. Playwright S18–S25 are written to match the Phase-1 e2e patterns but require a live full stack + worker enabled (+ platform key for CEO) to execute — to be run in a Docker/CI environment, not in this build session.
+3. SagaTests assert the DB outcome (Failed + compensation events / Forward reset) over real Postgres; reverse compensation *ordering* is asserted by the `SagaEngine` unit test (recording worker) since the integration registry has no non-HTTP node worker.
+4. Coverage (Coverlet ≥80%) and Trivy image scan are run as part of the phase-end Testing/Security pass (see phase-02-report.md).

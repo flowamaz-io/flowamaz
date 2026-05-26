@@ -30,6 +30,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
     private readonly IUnitOfWork _unitOfWork;
     private readonly SfgParser _parser;
     private readonly ILogger<WorkflowOrchestrator> _logger;
+    // Optional so unit tests can construct the orchestrator without the saga engine; DI supplies it
+    // at runtime. When present, a terminal failure with a compensation block runs the saga.
+    private readonly ISagaEngine? _sagaEngine;
 
     public WorkflowOrchestrator(
         IWorkflowDefinitionRepository definitions,
@@ -42,7 +45,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         IVariableEvaluationService variableEvaluation,
         IUnitOfWork unitOfWork,
         SfgParser parser,
-        ILogger<WorkflowOrchestrator> logger)
+        ILogger<WorkflowOrchestrator> logger,
+        ISagaEngine? sagaEngine = null)
     {
         _definitions = definitions;
         _versions = versions;
@@ -55,6 +59,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _unitOfWork = unitOfWork;
         _parser = parser;
         _logger = logger;
+        _sagaEngine = sagaEngine;
     }
 
     public async Task<WorkflowInstance> TriggerAsync(
@@ -324,8 +329,21 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         seq = await AppendEventAsync(seq, instance, "NodeFailed", nodeId, state.NodeType, ErrorPayload(error), cancellationToken);
 
         var compensation = node?.Compensation;
+        if (compensation is not null && _sagaEngine is not null)
+        {
+            // Persist the node failure, then hand off to the saga engine which drives the chosen
+            // strategy and records CompensationStarted → CompensationCompleted/Failed itself.
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            var strategy = Enum.TryParse<SagaStrategyType>(compensation.Strategy, ignoreCase: true, out var parsed)
+                ? parsed : SagaStrategyType.Backward;
+            await _sagaEngine.StartAsync(instanceId, nodeId, strategy, cancellationToken);
+            _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync exit instance={InstanceId} node={NodeId} — saga {Strategy}", instanceId, nodeId, strategy);
+            return;
+        }
+
         if (compensation is not null)
         {
+            // No saga engine wired (unit-test path) — record the start marker and stay Compensating.
             instance.SagaState = SagaState.Compensating;
             instance.SagaStrategy = compensation.Strategy;
             if (instance.CanTransitionTo(InstanceStatus.Compensating)) instance.TransitionTo(InstanceStatus.Compensating);
