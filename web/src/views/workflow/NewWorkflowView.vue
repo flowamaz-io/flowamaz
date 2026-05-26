@@ -1,21 +1,45 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { useDebounceFn } from '@vueuse/core';
 import CreationMethodSelector from '../../components/creation/CreationMethodSelector.vue';
 import NlTemplateForm from '../../components/creation/NlTemplateForm.vue';
 import VoiceInputButton from '../../components/creation/VoiceInputButton.vue';
 import VisualInputPanel from '../../components/creation/VisualInputPanel.vue';
 import ConversationImportPanel from '../../components/creation/ConversationImportPanel.vue';
 import DocumentUploadPanel from '../../components/creation/DocumentUploadPanel.vue';
+import CloneSuggestion from '../../components/workflow/CloneSuggestion.vue';
+import { workflowService } from '../../services/workflow.service';
 import type { SopParseResult } from '../../services/creation.service';
 
 const route = useRoute();
+const router = useRouter();
 const workspaceId = route.params.workspaceId as string;
 
 const selectedMethod = ref<string | null>(null);
 const generatedYaml = ref<string | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
+const workflowName = ref('');
+const cloneSuggestion = ref<{ id: string; name: string; similarityScore: number } | null>(null);
+const cloneDismissed = ref(false);
+
+const checkCloneSuggestion = useDebounceFn(async (name: string) => {
+  if (cloneDismissed.value || name.length < 3) { cloneSuggestion.value = null; return; }
+  cloneSuggestion.value = await workflowService.suggestClone(workspaceId, name);
+}, 600);
+
+async function cloneWorkflow() {
+  if (!cloneSuggestion.value) return;
+  loading.value = true;
+  try {
+    const cloned = await workflowService.clone(workspaceId, cloneSuggestion.value.id);
+    await router.push({ name: 'workflow-editor', params: { workspaceId, id: cloned.id } });
+  } catch (e: unknown) {
+    error.value = `Clone failed. ${e instanceof Error ? e.message : 'Please try again.'}`;
+    loading.value = false;
+  }
+}
 
 function onYamlGenerated(yaml: string) {
   generatedYaml.value = yaml;
@@ -53,7 +77,25 @@ function onConversationYaml(yaml: string) {
 
     <template v-else>
       <!-- Method selector -->
-      <section v-if="!selectedMethod">
+      <section v-if="!selectedMethod" class="space-y-4">
+        <!-- Workflow name + clone suggestion -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-neutral-700">Workflow name</label>
+          <input
+            v-model="workflowName"
+            type="text"
+            placeholder="e.g. Invoice Approval, Customer Onboarding..."
+            class="w-full border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:border-violet-500 focus:outline-none"
+            @input="checkCloneSuggestion(workflowName)"
+          />
+        </div>
+        <CloneSuggestion
+          v-if="cloneSuggestion && !cloneDismissed"
+          :workflow-name="cloneSuggestion.name"
+          :similarity-score="cloneSuggestion.similarityScore"
+          @clone="cloneWorkflow"
+          @dismiss="cloneDismissed = true; cloneSuggestion = null"
+        />
         <CreationMethodSelector v-model="selectedMethod" />
       </section>
 

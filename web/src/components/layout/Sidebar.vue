@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia';
-import { LayoutDashboard, Settings, Users, KeyRound, Workflow, Activity, Plug, X } from 'lucide-vue-next';
+import { LayoutDashboard, Settings, Users, KeyRound, Workflow, Activity, Plug, X, CloudSun } from 'lucide-vue-next';
 import { useUiStore } from '@/stores/ui.store';
 import { APP_NAME } from '@/utils/constants';
 
@@ -18,6 +18,7 @@ interface NavItem {
 const primary: NavItem[] = [
   { label: 'Dashboard', to: '/', icon: LayoutDashboard },
   { label: 'Workflows', to: '/workflows', icon: Workflow },
+  { label: 'Weather', to: '/weather', icon: CloudSun },
   { label: 'Instances', to: '/instances', icon: Activity },
   { label: 'Library', icon: Plug, disabled: true, badge: 'Phase 4' },
 ];

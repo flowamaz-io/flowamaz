@@ -49,6 +49,26 @@ export const workflowService = {
     return unwrap(res);
   },
 
+  async suggestClone(workspaceId: string, partialName: string): Promise<{ id: string; name: string; similarityScore: number } | null> {
+    try {
+      const res = await http.get<ApiEnvelope<{ id: string; name: string; similarityScore: number } | null>>(
+        `${base(workspaceId)}/suggest-clone`,
+        { params: { name: partialName } },
+      );
+      return unwrap(res);
+    } catch {
+      return null;
+    }
+  },
+
+  async clone(workspaceId: string, id: string): Promise<{ id: string; name: string; slug: string }> {
+    const res = await http.post<ApiEnvelope<{ id: string; name: string; slug: string }>>(
+      `${base(workspaceId)}/${id}/clone`,
+      {},
+    );
+    return unwrap(res);
+  },
+
   async validate(workspaceId: string, yamlContent: string): Promise<{ errors: Array<{ message: string; line?: number }>; warnings: Array<{ message: string; line?: number }> }> {
     const res = await http.post<ApiEnvelope<{ errors: Array<{ message: string; line?: number }>; warnings: Array<{ message: string; line?: number }> }>>(
       `${base(workspaceId)}/validate`,

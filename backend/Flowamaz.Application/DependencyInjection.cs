@@ -2,6 +2,7 @@ using Flowamaz.Application.Analytics;
 using Flowamaz.Application.Auth.Services;
 using Flowamaz.Application.Platform.Services;
 using Flowamaz.Application.Workflow.Creation;
+using Flowamaz.Application.Workflow.Dna;
 using Flowamaz.Application.Workflow.Debugger;
 using Flowamaz.Application.Workflow.Interpreter;
 using Flowamaz.Application.Workflow.Orchestrator;
@@ -72,6 +73,9 @@ public static class DependencyInjection
         // Co-pilot full service + SOP parsing (prompt 03-05).
         services.AddScoped<ICopilotService, CopilotService>();
         services.AddScoped<ISopParsingService, SopParsingService>();
+
+        // Workflow DNA service (prompt 03-07).
+        services.AddScoped<IWorkflowDnaService, WorkflowDnaService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;

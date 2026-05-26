@@ -29,6 +29,7 @@ const routes: RouteRecordRaw[] = [
     children: [
       { path: '', name: 'dashboard', component: () => import('@/views/dashboard/DashboardView.vue') },
       { path: 'workflows/new', name: 'workflow-new', component: () => import('@/views/workflow/NewWorkflowView.vue') },
+      { path: 'weather', name: 'weather', component: () => import('@/views/weather/WorkflowWeatherView.vue') },
       { path: 'workflows', name: 'workflows', component: () => import('@/views/workflow/WorkflowListView.vue') },
       { path: 'workflows/:id', name: 'workflow-detail', component: () => import('@/views/workflow/WorkflowDetailView.vue') },
       { path: 'workflows/:id/edit', name: 'workflow-editor', component: () => import('@/views/workflow/WorkflowEditorView.vue') },
