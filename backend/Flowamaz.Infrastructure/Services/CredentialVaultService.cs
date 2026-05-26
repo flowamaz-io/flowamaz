@@ -119,13 +119,9 @@ public sealed class CredentialVaultService : ICredentialVaultService
         try
         {
             var credential = await _db.WorkspaceCredentials
-                .FirstOrDefaultAsync(c => c.Id == credentialId && !c.IsDeleted, ct)
-                ?? throw new InvalidOperationException(
-                    $"Credential '{credentialId}' not found. It may have been revoked or deleted.");
-
-            if (credential.WorkspaceId != workspaceId)
-                throw new UnauthorizedAccessException(
-                    $"Credential '{credentialId}' does not belong to workspace '{workspaceId}'. Cross-workspace access is not permitted.");
+                .FirstOrDefaultAsync(c => c.Id == credentialId && c.WorkspaceId == workspaceId && !c.IsDeleted, ct)
+                ?? throw new UnauthorizedAccessException(
+                    $"Credential '{credentialId}' not found or access denied. Cross-workspace access is not permitted.");
 
             var workspaceMk = DeriveWorkspaceMasterKey(workspaceId);
 
@@ -150,7 +146,7 @@ public sealed class CredentialVaultService : ICredentialVaultService
         catch (UnauthorizedAccessException)
         {
             _logger.LogWarning(
-                "CredentialVaultService.RetrieveAsync cross-workspace attempt credentialId={CredentialId} requestedWorkspace={WorkspaceId}",
+                "CredentialVaultService.RetrieveAsync denied credentialId={CredentialId} requestedWorkspace={WorkspaceId}",
                 credentialId, workspaceId);
             throw;
         }
@@ -172,13 +168,9 @@ public sealed class CredentialVaultService : ICredentialVaultService
         try
         {
             var credential = await _db.WorkspaceCredentials
-                .FirstOrDefaultAsync(c => c.Id == credentialId && !c.IsDeleted, ct)
-                ?? throw new InvalidOperationException(
-                    $"Credential '{credentialId}' not found. It may have already been revoked.");
-
-            if (credential.WorkspaceId != workspaceId)
-                throw new UnauthorizedAccessException(
-                    $"Credential '{credentialId}' does not belong to workspace '{workspaceId}'.");
+                .FirstOrDefaultAsync(c => c.Id == credentialId && c.WorkspaceId == workspaceId && !c.IsDeleted, ct)
+                ?? throw new UnauthorizedAccessException(
+                    $"Credential '{credentialId}' not found or access denied. It may have been revoked or does not belong to this workspace.");
 
             credential.IsActive = false;
             _db.WorkspaceCredentials.Update(credential);
@@ -188,7 +180,14 @@ public sealed class CredentialVaultService : ICredentialVaultService
                 "CredentialVaultService.RevokeAsync exit credentialId={CredentialId} workspace={WorkspaceId}",
                 credentialId, workspaceId);
         }
-        catch (Exception ex) when (ex is not InvalidOperationException && ex is not UnauthorizedAccessException)
+        catch (UnauthorizedAccessException)
+        {
+            _logger.LogWarning(
+                "CredentialVaultService.RevokeAsync denied credentialId={CredentialId} requestedWorkspace={WorkspaceId}",
+                credentialId, workspaceId);
+            throw;
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
         {
             _logger.LogError(ex,
                 "CredentialVaultService.RevokeAsync error workspace={WorkspaceId} credentialId={CredentialId}",

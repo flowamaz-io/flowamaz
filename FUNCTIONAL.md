@@ -934,6 +934,20 @@ EMAIL_FROM_NAME=Flowamaz
 SUPPORT_EMAIL=support@flowamaz.io
 SECURITY_EMAIL=security@flowamaz.io
 
+# Gate Security
+GATE_SIGNING_KEY=        # 32-byte hex — required non-Development. Generate: openssl rand -hex 32
+SLACK_SIGNING_SECRET=    # from Slack app settings > Basic Information > Signing Secret
+TEAMS_BOT_SECRET=        # from Azure AD app registration
+
+# OAuth App Credentials
+SLACK_CLIENT_ID=
+SLACK_CLIENT_SECRET=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+MICROSOFT_TENANT_ID=common
+
 # Webhook Delivery
 WEBHOOK_SIGNING_SECRET_SALT=
 WEBHOOK_DELIVERY_MAX_RETRIES=5

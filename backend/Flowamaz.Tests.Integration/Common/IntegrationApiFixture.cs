@@ -29,6 +29,9 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
     private WebApplicationFactory<Flowamaz.Api.Program> _factory = null!;
     private ConnectionMultiplexer _redisClient = null!;
 
+    /// <summary>Fixed signing key used for gate HMAC in integration tests. Known value so tests can reproduce signatures.</summary>
+    public const string GateSigningKey = "integration-test-gate-signing-key-32!!";
+
     public IServiceProvider Services => _factory.Services;
 
     public async Task InitializeAsync()
@@ -40,6 +43,8 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
         // keeps AiCompletionService on the local stub so the dummy key never drives a live call.
         Environment.SetEnvironmentVariable("Ai__AnthropicPlatformKey", "test-platform-key");
         Environment.SetEnvironmentVariable("Ai__UseStubCompletion", "true");
+        // Known gate signing key so integration tests can reproduce HMAC signatures.
+        Environment.SetEnvironmentVariable("GATE_SIGNING_KEY", GateSigningKey);
 
         await _postgres.StartAsync();
         await _redis.StartAsync();

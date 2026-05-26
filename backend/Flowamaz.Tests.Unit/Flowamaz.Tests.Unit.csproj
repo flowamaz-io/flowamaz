@@ -26,6 +26,7 @@
     <ProjectReference Include="..\Flowamaz.Core\Flowamaz.Core.csproj" />
     <ProjectReference Include="..\Flowamaz.Application\Flowamaz.Application.csproj" />
     <ProjectReference Include="..\Flowamaz.Infrastructure\Flowamaz.Infrastructure.csproj" />
+    <ProjectReference Include="..\Flowamaz.Api\Flowamaz.Api.csproj" />
   </ItemGroup>
 
 </Project>

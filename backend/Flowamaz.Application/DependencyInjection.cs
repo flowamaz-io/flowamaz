@@ -128,6 +128,7 @@ public static class DependencyInjection
 
         services.AddScoped<ConnectorOperationHandlerRegistry>();
         services.AddScoped<IConnectorOperationHandlerRegistry>(sp => sp.GetRequiredService<ConnectorOperationHandlerRegistry>());
+        services.AddHttpClient(OAuthService.HttpClientName);
         services.AddScoped<IOAuthService, OAuthService>();
         services.AddScoped<IConnectorHealthService, ConnectorHealthService>();
 

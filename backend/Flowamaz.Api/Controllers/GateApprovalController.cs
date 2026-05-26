@@ -23,17 +23,20 @@ public sealed class GateApprovalController : ControllerBase
     private readonly GateService _gates;
     private readonly ICurrentUserService _currentUser;
     private readonly IConfiguration _config;
+    private readonly IHostEnvironment _env;
     private readonly ILogger<GateApprovalController> _logger;
 
     public GateApprovalController(
         GateService gates,
         ICurrentUserService currentUser,
         IConfiguration config,
+        IHostEnvironment env,
         ILogger<GateApprovalController> logger)
     {
         _gates = gates;
         _currentUser = currentUser;
         _config = config;
+        _env = env;
         _logger = logger;
     }
 
@@ -83,7 +86,19 @@ public sealed class GateApprovalController : ControllerBase
         _logger.LogInformation("GateApprovalController.SlackActions entry");
 
         // Validate Slack signing secret.
-        if (!await ValidateSlackSignatureAsync())
+        var slackSigningSecret = _config["SLACK_SIGNING_SECRET"];
+        if (string.IsNullOrWhiteSpace(slackSigningSecret))
+        {
+            if (!_env.IsDevelopment())
+            {
+                _logger.LogError(
+                    "GateApprovalController.SlackActions SLACK_SIGNING_SECRET not configured in non-Development environment");
+                return StatusCode(503, new { error = "Slack integration not configured. Set SLACK_SIGNING_SECRET." });
+            }
+            _logger.LogWarning(
+                "GateApprovalController.SlackActions SLACK_SIGNING_SECRET not set — skipping Slack signature validation in Development");
+        }
+        else if (!await ValidateSlackSignatureAsync(slackSigningSecret))
         {
             _logger.LogWarning("GateApprovalController.SlackActions invalid Slack signature");
             return Unauthorized();
@@ -183,7 +198,7 @@ public sealed class GateApprovalController : ControllerBase
         if (gate is null) return (false, null);
 
         // Verify HMAC signature.
-        var signingKey = _config["GATE_SIGNING_KEY"] ?? "default-dev-key";
+        var signingKey = GateHmacHelper.GetSigningKey(_config, _logger);
         var expiresUnix = gate.ExpiresAt.HasValue
             ? new DateTimeOffset(gate.ExpiresAt.Value).ToUnixTimeSeconds()
             : 0L;
@@ -221,16 +236,8 @@ public sealed class GateApprovalController : ControllerBase
         }
     }
 
-    private async Task<bool> ValidateSlackSignatureAsync()
+    private async Task<bool> ValidateSlackSignatureAsync(string slackSigningSecret)
     {
-        var slackSigningSecret = _config["SLACK_SIGNING_SECRET"];
-        if (string.IsNullOrWhiteSpace(slackSigningSecret))
-        {
-            // In development, skip validation if no secret configured.
-            _logger.LogWarning("GateApprovalController: SLACK_SIGNING_SECRET not configured — skipping signature validation");
-            return true;
-        }
-
         if (!Request.Headers.TryGetValue("X-Slack-Request-Timestamp", out var timestampValues)
             || !Request.Headers.TryGetValue("X-Slack-Signature", out var signatureValues))
         {

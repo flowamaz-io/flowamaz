@@ -184,8 +184,8 @@ public class Phase4GateTests : ApiTestBase
             await db.SaveChangesAsync();
         }
 
-        // Build the same HMAC the controller builds
-        const string signingKey = "default-dev-key"; // matches appsettings default
+        // Build the same HMAC the controller builds (key set in IntegrationApiFixture)
+        var signingKey = IntegrationApiFixture.GateSigningKey;
         var expiresUnix = new DateTimeOffset(expiresAt).ToUnixTimeSeconds();
         var message = $"{gateId}:approve:{expiresUnix}";
         var sig = GateHmacHelper.BuildHmac(message, signingKey);

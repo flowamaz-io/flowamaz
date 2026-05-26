@@ -851,3 +851,40 @@ Notes:
 - [x] Trivy: 0 CRITICAL/HIGH findings
 - [x] Moq added to integration test project for AI node service-level tests
 - [x] checkpoint.md updated to PHASE_COMPLETE
+
+---
+
+## fix-phase-04 — Security Hardening + Coverage + OAuth
+Date: 2026-05-26
+
+### fix-04-01 — GATE_SIGNING_KEY default + SLACK_SIGNING_SECRET bypass + DB workspace isolation
+
+- [x] C1 RESOLVED: GATE_SIGNING_KEY null → startup exception in non-Development (Program.cs)
+- [x] M1 RESOLVED: SLACK_SIGNING_SECRET missing in Production → 503 (GateApprovalController)
+- [x] Development mode: both missing → Warning log, ephemeral random key via GateHmacHelper.GetSigningKey()
+- [x] HumanGateNodeWorker: uses same shared ephemeral key — email links valid within same process
+- [x] CredentialVaultService.RetrieveAsync: workspaceId added to EF WHERE clause (DB-level isolation)
+- [x] CredentialVaultService.RevokeAsync: same DB-level isolation applied
+- [x] .env.example: GATE_SIGNING_KEY, SLACK_SIGNING_SECRET, TEAMS_BOT_SECRET documented
+- [x] FUNCTIONAL.md §22: all three vars added
+- [x] GateApprovalControllerTests: 4 tests (ValidHmac/InvalidHmac/Expired/GateNotFound)
+- [x] SlackActionsControllerTests: 4 tests (Valid/InvalidSig/MissingDevBypass/MissingProd503)
+- [x] CredentialVaultServiceTests: 2 new tests (RetrieveAsync_WrongWorkspaceId, RevokeAsync_WrongWorkspaceId)
+- [x] IntegrationApiFixture: GATE_SIGNING_KEY set to known test constant; Phase4GateTests updated
+- [x] grep "default-dev-key" backend/ → 0 results
+
+### fix-04-02 — Coverage gaps + real OAuth token exchange
+
+- [x] M2 RESOLVED: ConnectorCatalogueServiceTests — 8 tests (GetAll/GetById/GetInstalled/Install×2/Uninstall×2)
+- [x] M3 RESOLVED: ConnectorSandboxTests — 5 tests (ValidRequest/SchemaFail/500/200/Timeout)
+- [x] M3 RESOLVED: ByomProviderServiceTests — 3 tests (ValidRequest/401/ParseContent)
+- [x] M4 RESOLVED: OAuthService real exchange for Slack, GitHub, Microsoft
+- [x] OAuthException created in Application layer
+- [x] mock_token stub removed entirely
+- [x] Unknown provider → NotSupportedException (not silent fallback)
+- [x] OAuthServiceTests: updated for new IHttpClientFactory ctor, 5 new exchange tests
+- [x] DependencyInjection.cs: AddHttpClient(OAuthService.HttpClientName) registered
+- [x] .env.example: SLACK_CLIENT_ID/SECRET, GITHUB_CLIENT_ID/SECRET, MICROSOFT_CLIENT_ID/SECRET/TENANT_ID
+- [x] grep "mock_token" backend/ → 0 results
+- [x] dotnet build — 0 errors, 0 warnings
+- [x] dotnet test — 401 unit tests pass

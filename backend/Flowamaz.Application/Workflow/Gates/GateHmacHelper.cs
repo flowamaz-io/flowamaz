@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Flowamaz.Application.Workflow.Gates;
 
@@ -9,6 +11,28 @@ namespace Flowamaz.Application.Workflow.Gates;
 /// </summary>
 public static class GateHmacHelper
 {
+    // Process-scoped random key used when GATE_SIGNING_KEY is absent in Development.
+    // Shared across all callers in the same process so signed links validate correctly within one run.
+    private static readonly Lazy<string> _devEphemeralKey = new(() =>
+        Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant());
+
+    /// <summary>
+    /// Returns GATE_SIGNING_KEY from config, or a random ephemeral key in Development (with a warning).
+    /// Call sites in Production never reach the ephemeral path because Program.cs startup validation
+    /// throws if GATE_SIGNING_KEY is not set.
+    /// </summary>
+    public static string GetSigningKey(IConfiguration config, ILogger? logger = null)
+    {
+        var key = config["GATE_SIGNING_KEY"];
+        if (!string.IsNullOrEmpty(key))
+            return key;
+
+        logger?.LogWarning(
+            "GATE_SIGNING_KEY is not configured — using an ephemeral Development key. " +
+            "Email gate links will be invalid after process restart. Set GATE_SIGNING_KEY for stable links.");
+        return _devEphemeralKey.Value;
+    }
+
     /// <summary>
     /// Builds an HMAC-SHA256 hex signature for <paramref name="message"/> using
     /// <paramref name="key"/>.

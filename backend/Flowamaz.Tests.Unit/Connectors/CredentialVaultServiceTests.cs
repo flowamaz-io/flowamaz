@@ -129,7 +129,7 @@ public class CredentialVaultServiceTests
         // Act & Assert — workspace B cannot retrieve workspace A's credential
         var act = async () => await service.RetrieveAsync(workspaceB, credId);
         await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("*does not belong to workspace*");
+            .WithMessage("*not found or access denied*");
     }
 
     [Fact]
@@ -180,5 +180,51 @@ public class CredentialVaultServiceTests
         // Assert
         var aliases = await service.ListAsync(workspaceId);
         aliases.Should().ContainSingle(a => a.Id == credId && !a.IsActive);
+    }
+
+    [Fact]
+    public async Task RetrieveAsync_WrongWorkspaceId_ThrowsUnauthorised()
+    {
+        // Arrange
+        var db = NewDb();
+        var connectorId = Guid.NewGuid();
+        db.ConnectorDefinitions.Add(HttpConnector(connectorId));
+        await db.SaveChangesAsync();
+
+        var service = NewService(db);
+        var ownerWorkspace = Guid.NewGuid();
+        var attackerWorkspace = Guid.NewGuid();
+
+        var credId = await service.StoreAsync(ownerWorkspace, "http-rest", "Secret Key", "ApiKey", "secret-value");
+
+        // Act — attacker workspace cannot retrieve owner's credential
+        var act = async () => await service.RetrieveAsync(attackerWorkspace, credId);
+
+        // Assert — DB-level filter returns null, not a cross-workspace row
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("*not found or access denied*");
+    }
+
+    [Fact]
+    public async Task RevokeAsync_WrongWorkspaceId_ThrowsUnauthorised()
+    {
+        // Arrange
+        var db = NewDb();
+        var connectorId = Guid.NewGuid();
+        db.ConnectorDefinitions.Add(HttpConnector(connectorId));
+        await db.SaveChangesAsync();
+
+        var service = NewService(db);
+        var ownerWorkspace = Guid.NewGuid();
+        var attackerWorkspace = Guid.NewGuid();
+
+        var credId = await service.StoreAsync(ownerWorkspace, "http-rest", "Key To Protect", "ApiKey", "protected-value");
+
+        // Act — attacker workspace cannot revoke owner's credential
+        var act = async () => await service.RevokeAsync(attackerWorkspace, credId);
+
+        // Assert — DB-level filter ensures cross-workspace revoke is denied
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("*not found or access denied*");
     }
 }

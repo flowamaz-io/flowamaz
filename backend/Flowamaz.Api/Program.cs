@@ -258,6 +258,18 @@ using (var scope = app.Services.CreateScope())
     await migrationService.RunAsync(app.Lifetime.ApplicationStopping);
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// 16. Security startup gates — reject misconfigured deployments before first request.
+// ──────────────────────────────────────────────────────────────────────────────
+if (!app.Environment.IsDevelopment())
+{
+    var gateSigningKey = app.Configuration["GATE_SIGNING_KEY"];
+    if (string.IsNullOrEmpty(gateSigningKey))
+        throw new InvalidOperationException(
+            "GATE_SIGNING_KEY must be set in non-Development environments. " +
+            "Generate with: openssl rand -hex 32");
+}
+
 try
 {
     Log.Information("Flowamaz.Api starting — environment={Environment}", app.Environment.EnvironmentName);

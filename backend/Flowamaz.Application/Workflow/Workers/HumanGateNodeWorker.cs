@@ -258,7 +258,7 @@ public sealed class HumanGateNodeWorker : INodeWorker
         }
 
         var platformUrl = _config["PLATFORM_URL"] ?? _config["PlatformUrl"] ?? "https://app.flowamaz.com";
-        var signingKey = _config["GATE_SIGNING_KEY"] ?? "default-dev-key";
+        var signingKey = GateHmacHelper.GetSigningKey(_config, _logger);
         var expiresUnix = new DateTimeOffset(gate.ExpiresAt ?? DateTime.UtcNow.AddHours(DefaultTimeoutHours)).ToUnixTimeSeconds();
 
         var approveSig = GateHmacHelper.BuildHmac($"{gate.Id}:approve:{expiresUnix}", signingKey);
