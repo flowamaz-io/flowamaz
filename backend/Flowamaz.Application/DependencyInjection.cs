@@ -65,6 +65,10 @@ public static class DependencyInjection
         services.AddScoped<INlYamlGenerationService, NlYamlGenerationService>();
         services.AddSingleton<ICopilotPatternMatcher, CopilotPatternMatcher>();
 
+        // Visual input + Conversation import (prompt 03-04).
+        services.AddScoped<IVisualInputService, VisualInputService>();
+        services.AddScoped<IConversationImportService, ConversationImportService>();
+
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;
     }

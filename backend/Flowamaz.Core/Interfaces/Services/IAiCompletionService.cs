@@ -12,4 +12,11 @@ public interface IAiCompletionService
 {
     Task<AiCompletionResult> CompleteAsync(
         ModelConfig config, string systemPrompt, string userPrompt, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Vision completion (F3). Sends an image alongside a text prompt — requires HasVision=true model.
+    /// </summary>
+    Task<AiCompletionResult> CompleteWithImageAsync(
+        ModelConfig config, string systemPrompt, string imageBase64, string mimeType,
+        string additionalText, CancellationToken cancellationToken = default);
 }

@@ -740,3 +740,28 @@ All 3 fix prompts complete. Phase-end gates: unit 256 + integration 56 = **312 t
 - [x] Rate limiting 60 calls/user/hour on copilot endpoint
 - [x] Voice input: graceful degradation with actionable browser error message
 - [x] 20 patterns implemented; unknown command returns null
+
+## Prompt 03-04 — Visual Input + Conversation Import  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- `IAiCompletionService.CompleteWithImageAsync` — new vision overload; Anthropic multipart content block format; stub returns deterministic JSON for tests
+- `IVisualInputService` + `VisualInputService` — image → Claude vision (F3) → JSON parse → connector matching → YAML draft; confidence < 0.80 → low_confidence_elements[]
+- `IConversationImportService` + `ConversationImportService` — text/Slack JSON/Teams → F2 extraction → NlWorkflowRequest → NlYamlGenerationService pipeline
+- `WorkflowCreationController` — POST /from-image (multipart, 10MB limit) + POST /from-conversation
+- `VisualInputServiceTests` — 4 tests: valid extract, low-confidence detection, SAP connector mapping, malformed JSON fallback
+- `ConversationImportServiceTests` — 4 tests: Slack JSON, approver detection, generic text, malformed JSON fallback
+- `VisualInputPanel.vue` — drag-drop zone, client-side resize to 1920px via Canvas API, split result view
+- `VisualConfirmationStep.vue` — per-element type confirmation for low-confidence detections
+- `ConversationImportPanel.vue` — source type selector (Slack/Teams/Email/General), extracted process preview with approvers/systems
+
+**DoD**
+- [x] dotnet build 0 errors 0 warnings
+- [x] 309 unit tests pass
+- [x] Vue TypeScript build 0 errors
+- [x] Vision uses F3 (IAiCompletionService.CompleteWithImageAsync) — F2 used for conversation import
+- [x] Image tokens metered via IAiTokenMeteringService
+- [x] Max 10MB enforced at API layer; unsupported MIME types rejected with actionable error
+- [x] Low-confidence elements capped at 5 confirmation questions
+- [x] Malformed Claude JSON response handled gracefully

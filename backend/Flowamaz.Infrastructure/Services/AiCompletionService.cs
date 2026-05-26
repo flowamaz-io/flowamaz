@@ -113,6 +113,67 @@ public sealed class AiCompletionService : IAiCompletionService
         return new AiCompletionResult(text, tokensInput, tokensOutput);
     }
 
+    public async Task<AiCompletionResult> CompleteWithImageAsync(
+        ModelConfig config, string systemPrompt, string imageBase64, string mimeType,
+        string additionalText, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("AiCompletionService.CompleteWithImageAsync enter model={ModelId}", config.ModelId);
+
+        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        {
+            _logger.LogWarning("AiCompletionService.CompleteWithImageAsync: stub mode");
+            const string stubJson = """{"nodes":[{"id":"n1","label":"Start","type":"trigger","x":100,"y":100,"confidence":0.99,"annotations":[]},{"id":"n2","label":"Process","type":"action","x":100,"y":200,"confidence":0.95,"annotations":[]},{"id":"n3","label":"End","type":"end","x":100,"y":300,"confidence":0.99,"annotations":[]}],"edges":[{"from":"n1","to":"n2","label":null},{"from":"n2","to":"n3","label":null}],"low_confidence":[]}""";
+            return new AiCompletionResult(stubJson, EstimateTokens(imageBase64 + additionalText), EstimateTokens(stubJson));
+        }
+
+        try
+        {
+            var result = await CallAnthropicWithImageAsync(config, systemPrompt, imageBase64, mimeType, additionalText, cancellationToken);
+            _logger.LogDebug("AiCompletionService.CompleteWithImageAsync exit tokensIn={In} tokensOut={Out}", result.TokensInput, result.TokensOutput);
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "AiCompletionService.CompleteWithImageAsync error model={ModelId}", config.ModelId);
+            throw;
+        }
+    }
+
+    private async Task<AiCompletionResult> CallAnthropicWithImageAsync(
+        ModelConfig config, string systemPrompt, string imageBase64, string mimeType,
+        string additionalText, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Post, MessagesUrl);
+        request.Headers.TryAddWithoutValidation("x-api-key", config.ApiKey);
+        request.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
+        request.Content = JsonContent.Create(new
+        {
+            model = config.ModelId,
+            max_tokens = MaxTokens,
+            system = systemPrompt,
+            messages = new[]
+            {
+                new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "image", source = new { type = "base64", media_type = mimeType, data = imageBase64 } },
+                        new { type = "text", text = additionalText },
+                    },
+                },
+            },
+        });
+
+        using var response = await client.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        return ParseResponse(doc.RootElement);
+    }
+
     // Deterministic local completion: lead sentence + the supplied facts so instance-specific values
     // (amounts, names) always appear. Token counts are estimated (≈4 chars/token) for realistic metering.
     private static AiCompletionResult StubResult(string systemPrompt, string userPrompt)
