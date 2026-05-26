@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flowamaz.Core.Constants;
@@ -6,6 +5,8 @@ using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace Flowamaz.Application.Workflow.Creation;
 
@@ -113,45 +114,50 @@ public sealed class VisualInputService : IVisualInputService
         }
     }
 
+    private static readonly ISerializer _yamlSerializer = new SerializerBuilder()
+        .WithNamingConvention(CamelCaseNamingConvention.Instance)
+        .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitNull)
+        .Build();
+
     private string BuildYamlFromParsedNodes(IReadOnlyList<ParsedNode> nodes, IReadOnlyList<ParsedEdge> edges, Guid workspaceId)
     {
         var wfId = $"visual-workflow-{workspaceId.ToString()[..8]}";
-        var sb = new StringBuilder();
-        sb.AppendLine("apiVersion: flowamaz/v1");
-        sb.AppendLine("kind: Workflow");
-        sb.AppendLine("metadata:");
-        sb.AppendLine($"  id: {wfId}");
-        sb.AppendLine("  name: \"Visual Workflow\"");
-        sb.AppendLine("  description: \"Generated from uploaded diagram\"");
-        sb.AppendLine("  version: \"1.0.0\"");
-        sb.AppendLine("spec:");
-        sb.AppendLine("  trigger:");
-        sb.AppendLine("    type: manual");
-        sb.AppendLine("  nodes:");
-
-        foreach (var node in nodes)
-        {
-            var connectors = MatchConnectors(node.Annotations);
-            sb.AppendLine($"    - id: {node.Id}");
-            sb.AppendLine($"      type: {node.Type}");
-            sb.AppendLine($"      label: \"{node.Label}\"");
-            if (connectors.Count > 0)
-                sb.AppendLine($"      # connectors: {string.Join(", ", connectors)}");
-            sb.AppendLine("      config: {}");
-        }
-
-        sb.AppendLine("  edges:");
         var edgeIdx = 1;
-        foreach (var edge in edges)
+        var doc = new
         {
-            sb.AppendLine($"    - id: e{edgeIdx++}");
-            sb.AppendLine($"      from: {edge.From}");
-            sb.AppendLine($"      to: {edge.To}");
-            if (!string.IsNullOrEmpty(edge.Label))
-                sb.AppendLine($"      via: \"{edge.Label}\"");
-        }
+            apiVersion = "flowamaz/v1",
+            kind = "Workflow",
+            metadata = new
+            {
+                id = wfId,
+                name = "Visual Workflow",
+                description = "Generated from uploaded diagram",
+                version = "1.0.0"
+            },
+            spec = new
+            {
+                trigger = new { type = "manual" },
+                nodes = nodes.Select(n => new
+                {
+                    id = n.Id,
+                    type = n.Type,
+                    label = n.Label,
+                    connectors = MatchConnectors(n.Annotations).Count > 0
+                        ? MatchConnectors(n.Annotations)
+                        : (List<string>?)null,
+                    config = new { }
+                }).ToList(),
+                edges = edges.Select(e => new
+                {
+                    id = $"e{edgeIdx++}",
+                    from = e.From,
+                    to = e.To,
+                    via = string.IsNullOrEmpty(e.Label) ? (string?)null : e.Label
+                }).ToList()
+            }
+        };
 
-        return sb.ToString();
+        return _yamlSerializer.Serialize(doc);
     }
 
     private static List<string> MatchConnectors(IReadOnlyList<string> annotations)

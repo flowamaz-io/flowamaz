@@ -203,9 +203,13 @@ builder.Services.AddOpenApi();
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
+    {
         // Serialise/accept enums as strings (e.g. role "Admin", marketplacePolicy "AllowAll")
         // rather than opaque integers, on both responses and request binding.
-        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        // Case-insensitive binding so camelCase JSON from Vue matches PascalCase C# properties.
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    });
 
 var app = builder.Build();
 
