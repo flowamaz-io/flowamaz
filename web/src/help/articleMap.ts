@@ -7,7 +7,14 @@ export const articleMap: Record<string, string> = {
   '/settings': 'workspaces/what-is-a-workspace',
   '/settings/members': 'workspaces/invite-team-members',
   '/settings/api-keys': 'workspaces/api-keys',
-  // Phase 3+ routes added in later prompts.
+  // Phase 3 editor routes (prompt 03-06)
+  '/workflows/:id/edit': 'node-types/using-the-canvas',
+  '/workflows/:id/edit#node:trigger': 'node-types/trigger-nodes',
+  '/workflows/:id/edit#node:action': 'node-types/action-nodes',
+  '/workflows/:id/edit#node:ai': 'node-types/ai-nodes',
+  '/workflows/:id/edit#node:human-gate': 'node-types/human-gate-nodes',
+  '/workflows/:id/edit#node:router': 'node-types/router-nodes',
+  '/workflows/new': 'getting-started/what-is-flowamaz',
 };
 
 /** Falls back to the platform overview when a route has no explicit mapping. */

@@ -28,8 +28,10 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresOnboarding: true },
     children: [
       { path: '', name: 'dashboard', component: () => import('@/views/dashboard/DashboardView.vue') },
+      { path: 'workflows/new', name: 'workflow-new', component: () => import('@/views/workflow/NewWorkflowView.vue') },
       { path: 'workflows', name: 'workflows', component: () => import('@/views/workflow/WorkflowListView.vue') },
       { path: 'workflows/:id', name: 'workflow-detail', component: () => import('@/views/workflow/WorkflowDetailView.vue') },
+      { path: 'workflows/:id/edit', name: 'workflow-editor', component: () => import('@/views/workflow/WorkflowEditorView.vue') },
       { path: 'instances', name: 'instances', component: () => import('@/views/instance/InstanceListView.vue') },
       { path: 'instances/:id', name: 'instance-detail', component: () => import('@/views/instance/InstanceDetailView.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/views/workspace/WorkspaceSettingsView.vue') },
