@@ -1,5 +1,7 @@
 using Flowamaz.Application.Auth.Services;
 using Flowamaz.Application.Platform.Services;
+using Flowamaz.Application.Workflow.Debugger;
+using Flowamaz.Application.Workflow.Interpreter;
 using Flowamaz.Application.Workflow.Orchestrator;
 using Flowamaz.Application.Workflow.Saga;
 using Flowamaz.Application.Workflow.Services;
@@ -43,6 +45,10 @@ public static class DependencyInjection
         services.AddScoped<WorkflowService>();
         services.AddScoped<InstanceService>();
         services.AddScoped<GateService>();
+
+        // Interpreter + step debugger (prompt 02-05).
+        services.AddScoped<IWorkflowInterpreterService, WorkflowInterpreterService>();
+        services.AddScoped<IStepDebuggerService, StepDebuggerService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;

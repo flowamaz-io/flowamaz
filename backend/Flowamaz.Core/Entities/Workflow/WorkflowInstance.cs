@@ -11,6 +11,9 @@ public class WorkflowInstance : WorkspaceEntity
 {
     public Guid WorkflowDefinitionId { get; set; }
     public Guid WorkflowVersionId { get; set; }
+
+    /// <summary>Which workspace environment this run belongs to. Gates the step debugger (Production is off-limits).</summary>
+    public WorkspaceEnvironmentType EnvironmentType { get; set; } = WorkspaceEnvironmentType.Dev;
     public InstanceStatus Status { get; set; } = InstanceStatus.Pending;
     public InstanceTriggerType TriggerType { get; set; } = InstanceTriggerType.Manual;
     public string? TriggerPayload { get; set; }

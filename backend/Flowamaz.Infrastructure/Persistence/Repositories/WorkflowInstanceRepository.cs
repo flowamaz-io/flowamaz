@@ -28,6 +28,16 @@ public sealed class WorkflowInstanceRepository(FlowAmazDbContext db) : IWorkflow
         db.WorkflowInstances.AsNoTracking().Where(i => i.WorkspaceId == workspaceId)
             .OrderByDescending(i => i.CreatedAt).ToListAsync(cancellationToken);
 
+    private static readonly InstanceStatus[] ActiveStatuses =
+        [InstanceStatus.Pending, InstanceStatus.Running, InstanceStatus.Waiting, InstanceStatus.Compensating];
+
+    public Task<bool> HasActiveInstancesAsync(Guid workflowDefinitionId, Guid workspaceId, CancellationToken cancellationToken = default) =>
+        db.WorkflowInstances.AnyAsync(
+            i => i.WorkspaceId == workspaceId
+                 && i.WorkflowDefinitionId == workflowDefinitionId
+                 && ActiveStatuses.Contains(i.Status),
+            cancellationToken);
+
     public async Task AddAsync(WorkflowInstance instance, CancellationToken cancellationToken = default) =>
         await db.WorkflowInstances.AddAsync(instance, cancellationToken);
 

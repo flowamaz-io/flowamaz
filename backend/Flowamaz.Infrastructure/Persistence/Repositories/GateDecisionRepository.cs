@@ -19,6 +19,11 @@ public sealed class GateDecisionRepository(FlowAmazDbContext db) : IGateDecision
             .Where(g => g.InstanceId == instanceId && g.WorkspaceId == workspaceId)
             .OrderBy(g => g.CreatedAt).ToListAsync(cancellationToken);
 
+    public Task<List<GateDecision>> GetPendingForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>
+        db.GateDecisions.AsNoTracking()
+            .Where(g => g.WorkspaceId == workspaceId && g.Decision == GateDecisionStatus.Pending)
+            .OrderBy(g => g.CreatedAt).ToListAsync(cancellationToken);
+
     public Task<List<GateDecision>> GetExpiredAsync(DateTime asOf, CancellationToken cancellationToken = default) =>
         db.GateDecisions
             .Where(g => g.Decision == GateDecisionStatus.Pending && g.ExpiresAt != null && g.ExpiresAt <= asOf)

@@ -10,6 +10,7 @@ public sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<Wor
     {
         builder.HasKey(i => i.Id);
         builder.Property(i => i.Status).HasConversion<string>().HasMaxLength(32);
+        builder.Property(i => i.EnvironmentType).HasConversion<string>().HasMaxLength(16);
         builder.Property(i => i.TriggerType).HasConversion<string>().HasMaxLength(32);
         builder.Property(i => i.SagaState).HasConversion<string>().HasMaxLength(32);
         builder.Property(i => i.TriggerPayload).HasColumnType("jsonb");

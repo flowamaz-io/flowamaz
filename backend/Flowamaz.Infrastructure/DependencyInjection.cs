@@ -29,7 +29,7 @@ public static class DependencyInjection
         AddPersistence(services, configuration);
         AddRepositories(services);
         AddStartupMigration(services);
-        AddWorkflowEngine(services);
+        AddWorkflowEngine(services, configuration);
         AddRedis(services, configuration);
         AddAiServices(services);
         AddAuthServices(services);
@@ -75,11 +75,21 @@ public static class DependencyInjection
         services.AddScoped<IGateDecisionRepository, GateDecisionRepository>();
     }
 
-    private static void AddWorkflowEngine(IServiceCollection services)
+    private static void AddWorkflowEngine(IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<ITaskQueue, RedisTaskQueue>();
         services.AddScoped<IVariableEvaluationService, VariableEvaluationService>();
-        services.AddHostedService<OrchestratorWorker>();
+
+        // The background worker can be switched off (Worker:Enabled=false) — used by integration
+        // tests so the live polling loop doesn't race API writes (the full loop lands in 02-08).
+        if (configuration.GetValue<bool?>("Worker:Enabled") ?? true)
+        {
+            services.AddHostedService<OrchestratorWorker>();
+        }
+
+        // Interpreter AI completion + step-debugger state store (prompt 02-05).
+        services.AddSingleton<IAiCompletionService, AiCompletionService>();
+        services.AddSingleton<IDebugStateStore, RedisDebugStateStore>();
     }
 
     private static void AddStartupMigration(IServiceCollection services)

@@ -161,29 +161,33 @@ builder.Services.AddHealthChecks()
     .AddRedis(redisConnection, name: "redis", tags: ["redis"]);
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 12b. Quartz — delayed-queue promoter runs every 5s, moving ready retry/backoff
-//      items back onto their workspace pending queue (prompt 02-02).
+// 12b. Quartz — delayed-queue promoter (5s), lease-expiry recovery (15s), gate
+//      timeout/escalation (60s). Disabled with Worker:Enabled=false (integration tests).
 // ──────────────────────────────────────────────────────────────────────────────
-builder.Services.AddQuartz(q =>
+var backgroundWorkersEnabled = builder.Configuration.GetValue<bool?>("Worker:Enabled") ?? true;
+if (backgroundWorkersEnabled)
 {
-    var promoterKey = new JobKey(nameof(DelayedQueuePromoterJob));
-    q.AddJob<DelayedQueuePromoterJob>(promoterKey);
-    q.AddTrigger(t => t.ForJob(promoterKey)
-        .WithSimpleSchedule(s => s.WithIntervalInSeconds(5).RepeatForever()));
+    builder.Services.AddQuartz(q =>
+    {
+        var promoterKey = new JobKey(nameof(DelayedQueuePromoterJob));
+        q.AddJob<DelayedQueuePromoterJob>(promoterKey);
+        q.AddTrigger(t => t.ForJob(promoterKey)
+            .WithSimpleSchedule(s => s.WithIntervalInSeconds(5).RepeatForever()));
 
-    // Lease-expiry recovery every 15s (prompt 02-03).
-    var leaseKey = new JobKey(nameof(WorkerLeaseExpiryJob));
-    q.AddJob<WorkerLeaseExpiryJob>(leaseKey);
-    q.AddTrigger(t => t.ForJob(leaseKey)
-        .WithSimpleSchedule(s => s.WithIntervalInSeconds(15).RepeatForever()));
+        // Lease-expiry recovery every 15s (prompt 02-03).
+        var leaseKey = new JobKey(nameof(WorkerLeaseExpiryJob));
+        q.AddJob<WorkerLeaseExpiryJob>(leaseKey);
+        q.AddTrigger(t => t.ForJob(leaseKey)
+            .WithSimpleSchedule(s => s.WithIntervalInSeconds(15).RepeatForever()));
 
-    // Gate timeout / escalation every 60s (prompt 02-03).
-    var gateKey = new JobKey(nameof(GateTimeoutJob));
-    q.AddJob<GateTimeoutJob>(gateKey);
-    q.AddTrigger(t => t.ForJob(gateKey)
-        .WithSimpleSchedule(s => s.WithIntervalInSeconds(60).RepeatForever()));
-});
-builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
+        // Gate timeout / escalation every 60s (prompt 02-03).
+        var gateKey = new JobKey(nameof(GateTimeoutJob));
+        q.AddJob<GateTimeoutJob>(gateKey);
+        q.AddTrigger(t => t.ForJob(gateKey)
+            .WithSimpleSchedule(s => s.WithIntervalInSeconds(60).RepeatForever()));
+    });
+    builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 13. OpenAPI + Scalar at /scalar (always public, no auth).

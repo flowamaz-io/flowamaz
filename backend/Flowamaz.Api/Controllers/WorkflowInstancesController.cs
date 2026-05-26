@@ -111,7 +111,7 @@ public sealed class WorkflowInstancesController : ControllerBase
 
     [HttpGet("{id:guid}/timeline")]
     [RequireWorkspaceRole(WorkspaceRole.Viewer)]
-    public async Task<ActionResult<IReadOnlyList<TimelineEntry>>> Timeline(Guid workspaceId, Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<TimelineResponse>> Timeline(Guid workspaceId, Guid id, CancellationToken cancellationToken)
     {
         var timeline = await _instances.GetTimelineAsync(workspaceId, id, cancellationToken);
         return timeline is null ? NotFound() : Ok(timeline);

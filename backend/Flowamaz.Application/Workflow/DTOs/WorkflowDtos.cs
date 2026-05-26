@@ -78,5 +78,31 @@ public sealed record GateResponse(
     string DeliveryChannel, string DeliveryStatus, DateTime? ExpiresAt, DateTime CreatedAt,
     DateTime? DecidedAt, string? DecisionNote);
 
-public sealed record TimelineEntry(
-    string NodeId, string NodeType, string Status, DateTime? StartedAt, DateTime? CompletedAt);
+// ── Run timeline (waterfall, prompt 02-05) ───────────────────────────────────
+
+public sealed record TimelineResponse(
+    Guid InstanceId,
+    long TotalDurationMs,
+    DateTime? StartedAt,
+    DateTime? CompletedAt,
+    IReadOnlyList<TimelineNode> Nodes);
+
+public sealed record TimelineNode(
+    string NodeId,
+    string NodeType,
+    string Label,
+    string Status,
+    DateTime? StartedAt,
+    DateTime? CompletedAt,
+    long DurationMs,
+    long OffsetMs,
+    int RetryCount,
+    bool HasOutput);
+
+// ── Step debugger requests (prompt 02-05) ─────────────────────────────────────
+
+public sealed record PauseRequest(string AfterNodeId);
+
+public sealed record ForceVariableRequest(string Name, string Value);
+
+public sealed record ForceBranchRequest(string RouterNodeId, string TargetBranchEdgeId);

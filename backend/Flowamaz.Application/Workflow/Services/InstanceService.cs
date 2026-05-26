@@ -4,6 +4,7 @@ using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Queue;
 using Flowamaz.Core.Interfaces.Repositories;
+using Flowamaz.Core.Workflow;
 using Microsoft.Extensions.Logging;
 
 namespace Flowamaz.Application.Workflow.Services;
@@ -23,6 +24,8 @@ public sealed class InstanceService
     private readonly IWorkflowEventRepository _events;
     private readonly ITaskQueue _queue;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IWorkflowVersionRepository _versions;
+    private readonly SfgParser _parser;
     private readonly ILogger<InstanceService> _logger;
 
     public InstanceService(
@@ -32,6 +35,8 @@ public sealed class InstanceService
         IWorkflowEventRepository events,
         ITaskQueue queue,
         IUnitOfWork unitOfWork,
+        IWorkflowVersionRepository versions,
+        SfgParser parser,
         ILogger<InstanceService> logger)
     {
         _instances = instances;
@@ -40,6 +45,8 @@ public sealed class InstanceService
         _events = events;
         _queue = queue;
         _unitOfWork = unitOfWork;
+        _versions = versions;
+        _parser = parser;
         _logger = logger;
     }
 
@@ -100,15 +107,59 @@ public sealed class InstanceService
         return variables.Select(ToVariable).ToList();
     }
 
-    public async Task<List<TimelineEntry>?> GetTimelineAsync(Guid workspaceId, Guid id, CancellationToken ct = default)
+    public async Task<TimelineResponse?> GetTimelineAsync(Guid workspaceId, Guid id, CancellationToken ct = default)
     {
         var instance = await _instances.GetByIdForWorkspaceAsync(id, workspaceId, ct);
         if (instance is null) return null;
-        var states = await _nodeStates.GetForInstanceAsync(id, ct);
-        return states
+
+        var states = (await _nodeStates.GetForInstanceAsync(id, ct))
             .OrderBy(s => s.StartedAt ?? s.CreatedAt)
-            .Select(s => new TimelineEntry(s.NodeId, s.NodeType, s.Status.ToString(), s.StartedAt, s.CompletedAt))
             .ToList();
+
+        // Node labels come from the pinned version's graph (best-effort — fall back to node id).
+        var labels = await TryLoadLabelsAsync(instance, ct);
+        var instanceStart = instance.StartedAt ?? instance.CreatedAt;
+
+        long totalDurationMs = 0;
+        var nodes = new List<TimelineNode>(states.Count);
+        foreach (var s in states)
+        {
+            var durationMs = s.StartedAt is not null && s.CompletedAt is not null
+                ? (long)(s.CompletedAt.Value - s.StartedAt.Value).TotalMilliseconds
+                : 0;
+            totalDurationMs += durationMs;
+            var offsetMs = s.StartedAt is not null
+                ? Math.Max(0, (long)(s.StartedAt.Value - instanceStart).TotalMilliseconds)
+                : 0;
+            nodes.Add(new TimelineNode(
+                s.NodeId,
+                s.NodeType,
+                labels.GetValueOrDefault(s.NodeId, s.NodeId),
+                s.Status.ToString(),
+                s.StartedAt,
+                s.CompletedAt,
+                durationMs,
+                offsetMs,
+                s.RetryCount,
+                s.OutputPayload is not null));
+        }
+
+        return new TimelineResponse(instance.Id, totalDurationMs, instance.StartedAt, instance.CompletedAt, nodes);
+    }
+
+    private async Task<Dictionary<string, string>> TryLoadLabelsAsync(WorkflowInstance instance, CancellationToken ct)
+    {
+        var version = await _versions.GetByIdForWorkspaceAsync(instance.WorkflowVersionId, instance.WorkspaceId, ct);
+        if (version is null) return [];
+        try
+        {
+            var graph = await _parser.ParseAsync(version.YamlContent, ct);
+            return graph.Nodes.ToDictionary(n => n.Id, n => n.Label, StringComparer.Ordinal);
+        }
+        catch (Core.Exceptions.SfgParseException)
+        {
+            return [];
+        }
     }
 
     public async Task<TriggerInstanceResponse?> RetryAsync(Guid workspaceId, Guid id, CancellationToken ct = default)

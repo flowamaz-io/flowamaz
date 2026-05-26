@@ -22,4 +22,6 @@ public sealed class WorkflowVersionRepository(FlowAmazDbContext db) : IWorkflowV
 
     public async Task AddAsync(WorkflowVersion version, CancellationToken cancellationToken = default) =>
         await db.WorkflowVersions.AddAsync(version, cancellationToken);
+
+    public void Update(WorkflowVersion version) => db.WorkflowVersions.Update(version);
 }

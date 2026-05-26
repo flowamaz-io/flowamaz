@@ -460,3 +460,34 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 3. `/{id}/timeline` returns a basic node-state timeline; the Workflow Interpreter (02-05) enriches it.
 4. Publish uses a placeholder commit SHA (`Guid N`); real Git SHAs arrive in Phase 5 (WorkspaceGitService).
 5. Instance list filtering is in-memory over the workspace's instances (Phase 2 scale); a query-level filter can come later.
+
+---
+
+## Prompt 02-05 — Workflow Interpreter + Run Timeline + Step Debugger  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- **Workflow Interpreter** (`WorkflowInterpreterService`, `IWorkflowInterpreterService`): CEO narrative (resolves F5 `process-intel` via `IModelResolutionService`, calls `IAiCompletionService`, meters via `IAiTokenMeteringService`); Auditor + Developer narratives deterministic from event log / node states (zero AI). `WorkflowInterpreterController`: `GET …/narrative?audience=` + `POST …/narrative/download` (markdown attachment).
+- **AI completion seam** (`IAiCompletionService` + `AiCompletionService`): provider-agnostic single-shot completion; Phase-2 deterministic local impl (no provider key wired) with estimated token counts so metering is realistic.
+- **Enriched run timeline**: `InstanceService.GetTimelineAsync` now returns `TimelineResponse` (total_duration_ms = Σ node durations, per-node offset_ms/duration_ms/label/has_output); labels from the pinned version graph.
+- **Step debugger** (`StepDebuggerService`, `IStepDebuggerService`): pause/inspect/force-variable/step/force-branch/resume; **Dev/Staging-only enforced in the service** (Production → 403 `DebuggerNotAllowedException`). State in Redis (1h TTL) via `IDebugStateStore`/`RedisDebugStateStore`. `WorkflowDebuggerController` (all [Admin]).
+- Added `WorkflowInstance.EnvironmentType` (default Dev) + migration `AddInstanceEnvironment` (default 'Dev'). `NarrativeAudience` enum; `InterpreterNarrative`/`AiCompletionResult`/`DebugSnapshot` models.
+- **Test infra:** `Worker:Enabled` flag gates the OrchestratorWorker + Quartz; the integration fixture sets `Worker__Enabled=false` so the live polling loop can't race API writes.
+
+**Tests**
+- Unit: `WorkflowInterpreterServiceTests` (CEO contains variable values + metered once; Auditor lists event timestamps with zero AI; unknown → null), `StepDebuggerServiceTests` (pause stored for Dev; Production → 403 on every op; unknown → false).
+
+**DoD / acceptance**
+- [x] dotnet build 0/0; dotnet test all pass — **174 unit + 50 integration**
+- [x] CEO narrative via IModelResolutionService(F5) + metered (never hardcoded model id)
+- [x] Auditor + Developer narratives zero AI (deterministic)
+- [x] Timeline nodes carry offset_ms/duration_ms; total = Σ durations
+- [x] Debugger Dev/Staging-only enforced at the service layer; Production → 403
+- [x] Pause points in Redis with 1h TTL; ForceVariable writes a variable + appends an event
+
+**Deviations**
+1. No real provider SDK call yet — `AiCompletionService` is a deterministic local completion (Phase-2; metering still records estimated tokens, cost 0). Real Anthropic call wires when a platform key is configured.
+2. Download returns markdown (not PDF) — "keep it simple for Phase 2"; PDF rendering deferrable.
+3. Worker honouring pause points (the worker consulting `IDebugStateStore` before each step) is **deferred to 02-08** with the full execution-loop wiring; 02-05 ships the store + service + 403 gate, unit-tested.
+4. Added `EnvironmentType` to `WorkflowInstance` (default Dev) so the debugger's Production gate is enforceable; triggers default to Dev (per-environment triggering arrives with API-key environment context later).

@@ -33,6 +33,10 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        // Disable the background worker + Quartz jobs for tests — the live polling loop would race
+        // API writes (sequence numbers / node states). The full execution loop is exercised in 02-08.
+        Environment.SetEnvironmentVariable("Worker__Enabled", "false");
+
         await _postgres.StartAsync();
         await _redis.StartAsync();
         _redisClient = await ConnectionMultiplexer.ConnectAsync($"{_redis.GetConnectionString()},allowAdmin=true");
