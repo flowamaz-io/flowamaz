@@ -12,6 +12,9 @@ public sealed class CreateWorkflowDefinitionRequestValidator : AbstractValidator
             .Matches("^[a-z0-9-]+$").WithMessage("Workflow slug may contain only lowercase letters, numbers and hyphens.");
         RuleFor(x => x.YamlContent).NotEmpty().WithMessage("Provide the workflow YAML.");
         RuleFor(x => x.CreatedByMethod).IsInEnum().WithMessage("Choose how this workflow was created.");
+        RuleFor(x => x.SlaThresholdMs).GreaterThan(0)
+            .When(x => x.SlaThresholdMs.HasValue)
+            .WithMessage("SLA threshold must be greater than 0 milliseconds, or leave it unset for no SLA.");
     }
 }
 
@@ -20,6 +23,9 @@ public sealed class UpdateWorkflowDefinitionRequestValidator : AbstractValidator
     public UpdateWorkflowDefinitionRequestValidator()
     {
         RuleFor(x => x.YamlContent).NotEmpty().WithMessage("Provide the workflow YAML to save.");
+        RuleFor(x => x.SlaThresholdMs).GreaterThan(0)
+            .When(x => x.SlaThresholdMs.HasValue)
+            .WithMessage("SLA threshold must be greater than 0 milliseconds, or leave it unset for no SLA.");
     }
 }
 

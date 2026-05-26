@@ -20,6 +20,7 @@ public class ProcessIntelligenceJobWrapperTests
     private readonly Mock<IWorkflowAnalyticsRepository> _analytics = new();
     private readonly Mock<IWorkflowMetricRepository> _metrics = new();
     private readonly Mock<IWorkflowInsightRepository> _insights = new();
+    private readonly Mock<IWorkflowDefinitionRepository> _definitions = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IModelResolutionService> _modelResolution = new();
     private readonly Mock<IAiCompletionService> _completion = new();
@@ -27,7 +28,7 @@ public class ProcessIntelligenceJobWrapperTests
     private readonly Mock<ISemanticCacheService> _semanticCache = new();
 
     private ProcessIntelligenceService NewService() => new(
-        _analytics.Object, _metrics.Object, _insights.Object, _unitOfWork.Object,
+        _analytics.Object, _metrics.Object, _insights.Object, _definitions.Object, _unitOfWork.Object,
         _modelResolution.Object, _completion.Object, _metering.Object, _semanticCache.Object,
         NullLogger<ProcessIntelligenceService>.Instance);
 

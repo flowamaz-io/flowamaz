@@ -92,6 +92,7 @@ public static class DependencyInjection
         }
 
         // Interpreter AI completion + step-debugger state store (prompt 02-05).
+        services.AddHttpClient(AiCompletionService.HttpClientName);
         services.AddSingleton<IAiCompletionService, AiCompletionService>();
         services.AddSingleton<IDebugStateStore, RedisDebugStateStore>();
     }

@@ -9,9 +9,10 @@ public sealed record CreateWorkflowDefinitionRequest(
     string Slug,
     string YamlContent,
     string? NlDescription,
-    WorkflowCreatedByMethod CreatedByMethod);
+    WorkflowCreatedByMethod CreatedByMethod,
+    long? SlaThresholdMs = null);
 
-public sealed record UpdateWorkflowDefinitionRequest(string YamlContent);
+public sealed record UpdateWorkflowDefinitionRequest(string YamlContent, long? SlaThresholdMs = null);
 
 public sealed record TriggerInstanceRequest(Guid WorkflowDefinitionId, string? Payload, string? IdempotencyKey);
 
@@ -35,6 +36,7 @@ public sealed record WorkflowDefinitionResponse(
     string CurrentVersion,
     int HealthScore,
     WorkflowTriggerType TriggerType,
+    long? SlaThresholdMs,
     DateTime CreatedAt,
     DateTime UpdatedAt);
 

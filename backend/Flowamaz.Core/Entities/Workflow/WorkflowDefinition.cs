@@ -18,4 +18,7 @@ public class WorkflowDefinition : WorkspaceEntity
     public string CurrentVersion { get; set; } = "draft";
     public int HealthScore { get; set; } = 100;
     public WorkflowTriggerType TriggerType { get; set; } = WorkflowTriggerType.Manual;
+
+    /// <summary>Per-workflow SLA target in milliseconds. Null = no SLA; drives SLA-risk insights.</summary>
+    public long? SlaThresholdMs { get; set; }
 }

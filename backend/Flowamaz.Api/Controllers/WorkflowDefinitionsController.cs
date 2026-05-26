@@ -68,7 +68,7 @@ public sealed class WorkflowDefinitionsController : ControllerBase
         Guid workspaceId, Guid id, [FromBody] UpdateWorkflowDefinitionRequest request, CancellationToken cancellationToken)
     {
         await _updateValidator.ValidateAndThrowAsync(request, cancellationToken);
-        var updated = await _workflows.UpdateAsync(workspaceId, id, request.YamlContent, cancellationToken);
+        var updated = await _workflows.UpdateAsync(workspaceId, id, request.YamlContent, request.SlaThresholdMs, cancellationToken);
         return updated is null ? NotFound() : Ok(updated);
     }
 

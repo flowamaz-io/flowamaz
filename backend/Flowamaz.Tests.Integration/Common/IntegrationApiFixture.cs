@@ -1,3 +1,5 @@
+using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Models;
 using Flowamaz.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -36,8 +38,9 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
         // Disable the background worker + Quartz jobs for tests — the live polling loop would race
         // API writes (sequence numbers / node states). The full execution loop is exercised in 02-08.
         Environment.SetEnvironmentVariable("Worker__Enabled", "false");
-        // A dummy platform key so F5 model resolution succeeds for the interpreter (the Phase-2 local
-        // AiCompletionService never actually uses it).
+        // A dummy platform key so F5 model resolution succeeds for the interpreter. The real
+        // AiCompletionService would now make a live Anthropic call with this key, so the completion
+        // service is replaced with a local stub below (integration tests never hit external AI).
         Environment.SetEnvironmentVariable("Ai__AnthropicPlatformKey", "test-platform-key");
 
         await _postgres.StartAsync();
@@ -55,6 +58,11 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
 
                 services.RemoveAll<IConnectionMultiplexer>();
                 services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(_redis.GetConnectionString()));
+
+                // Integration tests never call external AI — stub the completion (the dummy platform
+                // key would otherwise drive a live Anthropic request from AiCompletionService).
+                services.RemoveAll<IAiCompletionService>();
+                services.AddSingleton<IAiCompletionService, StubAiCompletionService>();
             });
         });
 
@@ -76,6 +84,20 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
     {
         var endpoint = _redisClient.GetEndPoints()[0];
         await _redisClient.GetServer(endpoint).FlushDatabaseAsync();
+    }
+}
+
+/// <summary>
+/// Deterministic local completion for integration tests — echoes the prompt (so instance values flow
+/// into narratives) without making a network call. Mirrors the dev fallback in AiCompletionService.
+/// </summary>
+internal sealed class StubAiCompletionService : IAiCompletionService
+{
+    public Task<AiCompletionResult> CompleteAsync(
+        ModelConfig config, string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
+    {
+        var text = $"Status summary:\n{userPrompt.Trim()}";
+        return Task.FromResult(new AiCompletionResult(text, Math.Max(1, userPrompt.Length / 4), Math.Max(1, text.Length / 4)));
     }
 }
 

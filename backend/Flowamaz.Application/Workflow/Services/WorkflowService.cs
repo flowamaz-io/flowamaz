@@ -70,6 +70,7 @@ public sealed class WorkflowService
             CreatedByMethod = request.CreatedByMethod,
             Status = WorkflowStatus.Draft,
             CurrentVersion = "draft",
+            SlaThresholdMs = request.SlaThresholdMs,
             CreatedBy = createdBy,
         };
 
@@ -87,7 +88,7 @@ public sealed class WorkflowService
     }
 
     public async Task<WorkflowDefinitionResponse?> UpdateAsync(
-        Guid workspaceId, Guid id, string yamlContent, CancellationToken ct = default)
+        Guid workspaceId, Guid id, string yamlContent, long? slaThresholdMs = null, CancellationToken ct = default)
     {
         var definition = await _definitions.GetByIdForWorkspaceAsync(id, workspaceId, ct);
         if (definition is null) return null;
@@ -95,6 +96,7 @@ public sealed class WorkflowService
         await _parser.ParseAsync(yamlContent, ct); // validate before save
 
         definition.YamlContent = yamlContent;
+        definition.SlaThresholdMs = slaThresholdMs;
         _definitions.Update(definition);
         await _unitOfWork.SaveChangesAsync(ct);
         return ToResponse(definition);
@@ -169,7 +171,7 @@ public sealed class WorkflowService
 
     private static WorkflowDefinitionResponse ToResponse(WorkflowDefinition d) => new(
         d.Id, d.WorkspaceId, d.Name, d.Slug, d.Description, d.YamlContent, d.NlDescription,
-        d.CreatedByMethod, d.Status, d.CurrentVersion, d.HealthScore, d.TriggerType, d.CreatedAt, d.UpdatedAt);
+        d.CreatedByMethod, d.Status, d.CurrentVersion, d.HealthScore, d.TriggerType, d.SlaThresholdMs, d.CreatedAt, d.UpdatedAt);
 
     private static WorkflowVersionResponse ToVersionResponse(WorkflowVersion v) => new(
         v.Id, v.WorkflowDefinitionId, v.CommitSha, v.TagName, v.BranchName, v.Message, v.IsProduction, v.CreatedAt);

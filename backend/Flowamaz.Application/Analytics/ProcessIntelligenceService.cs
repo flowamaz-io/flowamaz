@@ -23,6 +23,7 @@ public sealed class ProcessIntelligenceService
     private readonly IWorkflowAnalyticsRepository _analytics;
     private readonly IWorkflowMetricRepository _metrics;
     private readonly IWorkflowInsightRepository _insights;
+    private readonly IWorkflowDefinitionRepository _definitions;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IModelResolutionService _modelResolution;
     private readonly IAiCompletionService _completion;
@@ -34,6 +35,7 @@ public sealed class ProcessIntelligenceService
         IWorkflowAnalyticsRepository analytics,
         IWorkflowMetricRepository metrics,
         IWorkflowInsightRepository insights,
+        IWorkflowDefinitionRepository definitions,
         IUnitOfWork unitOfWork,
         IModelResolutionService modelResolution,
         IAiCompletionService completion,
@@ -44,6 +46,7 @@ public sealed class ProcessIntelligenceService
         _analytics = analytics;
         _metrics = metrics;
         _insights = insights;
+        _definitions = definitions;
         _unitOfWork = unitOfWork;
         _modelResolution = modelResolution;
         _completion = completion;
@@ -81,10 +84,11 @@ public sealed class ProcessIntelligenceService
     {
         var durations = await _analytics.GetDurationsAsync(workspaceId, definitionId, periodStart, periodEnd, ct);
         var bottleneck = await _analytics.GetBottleneckAsync(workspaceId, definitionId, periodStart, periodEnd, ct);
-        var metric = BuildMetric(workspaceId, definitionId, periodStart, durations, bottleneck);
+        var definition = await _definitions.GetByIdForWorkspaceAsync(definitionId, workspaceId, ct);
+        var metric = BuildMetric(workspaceId, definitionId, periodStart, durations, bottleneck, definition?.SlaThresholdMs);
         await _metrics.UpsertAsync(metric, ct);
 
-        var slaMessage = EvaluateSlaRisk(definitionId.ToString(), metric.AvgDurationMs, metric.SlaThresholdMs);
+        var slaMessage = EvaluateSlaRisk(definition?.Name ?? definitionId.ToString(), metric.AvgDurationMs, metric.SlaThresholdMs);
         if (slaMessage is not null)
         {
             await _insights.ReplaceUnacknowledgedAsync(new WorkflowInsight
@@ -161,7 +165,8 @@ public sealed class ProcessIntelligenceService
     }
 
     public static WorkflowMetric BuildMetric(
-        Guid workspaceId, Guid definitionId, DateTime periodHour, List<InstanceDurationSample> samples, BottleneckSample? bottleneck)
+        Guid workspaceId, Guid definitionId, DateTime periodHour, List<InstanceDurationSample> samples, BottleneckSample? bottleneck,
+        long? slaThresholdMs = null)
     {
         var completedDurations = samples
             .Where(s => s.Status == InstanceStatus.Completed && s.DurationMs is not null)
@@ -181,8 +186,10 @@ public sealed class ProcessIntelligenceService
             AvgDurationMs = completedDurations.Count > 0 ? (long)completedDurations.Average() : 0,
             P95DurationMs = Percentile(completedDurations, 95),
             P99DurationMs = Percentile(completedDurations, 99),
-            SlaThresholdMs = null, // no per-workflow SLA source yet (future); breach count stays 0
-            SlaBreachCount = 0,
+            SlaThresholdMs = slaThresholdMs,
+            SlaBreachCount = slaThresholdMs is > 0
+                ? samples.Count(s => s.Status == InstanceStatus.Completed && s.DurationMs > slaThresholdMs.Value)
+                : 0,
             BottleneckNodeId = bottleneck?.NodeId,
             BottleneckAvgMs = bottleneck?.AvgMs,
         };

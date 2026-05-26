@@ -84,6 +84,25 @@ public class WorkflowInterpreterServiceTests
     }
 
     [Fact]
+    public async Task Developer_narrative_lists_node_durations_with_no_ai()
+    {
+        var start = new DateTime(2026, 3, 14, 9, 0, 0, DateTimeKind.Utc);
+        _nodeStates.Setup(r => r.GetForInstanceAsync(_instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new WorkflowNodeState { InstanceId = _instanceId, WorkspaceId = _ws, NodeId = "fetch", NodeType = "Action", Status = NodeStatus.Completed, StartedAt = start, CompletedAt = start.AddMilliseconds(2500), OutputPayload = "{}" },
+        ]);
+
+        var narrative = await NewService().GenerateNarrativeAsync(_ws, _instanceId, NarrativeAudience.Developer);
+
+        narrative.Should().NotBeNull();
+        narrative!.Audience.Should().Be("developer");
+        narrative.Content.Should().Contain("fetch");
+        narrative.Content.Should().Contain("duration_ms: 2500");
+        narrative.Content.Should().Contain("has_output: True");
+        _completion.Verify(c => c.CompleteAsync(It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Unknown_instance_returns_null()
     {
         var result = await NewService().GenerateNarrativeAsync(_ws, Guid.NewGuid(), NarrativeAudience.Developer);
