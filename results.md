@@ -812,4 +812,16 @@ Notes:
 - Playwright E2E: S26-S33 written (require live stack to run)
 - Trivy scan: 0 Critical, 0 High vulnerabilities in backend
 - Security: image bytes not logged, SOP text not logged, co-pilot command text not logged
+
+### fix-03-01: WorkflowDnaService — YamlDotNet refactor (2026-05-26)
+Status: COMPLETE
+Files: WorkflowDnaService.cs (refactored), WorkflowDnaServiceTests.cs (extended)
+Notes:
+- Removed all regex/string-split YAML parsing from WorkflowDnaService
+- Injected SfgParser; ComputeDnaAsync and FindSimilarAsync now use _sfgParser.ParseAsync
+- Invalid YAML propagates SfgParseException (no more silent empty DNA)
+- connector_id extracted via JsonDocument property access on Action node configs
+- 5 new unit tests added; all 11 DNA tests pass; full unit suite 329/329 pass
+- Integration failures (6) are pre-existing — unrelated to this fix
+- Build: 0 errors, 0 warnings
 - Build: 0 errors, 0 warnings — 324/324 backend unit tests pass — 36/36 frontend tests pass
