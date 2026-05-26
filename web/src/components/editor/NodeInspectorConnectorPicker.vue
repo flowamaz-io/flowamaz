@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
+import PayloadAutoMapperModal from './PayloadAutoMapperModal.vue';
 import { connectorService } from '@/services/connector.service';
-import type { ConnectorDefinition } from '@/services/connector.service';
+import type { ConnectorDefinition, FieldMapping } from '@/services/connector.service';
 
 interface ConnectorManifest {
   operations?: Array<{
@@ -30,6 +31,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: ConnectorValue] }>();
 
 const installedConnectors = ref<ConnectorDefinition[]>([]);
 const loading = ref(false);
+const mapperOpen = ref(false);
 
 const selectedConnector = computed<ConnectorDefinition | undefined>(() =>
   installedConnectors.value.find((c) => c.connectorId === props.modelValue.connectorId),
@@ -83,6 +85,14 @@ function onFieldChange(fieldName: string, value: string): void {
     ...props.modelValue,
     inputFields: { ...(props.modelValue.inputFields ?? {}), [fieldName]: value },
   });
+}
+
+function onMapped(mappings: FieldMapping[]): void {
+  const patched: Record<string, string> = { ...(props.modelValue.inputFields ?? {}) };
+  for (const m of mappings) {
+    patched[m.fieldName] = m.suggestedExpression;
+  }
+  emit('update:modelValue', { ...props.modelValue, inputFields: patched });
 }
 
 watch(() => props.workspaceId, loadInstalled);
@@ -164,10 +174,25 @@ onMounted(loadInstalled);
         </label>
       </template>
 
-      <!-- Payload mapper placeholder -->
-      <p class="text-xs text-slate-300 cursor-not-allowed select-none">
-        Paste a sample payload ↗ <span class="italic">(available in Phase 4.7)</span>
-      </p>
+      <!-- Payload auto-mapper trigger -->
+      <button
+        v-if="modelValue.operationId"
+        type="button"
+        class="text-xs text-indigo-500 hover:text-indigo-700 underline underline-offset-2 text-left"
+        @click="mapperOpen = true"
+      >
+        Paste a sample payload to auto-map fields ↗
+      </button>
+
+      <!-- Payload auto-mapper modal -->
+      <PayloadAutoMapperModal
+        v-if="mapperOpen"
+        v-model="mapperOpen"
+        :workspace-id="workspaceId"
+        :connector-id="modelValue.connectorId ?? ''"
+        :operation-id="modelValue.operationId ?? ''"
+        @mapped="onMapped"
+      />
     </template>
   </div>
 </template>

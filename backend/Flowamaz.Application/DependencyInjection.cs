@@ -1,5 +1,6 @@
 using Flowamaz.Application.Analytics;
 using Flowamaz.Application.Auth.Services;
+using Flowamaz.Application.Connectors;
 using Flowamaz.Application.Connectors.Handlers;
 using Flowamaz.Application.Connectors.Services;
 using Flowamaz.Application.Platform.Services;
@@ -91,6 +92,9 @@ public static class DependencyInjection
 
         // Workflow Empathy service (prompt 04-06).
         services.AddScoped<IWorkflowEmpathyService, WorkflowEmpathyService>();
+
+        // Payload auto-mapper (prompt 04-07).
+        services.AddScoped<IPayloadAutoMapper, PayloadAutoMapper>();
 
         // Connector operation handlers (prompt 04-02) — registered as IConnectorOperationHandler for registry resolution.
         services.AddHttpClient("http-rest-connector");

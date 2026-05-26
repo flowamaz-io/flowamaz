@@ -218,4 +218,25 @@ public sealed class CopilotPatternMatcherTests
         var result = Create().TryMatch(command);
         result.Should().BeNull();
     }
+
+    // ── Connector pattern tests (prompt 04-07) ───────────────────────────
+
+    [Fact]
+    public void SendSlackMessage_MatchesAndContainsSlackConnectorId()
+    {
+        var result = Create().TryMatch("Send Slack message to #finance");
+        result.Should().NotBeNull();
+        result!.PatternName.Should().Be("send-slack-message");
+        result.YamlPatch.Should().Contain("connector_id: slack");
+        result.YamlPatch.Should().Contain("#finance");
+    }
+
+    [Fact]
+    public void ScheduleCron_MatchesAndContainsScheduleCronConnectorId()
+    {
+        var result = Create().TryMatch("Schedule every Monday 9am");
+        result.Should().NotBeNull();
+        result!.PatternName.Should().Be("schedule-cron");
+        result.YamlPatch.Should().Contain("connector_id: schedule-cron");
+    }
 }

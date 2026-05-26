@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flowamaz.Api.Authorization;
 using Flowamaz.Application.Connectors.Services;
 using Flowamaz.Core.Enums;
@@ -19,17 +20,20 @@ public sealed class ConnectorsController : ControllerBase
     private readonly IConnectorHealthService _health;
     private readonly IOAuthService _oauth;
     private readonly ICurrentUserService _currentUser;
+    private readonly IPayloadAutoMapper _autoMapper;
 
     public ConnectorsController(
         IConnectorCatalogueService catalogue,
         IConnectorHealthService health,
         IOAuthService oauth,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IPayloadAutoMapper autoMapper)
     {
         _catalogue = catalogue;
         _health = health;
         _oauth = oauth;
         _currentUser = currentUser;
+        _autoMapper = autoMapper;
     }
 
     /// <summary>List all connectors in the catalogue.</summary>
@@ -110,6 +114,70 @@ public sealed class ConnectorsController : ControllerBase
         var result = await _oauth.InitiateAsync(workspaceId, connectorId, cancellationToken);
         return Ok(new { result.AuthorizationUrl, result.State });
     }
+
+    /// <summary>Auto-map a sample payload to a connector operation's input schema fields.</summary>
+    [HttpPost("{connectorId}/operations/{operationId}/auto-map")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    public async Task<IActionResult> AutoMap(
+        Guid workspaceId,
+        string connectorId,
+        string operationId,
+        [FromBody] AutoMapRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Build target schema: use provided or look it up from the connector manifest
+        JsonElement targetSchema;
+        if (request.TargetSchema.HasValue)
+        {
+            targetSchema = request.TargetSchema.Value;
+        }
+        else
+        {
+            var all = await _catalogue.GetAllAsync(cancellationToken);
+            var def = all.FirstOrDefault(c => c.ConnectorId == connectorId);
+            if (def is null)
+                return NotFound($"Connector '{connectorId}' not found in catalogue.");
+
+            try
+            {
+                using var manifestDoc = JsonDocument.Parse(def.ManifestJson);
+                if (!manifestDoc.RootElement.TryGetProperty("operations", out var ops)
+                    || ops.ValueKind != JsonValueKind.Array)
+                    return BadRequest("Connector manifest has no operations array.");
+
+                JsonElement? opSchema = null;
+                foreach (var op in ops.EnumerateArray())
+                {
+                    var opId = op.TryGetProperty("id", out var idProp) ? idProp.GetString()
+                        : op.TryGetProperty("name", out var nameProp) ? nameProp.GetString()
+                        : null;
+                    if (string.Equals(opId, operationId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        opSchema = op.TryGetProperty("input_schema", out var schema) ? schema : default(JsonElement?);
+                        break;
+                    }
+                }
+
+                if (opSchema is null)
+                    return NotFound($"Operation '{operationId}' not found in connector '{connectorId}'.");
+
+                targetSchema = opSchema.Value;
+            }
+            catch (JsonException)
+            {
+                return BadRequest("Connector manifest JSON is invalid.");
+            }
+        }
+
+        using var sampleDoc = JsonDocument.Parse(request.SamplePayload.GetRawText());
+        var result = await _autoMapper.MapAsync(sampleDoc, targetSchema, workspaceId, cancellationToken);
+        return Ok(result);
+    }
 }
 
 public record InstallConnectorRequest(Guid? CredentialId);
+
+public record AutoMapRequest(
+    JsonElement SamplePayload,
+    JsonElement? TargetSchema = null
+);

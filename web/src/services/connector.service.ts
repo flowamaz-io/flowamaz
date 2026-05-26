@@ -1,6 +1,17 @@
 import { http, unwrap } from './api.service';
 import type { ApiEnvelope } from '@/types';
 
+export interface FieldMapping {
+  fieldName: string;
+  suggestedExpression: string;
+  confidence: number;
+}
+
+export interface AutoMapResult {
+  mappings: FieldMapping[];
+  unmappedFields: string[];
+}
+
 export interface ConnectorDefinition {
   id: string;
   connectorId: string;
@@ -76,6 +87,19 @@ export const connectorService = {
     const res = await http.post<ApiEnvelope<OAuthInitiateResult>>(
       `${base(workspaceId)}/${connectorId}/oauth/initiate`,
       {},
+    );
+    return unwrap(res);
+  },
+
+  async autoMap(
+    workspaceId: string,
+    connectorId: string,
+    operationId: string,
+    samplePayload: object,
+  ): Promise<AutoMapResult> {
+    const res = await http.post<ApiEnvelope<AutoMapResult>>(
+      `${base(workspaceId)}/${connectorId}/operations/${operationId}/auto-map`,
+      { sample_payload: samplePayload },
     );
     return unwrap(res);
   },

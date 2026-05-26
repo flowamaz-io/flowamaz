@@ -282,6 +282,115 @@ public sealed partial class CopilotPatternMatcher : ICopilotPatternMatcher
                     $"spec.variables.{varName}:\n  type: string\n  required: true\n  sensitive: true",
                     $"Add sensitive variable '{varName}'");
             }),
+
+        // ── Connector patterns (prompt 04-07) ──────────────────────────────
+
+        new("connect-to-slack",
+            ConnectToSlackRegex(),
+            (_, _, _) =>
+                new PatternMatchResult("connect-to-slack",
+                    "nodes:\n  - id: slack-action-1\n    type: action\n    label: \"Send Slack Message\"\n    config:\n      connector_id: slack\n      operation_id: send-message\n      input:\n        channel: \"#general\"\n        text: \"\"",
+                    "Add Slack send-message action node")),
+
+        new("send-slack-message",
+            SendSlackMessageRegex(),
+            (m, cmd, _) =>
+            {
+                var channel = m.Groups[1].Length > 0 ? m.Groups[1].Value.Trim()
+                    : SendSlackChannelRegex().Match(cmd) is { Success: true } cm ? cm.Groups[1].Value.Trim()
+                    : "#general";
+                return new PatternMatchResult("send-slack-message",
+                    $"nodes:\n  - id: slack-action-2\n    type: action\n    label: \"Send Slack Message\"\n    config:\n      connector_id: slack\n      operation_id: send-message\n      input:\n        channel: \"{channel}\"\n        text: \"\"",
+                    $"Add Slack send-message action to {channel}");
+            }),
+
+        new("send-teams-approval",
+            SendTeamsApprovalRegex(),
+            (m, _, _) =>
+            {
+                var person = m.Groups[1].Length > 0 ? m.Groups[1].Value.Trim() : "manager";
+                return new PatternMatchResult("send-teams-approval",
+                    $"nodes:\n  - id: teams-approval-3\n    type: action\n    label: \"Send Teams Approval\"\n    config:\n      connector_id: teams\n      operation_id: post-adaptive-card\n      input:\n        to: \"{person}\"\n        card_type: approval",
+                    $"Add Teams approval adaptive card to {person}");
+            }),
+
+        new("create-github-issue",
+            CreateGithubIssueRegex(),
+            (_, _, _) =>
+                new PatternMatchResult("create-github-issue",
+                    "nodes:\n  - id: github-action-4\n    type: action\n    label: \"Create GitHub Issue\"\n    config:\n      connector_id: github\n      operation_id: create-issue\n      input:\n        title: \"\"\n        body: \"\"",
+                    "Add GitHub create-issue action node")),
+
+        new("send-email-to",
+            SendEmailToRegex(),
+            (m, cmd, _) =>
+            {
+                var address = m.Groups[1].Length > 0 ? m.Groups[1].Value.Trim()
+                    : EmailAddressRegex().Match(cmd) is { Success: true } em ? em.Groups[1].Value.Trim()
+                    : "";
+                return new PatternMatchResult("send-email-to",
+                    $"nodes:\n  - id: email-action-5\n    type: action\n    label: \"Send Email\"\n    config:\n      connector_id: email-smtp\n      operation_id: send-email\n      input:\n        to: \"{address}\"\n        subject: \"\"\n        body: \"\"",
+                    $"Add email send-email action to {address}");
+            }),
+
+        new("http-call",
+            HttpCallRegex(),
+            (m, _, _) =>
+            {
+                // Group 1+2 = "http METHOD URL" form; Group 3+4 = "call URL with METHOD" form
+                string method, url;
+                if (m.Groups[1].Length > 0)
+                {
+                    method = m.Groups[1].Value.Trim().ToUpperInvariant();
+                    url = m.Groups[2].Length > 0 ? m.Groups[2].Value.Trim() : "";
+                }
+                else
+                {
+                    url = m.Groups[3].Length > 0 ? m.Groups[3].Value.Trim() : "";
+                    method = m.Groups[4].Length > 0 ? m.Groups[4].Value.Trim().ToUpperInvariant() : "GET";
+                }
+                return new PatternMatchResult("http-call",
+                    $"nodes:\n  - id: http-action-6\n    type: action\n    label: \"HTTP {method}\"\n    config:\n      connector_id: http-rest\n      operation_id: {method.ToLowerInvariant()}\n      input:\n        url: \"{url}\"",
+                    $"Add HTTP {method} action to {url}");
+            }),
+
+        new("query-postgres",
+            QueryPostgresRegex(),
+            (m, _, _) =>
+            {
+                var table = m.Groups[1].Length > 0 ? m.Groups[1].Value.Trim() : "";
+                var query = string.IsNullOrEmpty(table) ? "" : $"SELECT * FROM {table}";
+                return new PatternMatchResult("query-postgres",
+                    $"nodes:\n  - id: postgres-action-7\n    type: action\n    label: \"Query PostgreSQL\"\n    config:\n      connector_id: postgresql\n      operation_id: query\n      input:\n        sql: \"{query}\"",
+                    "Add PostgreSQL query action node");
+            }),
+
+        new("read-file",
+            ReadFileRegex(),
+            (m, _, _) =>
+            {
+                var path = m.Groups[1].Length > 0 ? m.Groups[1].Value.Trim() : "";
+                return new PatternMatchResult("read-file",
+                    $"nodes:\n  - id: file-action-8\n    type: action\n    label: \"Read File\"\n    config:\n      connector_id: file-system\n      operation_id: read-file\n      input:\n        path: \"{path}\"",
+                    $"Add file-system read-file action for {path}");
+            }),
+
+        new("schedule-cron",
+            ScheduleCronRegex(),
+            (m, _, _) =>
+            {
+                var expr = m.Groups[1].Length > 0 ? m.Groups[1].Value.Trim() : "0 9 * * 1";
+                return new PatternMatchResult("schedule-cron",
+                    $"spec:\n  trigger:\n    type: schedule\n    config:\n      connector_id: schedule-cron\n      cron: \"{expr}\"",
+                    $"Add schedule-cron trigger with expression '{expr}'");
+            }),
+
+        new("parse-document",
+            ParseDocumentRegex(),
+            (_, _, _) =>
+                new PatternMatchResult("parse-document",
+                    "nodes:\n  - id: sop-parse-10\n    type: sub-workflow\n    label: \"Parse Document\"\n    config:\n      workflow_id: sop-parsing\n      input:\n        document: \"{{ variables.document }}\"",
+                    "Add SOP document parsing sub-workflow node")),
     ];
 
     [GeneratedRegex(@"(?:add|set).*?timeout|(?:add|set).*?\d+\s*(?:h|hour|m|min|s|sec|second|minute).*?timeout", RegexOptions.IgnoreCase)]
@@ -349,4 +458,41 @@ public sealed partial class CopilotPatternMatcher : ICopilotPatternMatcher
 
     [GeneratedRegex(@"add\s+(?:sensitive|secret|secure)\s+variable\s+(\w+)", RegexOptions.IgnoreCase)]
     private static partial Regex AddSensitiveVarRegex();
+
+    // Connector patterns (prompt 04-07)
+    [GeneratedRegex(@"connect\s+to\s+slack|add\s+slack|use\s+slack", RegexOptions.IgnoreCase)]
+    private static partial Regex ConnectToSlackRegex();
+
+    [GeneratedRegex(@"(?:send\s+slack\s+message\s+to|post\s+to\s+slack)\s+(#?\w+)", RegexOptions.IgnoreCase)]
+    private static partial Regex SendSlackMessageRegex();
+
+    [GeneratedRegex(@"#(\w+)", RegexOptions.IgnoreCase)]
+    private static partial Regex SendSlackChannelRegex();
+
+    [GeneratedRegex(@"(?:send\s+teams\s+approval(?:\s+to\s+(\S+))?|teams\s+approval)", RegexOptions.IgnoreCase)]
+    private static partial Regex SendTeamsApprovalRegex();
+
+    [GeneratedRegex(@"(?:create|open)\s+github\s+issue", RegexOptions.IgnoreCase)]
+    private static partial Regex CreateGithubIssueRegex();
+
+    [GeneratedRegex(@"(?:send\s+email\s+to|email)\s+(\S+@\S+|\S+)", RegexOptions.IgnoreCase)]
+    private static partial Regex SendEmailToRegex();
+
+    [GeneratedRegex(@"\b(\w+@\S+\.\S+)", RegexOptions.IgnoreCase)]
+    private static partial Regex EmailAddressRegex();
+
+    [GeneratedRegex(@"(?:http\s+(get|post|put|patch|delete)\s+(\S+)|call\s+(\S+)\s+with\s+(get|post|put|patch|delete))", RegexOptions.IgnoreCase)]
+    private static partial Regex HttpCallRegex();
+
+    [GeneratedRegex(@"(?:query\s+postgres|query\s+database|select\s+from\s+(\w+))", RegexOptions.IgnoreCase)]
+    private static partial Regex QueryPostgresRegex();
+
+    [GeneratedRegex(@"(?:read\s+file\s+from|load\s+file)\s+(\S+)", RegexOptions.IgnoreCase)]
+    private static partial Regex ReadFileRegex();
+
+    [GeneratedRegex(@"(?:schedule\s+(?:this\s+workflow\s+)?every|run\s+every|schedule\s+every)\s+(.+)", RegexOptions.IgnoreCase)]
+    private static partial Regex ScheduleCronRegex();
+
+    [GeneratedRegex(@"parse\s+(?:this\s+)?(?:document|sop)", RegexOptions.IgnoreCase)]
+    private static partial Regex ParseDocumentRegex();
 }
