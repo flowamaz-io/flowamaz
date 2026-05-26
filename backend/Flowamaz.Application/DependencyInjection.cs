@@ -6,6 +6,7 @@ using Flowamaz.Application.Workflow.Interpreter;
 using Flowamaz.Application.Workflow.Orchestrator;
 using Flowamaz.Application.Workflow.Saga;
 using Flowamaz.Application.Workflow.Services;
+using Flowamaz.Application.Workflow.Validation;
 using Flowamaz.Application.Workflow.Workers;
 using Flowamaz.Application.Workspace.Services;
 using Flowamaz.Core.Interfaces.Services;
@@ -55,6 +56,9 @@ public static class DependencyInjection
         services.AddScoped<ProcessIntelligenceService>();
         services.AddScoped<WorkflowWeatherService>();
         services.AddScoped<InsightService>();
+
+        // Workflow validator (prompt 03-01).
+        services.AddScoped<IWorkflowValidator, WorkflowValidator>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;
