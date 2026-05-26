@@ -3,6 +3,7 @@ using Flowamaz.Core.Entities;
 using Flowamaz.Core.Entities.Ai;
 using Flowamaz.Core.Entities.Analytics;
 using Flowamaz.Core.Entities.Auth;
+using Flowamaz.Core.Entities.Connector;
 using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Entities.Workspaces;
@@ -61,6 +62,10 @@ public class FlowAmazDbContext : DbContext
 
     public DbSet<WorkflowMetric> WorkflowMetrics => Set<WorkflowMetric>();
     public DbSet<WorkflowInsight> WorkflowInsights => Set<WorkflowInsight>();
+
+    public DbSet<ConnectorDefinition> ConnectorDefinitions => Set<ConnectorDefinition>();
+    public DbSet<WorkspaceConnector> WorkspaceConnectors => Set<WorkspaceConnector>();
+    public DbSet<WorkspaceCredential> WorkspaceCredentials => Set<WorkspaceCredential>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

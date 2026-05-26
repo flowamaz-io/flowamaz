@@ -3,6 +3,7 @@ using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Queue;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Infrastructure.Connectors;
 using Flowamaz.Infrastructure.Persistence;
 using Flowamaz.Infrastructure.Persistence.Repositories;
 using Flowamaz.Infrastructure.Queue;
@@ -34,6 +35,7 @@ public static class DependencyInjection
         AddAiServices(services);
         AddAuthServices(services);
         AddEmail(services);
+        AddConnectors(services);
         return services;
     }
 
@@ -130,5 +132,13 @@ public static class DependencyInjection
     {
         services.AddHttpClient(EmailService.HttpClientName);
         services.AddSingleton<IEmailService, EmailService>();
+    }
+
+    private static void AddConnectors(IServiceCollection services)
+    {
+        services.AddScoped<ICredentialVaultService, CredentialVaultService>();
+        services.AddScoped<IConnectorCatalogueService, ConnectorCatalogueService>();
+        services.AddHttpClient(ConnectorSandbox.HttpClientName);
+        services.AddScoped<IConnectorSandbox, ConnectorSandbox>();
     }
 }

@@ -359,12 +359,35 @@ flowamaz/
 
 ---
 
+## Execution Model
+
+### Per Prompt (continuous — no stopping between prompts)
+```
+Read checkpoint.md
+→ Execute current prompt
+→ dotnet build (0 errors 0 warnings)
+→ dotnet test (all pass)
+→ git add . && git commit && git push origin develop
+→ Log to results.md
+→ Update checkpoint.md (advance to next prompt)
+→ /clear
+→ Read CLAUDE.md + FUNCTIONAL.md + checkpoint.md
+→ Execute next prompt immediately
+→ Repeat until checkpoint shows PHASE_COMPLETE
+```
+
+Do NOT stop between prompts. Do NOT open PRs between prompts.
+Push directly to develop after each prompt. Continue immediately.
+
+### Phase End (when checkpoint shows PHASE_COMPLETE)
+Run all phase-end agents, compile phase report, fire notification hook.
+This is the only planned stop.
+
 ## Token Management
 
-- /clear after every prompt — no exceptions
+- /clear after every prompt — PM re-reads files to resume
 - /compact only as emergency mid-prompt valve
-- PM reads from files only — never from conversation history
-- After /clear: read CLAUDE.md → read FUNCTIONAL.md → read checkpoint.md → execute
+- After /clear: read CLAUDE.md → FUNCTIONAL.md → checkpoint.md → execute next prompt immediately
 
 ---
 
