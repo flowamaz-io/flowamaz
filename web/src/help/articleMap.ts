@@ -15,6 +15,9 @@ export const articleMap: Record<string, string> = {
   '/workflows/:id/edit#node:human-gate': 'node-types/human-gate-nodes',
   '/workflows/:id/edit#node:router': 'node-types/router-nodes',
   '/workflows/new': 'getting-started/what-is-flowamaz',
+  // Phase 4 connector routes (prompt 04-05)
+  '/library': 'connectors/add-your-first-connector',
+  '/library/health': 'connectors/connector-health-dashboard',
 };
 
 /** Falls back to the platform overview when a route has no explicit mapping. */

@@ -20,7 +20,7 @@ const primary: NavItem[] = [
   { label: 'Workflows', to: '/workflows', icon: Workflow },
   { label: 'Weather', to: '/weather', icon: CloudSun },
   { label: 'Instances', to: '/instances', icon: Activity },
-  { label: 'Library', icon: Plug, disabled: true, badge: 'Phase 4' },
+  { label: 'Library', to: '/library', icon: Plug },
 ];
 
 const settings: NavItem[] = [
