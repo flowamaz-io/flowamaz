@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import SfgCanvas from '../../components/canvas/SfgCanvas.vue';
 import FmYamlEditor from '../../components/editor/FmYamlEditor.vue';
 import CopilotPanel from '../../components/editor/CopilotPanel.vue';
+import EmpathyPanel from '../../components/editor/EmpathyPanel.vue';
 import { useWorkflowEditor } from '../../composables/useWorkflowEditor';
 import { useHelp } from '../../composables/useHelp';
 
@@ -21,6 +22,7 @@ const { openArticle } = useHelp();
 
 const copilotOpen = ref(false);
 const copilotPanelRef = ref<InstanceType<typeof CopilotPanel> | null>(null);
+const empathyMode = ref(false);
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -133,9 +135,21 @@ onUnmounted(() => {
           @click="copilotOpen = !copilotOpen"
         >✦ Co-pilot <kbd class="ml-1 text-neutral-400">⌘K</kbd></button>
 
+        <!-- Mode toggle -->
+        <div class="flex rounded-lg overflow-hidden border border-neutral-600 shrink-0">
+          <button
+            :class="['text-xs px-3 py-1.5 transition-colors', !empathyMode ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white']"
+            @click="empathyMode = false"
+          >Technical</button>
+          <button
+            :class="['text-xs px-3 py-1.5 transition-colors', empathyMode ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white']"
+            @click="empathyMode = true"
+          >Empathy</button>
+        </div>
+
         <button
           class="text-xs text-neutral-400 hover:text-white"
-          @click="openArticle('node-types/using-the-canvas')"
+          @click="openArticle('workflow-empathy')"
         >Help</button>
       </div>
 
@@ -156,9 +170,16 @@ onUnmounted(() => {
           @mousedown.prevent="onDividerMousedown"
         />
 
-        <!-- YAML Editor -->
+        <!-- Right panel: YAML editor (technical) or Empathy panel -->
         <div class="flex-1 overflow-hidden">
+          <EmpathyPanel
+            v-if="empathyMode"
+            :workspace-id="workspaceId"
+            :workflow-id="workflowId"
+            :visible="empathyMode"
+          />
           <FmYamlEditor
+            v-else
             ref="yamlEditorRef"
             v-model="yaml"
             :diagnostics="validationErrors"

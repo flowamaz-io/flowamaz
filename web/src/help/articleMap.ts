@@ -18,6 +18,8 @@ export const articleMap: Record<string, string> = {
   // Phase 4 connector routes (prompt 04-05)
   '/library': 'connectors/add-your-first-connector',
   '/library/health': 'connectors/connector-health-dashboard',
+  // Phase 4 empathy routes (prompt 04-06)
+  '/workflows/:id/edit#empathy': 'workflow-empathy',
 };
 
 /** Falls back to the platform overview when a route has no explicit mapping. */

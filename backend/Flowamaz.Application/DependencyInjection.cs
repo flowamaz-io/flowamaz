@@ -5,6 +5,7 @@ using Flowamaz.Application.Connectors.Services;
 using Flowamaz.Application.Platform.Services;
 using Flowamaz.Application.Workflow.Creation;
 using Flowamaz.Application.Workflow.Dna;
+using Flowamaz.Application.Workflow.Empathy;
 using Flowamaz.Application.Workflow.Debugger;
 using Flowamaz.Application.Workflow.Interpreter;
 using Flowamaz.Application.Workflow.Orchestrator;
@@ -87,6 +88,9 @@ public static class DependencyInjection
 
         // Workflow DNA service (prompt 03-07).
         services.AddScoped<IWorkflowDnaService, WorkflowDnaService>();
+
+        // Workflow Empathy service (prompt 04-06).
+        services.AddScoped<IWorkflowEmpathyService, WorkflowEmpathyService>();
 
         // Connector operation handlers (prompt 04-02) — registered as IConnectorOperationHandler for registry resolution.
         services.AddHttpClient("http-rest-connector");
