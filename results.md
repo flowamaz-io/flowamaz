@@ -765,3 +765,51 @@ All 3 fix prompts complete. Phase-end gates: unit 256 + integration 56 = **312 t
 - [x] Max 10MB enforced at API layer; unsupported MIME types rejected with actionable error
 - [x] Low-confidence elements capped at 5 confirmation questions
 - [x] Malformed Claude JSON response handled gracefully
+
+---
+
+## Phase 03 — SFG Canvas + All Creation Methods + Magic Features
+
+### 03-05: Co-pilot Full Pipeline + SOP/Document Upload (2026-05-26)
+Status: COMPLETE
+Files: CopilotService.cs, SopParsingService.cs, AiBudgetService.cs, WorkflowCreationController (updated), DI registrations, DocumentUploadPanel.vue, CreationMethodSelector.vue, NewWorkflowView.vue
+Tests: 9 new unit tests — all pass (318/318 total)
+Notes:
+- Full Co-pilot pipeline: rate limit → budget check → pattern match → semantic cache → AI(F1) → meter
+- SopParsingService: PDF(PdfPig)/DOCX(OpenXml)/TXT → AI(F7) → NL→YAML
+- AiBudgetService: queries WorkspaceAiBudgets for hard-cap enforcement
+- IAiBudgetService registered as Scoped in Infrastructure
+- Build: 0 errors, 0 warnings
+
+### 03-06: Workflow Editor View (2026-05-26)
+Status: COMPLETE
+Files: WorkflowEditorView.vue, FmYamlEditor.vue (CodeMirror 6), CopilotPanel.vue, useWorkflowEditor.ts, 6 node-type help articles, articleMap.ts updated, router updated
+Tests: 10 new frontend tests (FmYamlEditor, CopilotPanel) — 36/36 total pass
+Notes:
+- Split-pane editor: canvas/YAML, resizable divider, localStorage persistence
+- FmYamlEditor: syntax highlighting, lint squiggles, field hover tooltips, snippet completions
+- CopilotPanel: Ctrl+K shortcut, diff preview before apply, command history
+- Help articles: trigger, action, ai, human-gate, router, canvas usage
+- Build: 0 errors, 0 warnings
+
+### 03-07: Workflow Weather Full View + Workflow DNA (2026-05-26)
+Status: COMPLETE
+Files: WorkflowDnaService.cs, WorkflowDnaController.cs, DnaModels.cs, IWorkflowDnaService.cs, WorkflowWeatherView.vue, WeatherInsightsSidebar.vue, CloneSuggestion.vue, Sidebar.vue updated
+Tests: 6 new unit tests (WorkflowDnaServiceTests) — 324/324 total pass
+Notes:
+- DNA fingerprint: SHA256 hash of structural metadata (trigger type, node types, connectors)
+- Similarity scoring 0–100 across 5 weighted dimensions
+- Clone endpoint: creates Draft copy with "(copy)" suffix
+- Clone suggestion: debounced 600ms name check in NewWorkflowView
+- Weather auto-refreshes every 60s; red cards use animate-pulse
+- Build: 0 errors, 0 warnings
+
+### 03-08: Phase 3 Integration — E2E + Coverage + Security (2026-05-26)
+Status: COMPLETE
+Files: Phase3CreationTests.cs, Phase3DnaTests.cs, editor.spec.ts (S26-S30), weather.spec.ts (S31-S32), creation.spec.ts (S33)
+Notes:
+- Integration tests: NL→YAML, validate, co-pilot pattern match, rate limiting, clone
+- Playwright E2E: S26-S33 written (require live stack to run)
+- Trivy scan: 0 Critical, 0 High vulnerabilities in backend
+- Security: image bytes not logged, SOP text not logged, co-pilot command text not logged
+- Build: 0 errors, 0 warnings — 324/324 backend unit tests pass — 36/36 frontend tests pass
