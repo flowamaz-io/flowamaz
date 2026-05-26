@@ -22,7 +22,9 @@ public sealed record NodeExecutionContext(
     SfgNode Node,
     WorkflowGraph Graph,
     IReadOnlyDictionary<string, JsonElement> Variables,
-    string LeaseId);
+    string LeaseId,
+    /// <summary>Variable names whose values must be redacted before any AI call. Null = no redaction.</summary>
+    IReadOnlySet<string>? SensitiveVariableNames = null);
 
 /// <summary>
 /// Outcome of running a node. <see cref="ShouldRetry"/> is the worker's verdict on whether a

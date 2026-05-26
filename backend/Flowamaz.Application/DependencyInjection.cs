@@ -44,6 +44,12 @@ public static class DependencyInjection
         // Node workers + saga engine (prompt 02-03).
         services.AddHttpClient(HttpActionWorker.HttpClientName);
         services.AddScoped<INodeWorker, HttpActionWorker>();
+
+        // AI node worker + BYOM provider (prompt 04-03).
+        services.AddHttpClient(ByomProviderService.HttpClientName);
+        services.AddScoped<IByomProviderService, ByomProviderService>();
+        services.AddScoped<INodeWorker, AiNodeWorker>();
+
         services.AddScoped<INodeWorkerRegistry, NodeWorkerRegistry>();
         services.AddScoped<ISagaEngine, SagaEngine>();
 
