@@ -1,5 +1,7 @@
 using Flowamaz.Application.Analytics;
 using Flowamaz.Application.Auth.Services;
+using Flowamaz.Application.Connectors.Handlers;
+using Flowamaz.Application.Connectors.Services;
 using Flowamaz.Application.Platform.Services;
 using Flowamaz.Application.Workflow.Creation;
 using Flowamaz.Application.Workflow.Dna;
@@ -76,6 +78,40 @@ public static class DependencyInjection
 
         // Workflow DNA service (prompt 03-07).
         services.AddScoped<IWorkflowDnaService, WorkflowDnaService>();
+
+        // Connector operation handlers (prompt 04-02) — registered as IConnectorOperationHandler for registry resolution.
+        services.AddHttpClient("http-rest-connector");
+        services.AddHttpClient("slack-connector");
+        services.AddHttpClient("teams-connector");
+        services.AddHttpClient("github-connector");
+        services.AddHttpClient("webhook-emit-connector");
+
+        services.AddScoped<IConnectorOperationHandler, HttpGetHandler>();
+        services.AddScoped<IConnectorOperationHandler, HttpPostHandler>();
+        services.AddScoped<IConnectorOperationHandler, HttpPutHandler>();
+        services.AddScoped<IConnectorOperationHandler, HttpPatchHandler>();
+        services.AddScoped<IConnectorOperationHandler, HttpDeleteHandler>();
+        services.AddScoped<IConnectorOperationHandler, HttpHeadHandler>();
+        services.AddScoped<IConnectorOperationHandler, SlackSendMessageHandler>();
+        services.AddScoped<IConnectorOperationHandler, SlackSendDmHandler>();
+        services.AddScoped<IConnectorOperationHandler, SlackPostApprovalMessageHandler>();
+        services.AddScoped<IConnectorOperationHandler, TeamsSendMessageHandler>();
+        services.AddScoped<IConnectorOperationHandler, TeamsPostAdaptiveCardHandler>();
+        services.AddScoped<IConnectorOperationHandler, EmailSendHandler>();
+        services.AddScoped<IConnectorOperationHandler, GitHubCreateIssueHandler>();
+        services.AddScoped<IConnectorOperationHandler, GitHubGetIssueHandler>();
+        services.AddScoped<IConnectorOperationHandler, GitHubCreatePrHandler>();
+        services.AddScoped<IConnectorOperationHandler, GitHubAddCommentHandler>();
+        services.AddScoped<IConnectorOperationHandler, PostgreSqlQueryHandler>();
+        services.AddScoped<IConnectorOperationHandler, PostgreSqlExecuteHandler>();
+        services.AddScoped<IConnectorOperationHandler, WebhookEmitHandler>();
+        services.AddScoped<IConnectorOperationHandler, ScheduleCronValidateHandler>();
+        services.AddScoped<IConnectorOperationHandler, MySqlQueryHandler>();
+        services.AddScoped<IConnectorOperationHandler, MySqlExecuteHandler>();
+
+        services.AddScoped<ConnectorOperationHandlerRegistry>();
+        services.AddScoped<IOAuthService, OAuthService>();
+        services.AddScoped<IConnectorHealthService, ConnectorHealthService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;
