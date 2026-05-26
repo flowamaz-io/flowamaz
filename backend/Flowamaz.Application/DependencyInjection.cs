@@ -50,6 +50,9 @@ public static class DependencyInjection
         services.AddScoped<IByomProviderService, ByomProviderService>();
         services.AddScoped<INodeWorker, AiNodeWorker>();
 
+        // Human gate node worker (prompt 04-04).
+        services.AddScoped<INodeWorker, HumanGateNodeWorker>();
+
         services.AddScoped<INodeWorkerRegistry, NodeWorkerRegistry>();
         services.AddScoped<ISagaEngine, SagaEngine>();
 
@@ -116,6 +119,7 @@ public static class DependencyInjection
         services.AddScoped<IConnectorOperationHandler, MySqlExecuteHandler>();
 
         services.AddScoped<ConnectorOperationHandlerRegistry>();
+        services.AddScoped<IConnectorOperationHandlerRegistry>(sp => sp.GetRequiredService<ConnectorOperationHandlerRegistry>());
         services.AddScoped<IOAuthService, OAuthService>();
         services.AddScoped<IConnectorHealthService, ConnectorHealthService>();
 

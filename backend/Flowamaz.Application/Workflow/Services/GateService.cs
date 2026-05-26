@@ -48,6 +48,19 @@ public sealed class GateService
         return gate is null || gate.WorkspaceId != workspaceId ? null : ToResponse(gate);
     }
 
+    /// <summary>
+    /// Returns minimal gate metadata by gate ID (no workspace scoping — used only for signed
+    /// email/Slack link flows where the workspace is unknown until the gate is loaded).
+    /// Callers must verify the HMAC signature before acting on the returned entity.
+    /// </summary>
+    public async Task<GateInfoDto?> GetByGateIdAsync(Guid gateId, CancellationToken ct = default)
+    {
+        var gate = await _gates.GetByIdAsync(gateId, ct);
+        if (gate is null) return null;
+
+        return new GateInfoDto(gate.Id, gate.WorkspaceId, gate.InstanceId, gate.NodeId, gate.ExpiresAt);
+    }
+
     public async Task<GateResponse?> DecideAsync(
         Guid workspaceId, Guid instanceId, string nodeId, string decision, string? note, Guid decidedBy, CancellationToken ct = default)
     {

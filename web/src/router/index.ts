@@ -23,6 +23,11 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/gates/:decision',
+    name: 'gate-approval-success',
+    component: () => import('@/views/gates/GateApprovalSuccessView.vue'),
+  },
+  {
     path: '/',
     component: AppShell,
     meta: { requiresAuth: true, requiresOnboarding: true },
@@ -35,6 +40,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'workflows/:id/edit', name: 'workflow-editor', component: () => import('@/views/workflow/WorkflowEditorView.vue') },
       { path: 'instances', name: 'instances', component: () => import('@/views/instance/InstanceListView.vue') },
       { path: 'instances/:id', name: 'instance-detail', component: () => import('@/views/instance/InstanceDetailView.vue') },
+      { path: 'gates', name: 'gates', component: () => import('@/views/gates/GatesView.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/views/workspace/WorkspaceSettingsView.vue') },
       { path: 'settings/members', name: 'members', component: () => import('@/views/workspace/MembersView.vue') },
       { path: 'settings/api-keys', name: 'api-keys', component: () => import('@/views/workspace/ApiKeysView.vue') },

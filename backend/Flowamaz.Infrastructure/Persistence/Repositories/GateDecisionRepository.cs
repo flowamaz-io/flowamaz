@@ -11,6 +11,9 @@ public sealed class GateDecisionRepository(FlowAmazDbContext db) : IGateDecision
     public Task<GateDecision?> GetByIdForWorkspaceAsync(Guid id, Guid workspaceId, CancellationToken cancellationToken = default) =>
         db.GateDecisions.FirstOrDefaultAsync(g => g.Id == id && g.WorkspaceId == workspaceId, cancellationToken);
 
+    public Task<GateDecision?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+        db.GateDecisions.FirstOrDefaultAsync(g => g.Id == id, cancellationToken);
+
     public Task<GateDecision?> GetByNodeAsync(Guid instanceId, string nodeId, CancellationToken cancellationToken = default) =>
         db.GateDecisions.FirstOrDefaultAsync(g => g.InstanceId == instanceId && g.NodeId == nodeId, cancellationToken);
 

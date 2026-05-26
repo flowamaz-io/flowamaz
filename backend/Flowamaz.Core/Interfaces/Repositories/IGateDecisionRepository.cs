@@ -9,6 +9,14 @@ namespace Flowamaz.Core.Interfaces.Repositories;
 public interface IGateDecisionRepository
 {
     Task<GateDecision?> GetByIdForWorkspaceAsync(Guid id, Guid workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cross-workspace lookup by gate ID only — used exclusively for signed email/Slack
+    /// click-through flows where the workspace is unknown until the gate entity is loaded.
+    /// Callers must verify the HMAC signature before trusting the returned entity.
+    /// </summary>
+    Task<GateDecision?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+
     Task<GateDecision?> GetByNodeAsync(Guid instanceId, string nodeId, CancellationToken cancellationToken = default);
     Task<List<GateDecision>> GetForInstanceAsync(Guid instanceId, Guid workspaceId, CancellationToken cancellationToken = default);
 

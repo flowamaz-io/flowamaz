@@ -7,7 +7,7 @@ namespace Flowamaz.Application.Connectors.Services;
 /// Resolves the correct <see cref="IConnectorOperationHandler"/> by (connectorId, operationId).
 /// All handlers are registered as IConnectorOperationHandler in DI and injected here.
 /// </summary>
-public sealed class ConnectorOperationHandlerRegistry
+public sealed class ConnectorOperationHandlerRegistry : IConnectorOperationHandlerRegistry
 {
     private readonly IReadOnlyDictionary<string, IConnectorOperationHandler> _handlers;
     private readonly ILogger<ConnectorOperationHandlerRegistry> _logger;

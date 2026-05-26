@@ -36,7 +36,25 @@ public sealed record NodeExecutionResult(
     string? ErrorMessage,
     bool ShouldRetry)
 {
+    private const string GateWaitingPrefix = "GATE_WAITING:";
+
     public static NodeExecutionResult Ok(JsonDocument? output) => new(true, output, null, false);
     public static NodeExecutionResult Retryable(string error) => new(false, null, error, true);
     public static NodeExecutionResult Fatal(string error) => new(false, null, error, false);
+
+    /// <summary>
+    /// Signals that a HumanGate node has paused the instance pending an approval decision.
+    /// The orchestrator detects <see cref="IsGateWaiting"/> and parks the instance rather than
+    /// treating this as a failure.
+    /// </summary>
+    public static NodeExecutionResult GateWaiting(string gateDecisionId) =>
+        new(false, null, $"{GateWaitingPrefix}{gateDecisionId}", false);
+
+    /// <summary>True when this result represents a parked gate rather than a real failure.</summary>
+    public bool IsGateWaiting => ErrorMessage?.StartsWith(GateWaitingPrefix, StringComparison.Ordinal) == true;
+
+    /// <summary>Extracts the gate decision ID when <see cref="IsGateWaiting"/> is true.</summary>
+    public string? GateDecisionId => IsGateWaiting
+        ? ErrorMessage![GateWaitingPrefix.Length..]
+        : null;
 }

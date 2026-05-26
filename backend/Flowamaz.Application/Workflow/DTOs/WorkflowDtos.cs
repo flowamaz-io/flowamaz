@@ -80,6 +80,17 @@ public sealed record GateResponse(
     string DeliveryChannel, string DeliveryStatus, DateTime? ExpiresAt, DateTime CreatedAt,
     DateTime? DecidedAt, string? DecisionNote);
 
+/// <summary>
+/// Minimal gate metadata returned by cross-workspace gate lookups (email/Slack click-through).
+/// Not scoped to a workspace — callers must verify the signature before trusting it.
+/// </summary>
+public sealed record GateInfoDto(
+    Guid Id,
+    Guid WorkspaceId,
+    Guid InstanceId,
+    string NodeId,
+    DateTime? ExpiresAt);
+
 // ── Run timeline (waterfall, prompt 02-05) ───────────────────────────────────
 
 public sealed record TimelineResponse(
