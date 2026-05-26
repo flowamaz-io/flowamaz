@@ -69,6 +69,10 @@ public static class DependencyInjection
         services.AddScoped<IVisualInputService, VisualInputService>();
         services.AddScoped<IConversationImportService, ConversationImportService>();
 
+        // Co-pilot full service + SOP parsing (prompt 03-05).
+        services.AddScoped<ICopilotService, CopilotService>();
+        services.AddScoped<ISopParsingService, SopParsingService>();
+
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;
     }

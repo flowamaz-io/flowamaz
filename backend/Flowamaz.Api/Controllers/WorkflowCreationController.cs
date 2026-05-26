@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json;
 using Flowamaz.Api.Authorization;
 using Flowamaz.Core.Enums;
-using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -14,29 +13,36 @@ namespace Flowamaz.Api.Controllers;
 public sealed class WorkflowCreationController : ControllerBase
 {
     private readonly INlYamlGenerationService _generator;
-    private readonly ICopilotPatternMatcher _matcher;
-    private readonly IRateLimitService _rateLimit;
+    private readonly ICopilotService _copilot;
     private readonly IVisualInputService _visualInput;
     private readonly IConversationImportService _conversationImport;
+    private readonly ISopParsingService _sopParsing;
     private readonly ILogger<WorkflowCreationController> _log;
 
     private const long MaxImageBytes = 10 * 1024 * 1024; // 10MB
+    private const long MaxDocBytes = 20 * 1024 * 1024; // 20MB
     private static readonly HashSet<string> AllowedMimeTypes = ["image/jpeg", "image/png", "image/heic", "application/pdf"];
+    private static readonly HashSet<string> AllowedDocMimeTypes =
+    [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain"
+    ];
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     public WorkflowCreationController(
         INlYamlGenerationService generator,
-        ICopilotPatternMatcher matcher,
-        IRateLimitService rateLimit,
+        ICopilotService copilot,
         IVisualInputService visualInput,
         IConversationImportService conversationImport,
+        ISopParsingService sopParsing,
         ILogger<WorkflowCreationController> log)
     {
         _generator = generator;
-        _matcher = matcher;
-        _rateLimit = rateLimit;
+        _copilot = copilot;
         _visualInput = visualInput;
         _conversationImport = conversationImport;
+        _sopParsing = sopParsing;
         _log = log;
     }
 
@@ -91,7 +97,7 @@ public sealed class WorkflowCreationController : ControllerBase
     }
 
     /// <summary>
-    /// Co-pilot command endpoint. Pattern matcher only in Phase 3 — AI fallback in Phase 4.
+    /// Co-pilot command endpoint. Full pipeline: rate → budget → pattern → cache → AI(F1).
     /// Rate limited to 60 calls/user/hour.
     /// </summary>
     [HttpPost("{id:guid}/copilot")]
@@ -102,17 +108,46 @@ public sealed class WorkflowCreationController : ControllerBase
         _log.LogInformation("WorkflowCreationController.Copilot entry workspaceId={WorkspaceId} workflowId={Id}", workspaceId, id);
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "unknown";
-        var allowed = await _rateLimit.CheckAndIncrementAsync($"copilot:{workspaceId}:{userId}", 60, 3600, cancellationToken);
-        if (!allowed)
+        var result = await _copilot.ProcessCommandAsync(request.Command, request.YamlContent, workspaceId, userId, cancellationToken);
+
+        if (!result.Success)
         {
-            _log.LogWarning("WorkflowCreationController.Copilot rate_limited userId={UserId}", userId);
-            return StatusCode(429, new { error = "Rate limit exceeded. You can send 60 Co-pilot commands per hour. Please wait before trying again." });
+            _log.LogWarning("WorkflowCreationController.Copilot rejected errorMessage={Error}", result.ErrorMessage);
+            return StatusCode(429, new { error = result.ErrorMessage });
         }
 
-        var match = _matcher.TryMatch(request.Command, request.YamlContent);
+        _log.LogInformation("WorkflowCreationController.Copilot exit matched={Pattern} cacheHit={Cache}", result.MatchedPattern, result.CacheHit);
+        return Ok(new CopilotResponse(result.MatchedPattern, result.YamlPatch, result.CacheHit));
+    }
 
-        _log.LogInformation("WorkflowCreationController.Copilot exit matched={Matched}", match is not null);
-        return Ok(new CopilotResponse(match?.PatternName, match?.YamlPatch, CacheHit: false));
+    /// <summary>
+    /// Parse a SOP document (PDF, DOCX, TXT) and generate workflow YAML.
+    /// Max 20MB. Returns YAML draft plus extracted steps.
+    /// </summary>
+    [HttpPost("from-document")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    [RequestSizeLimit(20 * 1024 * 1024)]
+    public async Task<ActionResult<SopParseResult>> FromDocument(
+        Guid workspaceId, IFormFile document, CancellationToken cancellationToken)
+    {
+        _log.LogInformation("WorkflowCreationController.FromDocument entry workspaceId={WorkspaceId}", workspaceId);
+
+        if (document == null || document.Length == 0)
+            return BadRequest(new { error = "No document provided. Upload a PDF, DOCX, or TXT file up to 20MB." });
+
+        if (document.Length > MaxDocBytes)
+            return BadRequest(new { error = "Document too large. Maximum size is 20MB. Reduce the file size and try again." });
+
+        var mimeType = document.ContentType.ToLowerInvariant();
+        if (!AllowedDocMimeTypes.Contains(mimeType))
+            return BadRequest(new { error = $"Unsupported file type '{mimeType}'. Upload a PDF, DOCX, or plain text file." });
+
+        using var ms = new MemoryStream();
+        await document.CopyToAsync(ms, cancellationToken);
+        var result = await _sopParsing.ParseAsync(ms.ToArray(), mimeType, workspaceId, cancellationToken);
+
+        _log.LogInformation("WorkflowCreationController.FromDocument exit steps={Steps} tokens={Tokens}", result.ExtractedSteps.Count, result.TokensUsed);
+        return Ok(result);
     }
 
     /// <summary>

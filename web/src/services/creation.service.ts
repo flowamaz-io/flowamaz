@@ -40,6 +40,26 @@ export interface CopilotResponse {
   cache_hit: boolean;
 }
 
+export interface ConversationImportResult {
+  yaml_content: string;
+  extracted_process: {
+    summary: string;
+    steps: string[];
+    approvers: string[];
+    systems: string[];
+  };
+  confidence_score: number;
+  tokens_used: number;
+}
+
+export interface SopParseResult {
+  yaml_content: string;
+  extracted_steps: string[];
+  page_count: number;
+  word_count: number;
+  tokens_used: number;
+}
+
 export const creationService = {
   async generateWorkflow(
     workspaceId: string,
@@ -78,6 +98,17 @@ export const creationService = {
     }
 
     throw new Error('Stream ended unexpectedly. Please try again.');
+  },
+
+  async parseDocument(workspaceId: string, file: File): Promise<SopParseResult> {
+    const form = new FormData();
+    form.append('document', file);
+    const { data } = await axios.post<SopParseResult>(
+      `/api/v1/workspaces/${workspaceId}/workflows/from-document`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return data;
   },
 
   async sendCopilotCommand(
