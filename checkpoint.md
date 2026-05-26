@@ -25,7 +25,9 @@ Notes: |
   02-08: end-to-end wiring (FailNode→SagaEngine, worker executes nodes via registry); Phase2 lifecycle/
   saga/concurrency integration tests; Playwright S18-S25; PHASE_COMPLETE.
   Backend build 0/0; 183 unit + 56 integration. Web build 0 TS errors, 13 vitest.
-  PHASE 02 COMPLETE — pending phase-end agents (Verifier/UX/UI/Testing/Security) + phase-02-report.md.
+  PHASE 02 COMPLETE — phase-end done: 183 unit + 56 integration green; Trivy 0 CRITICAL/0 HIGH;
+  phase-02-report.md compiled; notify hook fired. fix-02 recommended (coverage on worker/jobs +
+  workflow-service read paths to clear >=80%; run Playwright S18-S25 in CI). Awaiting human review.
   Background worker + Quartz gated by Worker:Enabled (off in integration tests via Worker__Enabled=false).
   DEFERRED to 02-08: wire node executors into OrchestratorWorker loop, invoke SagaEngine from
   WorkflowOrchestrator.FailNodeAsync, and have the worker honour debugger pause points (full E2E loop).
