@@ -1,6 +1,7 @@
 using Flowamaz.Application.Analytics;
 using Flowamaz.Application.Auth.Services;
 using Flowamaz.Application.Platform.Services;
+using Flowamaz.Application.Workflow.Creation;
 using Flowamaz.Application.Workflow.Debugger;
 using Flowamaz.Application.Workflow.Interpreter;
 using Flowamaz.Application.Workflow.Orchestrator;
@@ -59,6 +60,10 @@ public static class DependencyInjection
 
         // Workflow validator (prompt 03-01).
         services.AddScoped<IWorkflowValidator, WorkflowValidator>();
+
+        // NL→YAML generation + Co-pilot pattern matcher (prompt 03-03).
+        services.AddScoped<INlYamlGenerationService, NlYamlGenerationService>();
+        services.AddSingleton<ICopilotPatternMatcher, CopilotPatternMatcher>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;

@@ -689,3 +689,54 @@ precise 5/hour/IP register cap). Proxy then booted clean.
 ## Phase fix-02 — PHASE COMPLETE  (2026-05-26)
 
 All 3 fix prompts complete. Phase-end gates: unit 256 + integration 56 = **312 tests pass**; Infrastructure/Workers + Jobs 100%; Workflow services ≥92%; AI completion 98.5%; 25/25 Playwright E2E green; Trivy 0 Critical/High on backend image, web image, and backend NuGet deps. See `fix-phase-02-report.md`.
+
+---
+
+## Prompt 03-01 — YAML Spec Validator  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- `workflow-v1.schema.json` — full JSON Schema covering all 11 node types, edges, groups, variables, trigger types
+- `IWorkflowValidator` + `WorkflowValidator` — 6-layer validator (schema, graph, expression, capability, security, best-practice)
+- `ValidationResult` + `ValidationIssue` records in Flowamaz.Core.Workflow
+- `WorkflowValidationController` — POST /api/v1/workspaces/{id}/workflows/validate (always 200)
+- `WorkflowValidatorTests` — 8 tests covering all 6 layers; all pass
+- `docs/yaml-spec.md` — complete YAML specification reference
+
+**DoD**
+- [x] dotnet build 0 errors 0 warnings
+- [x] All 320 tests pass (264 unit + 56 integration)
+- [x] Validator has no Infrastructure dependencies
+- [x] JSON Schema covers all node types
+- [x] API endpoint returns 200 always
+- [x] docs/yaml-spec.md documents every field
+
+
+## Prompt 03-03 — NL→YAML Generation + Voice Input + Co-pilot Foundation  (2026-05-26)
+
+**Status:** Complete · pushed to `develop`
+
+**Built**
+- `INlYamlGenerationService` + `NlYamlGenerationService` — 6-section NL template → Claude Sonnet → validated YAML pipeline with semantic cache, self-correction retry, AI metering
+- `ICopilotPatternMatcher` + `CopilotPatternMatcher` — 20 regex patterns using C# source-generated Regex, zero AI cost for common commands
+- `WorkflowCreationController` — POST /generate (SSE streaming) + POST /{id}/copilot (rate-limited 60/hr)
+- `NlWorkflowRequest` + `GenerationResult` + `PatternMatchResult` records in Flowamaz.Core.Models
+- `NlYamlGenerationServiceTests` — 4 tests: valid input, self-correction retry, cache hit, markdown fence stripping
+- `CopilotPatternMatcherTests` — 23 tests: all 20 patterns + unknown command null return
+- `useVoiceInput.ts` — Web Speech API composable with graceful degradation
+- `NlTemplateForm.vue` — 6-section form with VoiceInputButton per field, SSE progress display
+- `VoiceInputButton.vue` — microphone toggle with browser support check
+- `creation.service.ts` — SSE generateWorkflow() + copilot axios call
+
+**DoD**
+- [x] dotnet build 0 errors 0 warnings
+- [x] 301 unit tests pass (all new tests included)
+- [x] Vue TypeScript build 0 errors
+- [x] NlYamlGenerationService uses F2 via IModelResolutionService (no hardcoded model)
+- [x] Semantic cache checked before every AI call
+- [x] One self-correction retry on validation failure — no infinite loop
+- [x] AI usage metered on every call
+- [x] Rate limiting 60 calls/user/hour on copilot endpoint
+- [x] Voice input: graceful degradation with actionable browser error message
+- [x] 20 patterns implemented; unknown command returns null
