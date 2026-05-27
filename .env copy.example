@@ -23,6 +23,9 @@ ANTHROPIC_PLATFORM_KEY=
 GOOGLE_PLATFORM_KEY=
 
 # Email (leave empty — logs warning, never throws)
+# Note: use Email__ResendApiKey (double underscore) to override nested config
+# OR ensure appsettings.json Email:ResendApiKey reads from RESEND_API_KEY env var
+# Both forms work — double underscore maps to nested .NET config sections
 RESEND_API_KEY=
 EMAIL_FROM_ADDRESS=noreply@flowamaz.io
 EMAIL_FROM_NAME=Flowamaz

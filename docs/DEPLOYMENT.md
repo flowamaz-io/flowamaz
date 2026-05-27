@@ -13,7 +13,7 @@ Copy `.env.example` to `.env` and set real values. Key variables:
 | `JWT_SECRET` | **Required** (≥ 32 chars). Signs access tokens. The API refuses to start outside Development without it. |
 | `JWT_ISSUER` / `JWT_AUDIENCE` | Token issuer/audience. |
 | `ANTHROPIC_PLATFORM_KEY` | Platform-managed Anthropic key (only Anthropic is platform-managed). |
-| `RESEND_API_KEY` / `EMAIL_FROM_ADDRESS` | Transactional email (noreply@flowamaz.io). |
+| `RESEND_API_KEY` / `EMAIL_FROM_ADDRESS` | Transactional email (noreply@flowamaz.io). For Docker deployments use `Email__ResendApiKey` (double underscore) to override the nested .NET config section. |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins for the SPA. |
 
 Never commit `.env` or any populated secret.
