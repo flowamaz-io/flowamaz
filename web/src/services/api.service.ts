@@ -5,7 +5,7 @@ import axios, {
 } from 'axios';
 import type { ApiEnvelope, RefreshResponse } from '@/types';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 /**
  * Lazily-wired hooks so the Axios instance never imports the Pinia store directly

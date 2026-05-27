@@ -20,8 +20,6 @@ services:
   backend:
     build: ../backend
     container_name: flowamaz-backend
-    ports:
-    - "8307:8307"
     env_file: ../.env
     environment:
       # Override the documented host-dev connection strings with the in-network service names.
@@ -47,7 +45,7 @@ services:
       context: ../web
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: http://localhost:8307
+        VITE_API_BASE_URL: ""
     container_name: flowamaz-web
     restart: unless-stopped
 
