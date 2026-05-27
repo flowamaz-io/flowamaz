@@ -4,11 +4,14 @@ import type { Toast } from '@/types';
 
 let toastSeq = 0;
 
+const SIDEBAR_MINIMIZED_KEY = 'fmz_sidebar_collapsed';
+
 /** Global UI state: help panel, sidebar, and the toast queue. */
 export const useUiStore = defineStore('ui', () => {
   const helpPanelOpen = ref(false);
   const helpPanelArticle = ref<string | null>(null);
   const sidebarCollapsed = ref(false);
+  const sidebarMinimized = ref(localStorage.getItem(SIDEBAR_MINIMIZED_KEY) === 'true');
   const toasts = ref<Toast[]>([]);
 
   function openHelp(article?: string): void {
@@ -32,6 +35,11 @@ export const useUiStore = defineStore('ui', () => {
     sidebarCollapsed.value = collapsed;
   }
 
+  function toggleSidebarMinimized(): void {
+    sidebarMinimized.value = !sidebarMinimized.value;
+    localStorage.setItem(SIDEBAR_MINIMIZED_KEY, String(sidebarMinimized.value));
+  }
+
   function dismissToast(id: number): void {
     toasts.value = toasts.value.filter((t) => t.id !== id);
   }
@@ -48,12 +56,14 @@ export const useUiStore = defineStore('ui', () => {
     helpPanelOpen,
     helpPanelArticle,
     sidebarCollapsed,
+    sidebarMinimized,
     toasts,
     openHelp,
     closeHelp,
     setHelpArticle,
     toggleSidebar,
     setSidebar,
+    toggleSidebarMinimized,
     addToast,
     dismissToast,
   };

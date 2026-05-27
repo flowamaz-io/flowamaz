@@ -23,12 +23,16 @@ const isFullScreen = computed(() =>
 );
 
 // Shift+? opens the help panel globally (FUNCTIONAL.md §10.1). "?" is Shift+/ on most layouts.
+// [ toggles the sidebar expand/collapse on desktop.
 function onKeydown(event: KeyboardEvent): void {
   const target = event.target as HTMLElement | null;
   const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
   if (event.shiftKey && event.key === '?' && !typing) {
     event.preventDefault();
     help.openForRoute(route.path);
+  }
+  if (event.key === '[' && !event.metaKey && !event.ctrlKey && !typing) {
+    ui.toggleSidebarMinimized();
   }
 }
 
