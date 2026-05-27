@@ -8,7 +8,7 @@ services:
     container_name: flowamaz-proxy
     ports:
       - "8306:80"
-      - "8306:443"
+      - "8443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
@@ -20,6 +20,8 @@ services:
   backend:
     build: ../backend
     container_name: flowamaz-backend
+    ports:
+    - "8307:8307"
     env_file: ../.env
     environment:
       # Override the documented host-dev connection strings with the in-network service names.
@@ -41,7 +43,11 @@ services:
       start_period: 15s
 
   web:
-    build: ../web
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8307
     container_name: flowamaz-web
     restart: unless-stopped
 
