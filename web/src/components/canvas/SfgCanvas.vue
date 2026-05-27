@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-full bg-gray-950 overflow-hidden">
+  <div class="flex flex-col h-full bg-[#F8FAFC] overflow-hidden">
     <!-- Toolbar -->
     <CanvasToolbar
       :workflow-name="workflowName"
@@ -39,7 +39,7 @@
         <!-- Minimap -->
         <div
           v-show="showMinimap"
-          class="absolute bottom-4 right-4 w-36 h-28 bg-gray-800 border border-gray-600 rounded-lg overflow-hidden shadow-lg pointer-events-none opacity-80"
+          class="absolute bottom-4 right-4 w-36 h-28 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-lg pointer-events-none opacity-80"
         >
           <div ref="minimapRef" class="w-full h-full" />
         </div>

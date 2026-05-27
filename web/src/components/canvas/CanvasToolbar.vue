@@ -1,5 +1,5 @@
 <template>
-  <div class="h-10 bg-gray-900 border-b border-gray-700 flex items-center px-3 gap-2 shrink-0">
+  <div class="h-10 bg-white border-b border-[#E5E7EB] flex items-center px-3 gap-2 shrink-0">
     <!-- Left: actions -->
     <button
       class="toolbar-btn"
@@ -17,7 +17,7 @@
     >
       <Redo2 class="w-4 h-4" />
     </button>
-    <div class="w-px h-5 bg-gray-700 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
     <button class="toolbar-btn" title="Tidy Layout" @click="$emit('tidy')">
       <LayoutDashboard class="w-4 h-4" />
     </button>
@@ -29,7 +29,7 @@
     <div class="flex-1 flex justify-center">
       <input
         :value="workflowName"
-        class="bg-transparent text-sm text-gray-100 text-center outline-none border-b border-transparent hover:border-gray-600 focus:border-indigo-500 transition-colors w-64 py-0.5"
+        class="bg-transparent text-sm text-gray-700 text-center outline-none border-b border-transparent hover:border-gray-300 focus:border-primary-500 transition-colors w-64 py-0.5"
         placeholder="Workflow name"
         @input="$emit('rename', ($event.target as HTMLInputElement).value)"
       />
@@ -46,7 +46,7 @@
       <Maximize2 class="w-4 h-4" />
     </button>
     <button
-      :class="['toolbar-btn', showMinimap ? 'text-indigo-400' : '']"
+      :class="['toolbar-btn', showMinimap ? 'text-primary-600' : '']"
       title="Toggle Minimap"
       @click="$emit('toggleMinimap')"
     >
@@ -54,7 +54,7 @@
     </button>
 
     <!-- Save state indicator -->
-    <div class="w-px h-5 bg-gray-700 mx-1" />
+    <div class="w-px h-5 bg-gray-200 mx-1" />
     <button
       class="toolbar-btn text-xs gap-1.5"
       :class="isDirty ? 'text-amber-400' : 'text-green-400'"

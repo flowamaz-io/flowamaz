@@ -19,6 +19,7 @@
       <!-- Purpose -->
       <FormField
         label="Purpose"
+        hint="What does this workflow do and who uses it? e.g. 'Routes purchase requests from employees to their manager for approval before submitting to finance.'"
         placeholder="What does this workflow do? Who uses it?"
         v-model="form.purpose"
         :rows="2"
@@ -28,6 +29,7 @@
       <!-- Trigger -->
       <FormField
         label="Trigger"
+        hint="What starts this workflow? e.g. 'A form submission with fields: requester name, amount, description, and cost centre.'"
         placeholder="What starts this workflow? Manual, webhook, schedule, event? What inputs are needed?"
         v-model="form.triggerDescription"
         :rows="2"
@@ -37,6 +39,7 @@
       <!-- Steps -->
       <FormField
         label="Steps"
+        hint="Describe each step in order, including decisions and who does what. e.g. '1. Validate the requester is an active employee. 2. If amount > RM5000, route to manager approval. 3. Manager approves or rejects. 4. If approved, create PO in system.'"
         placeholder="Describe each step in order. Include decisions, branches, and who does what."
         v-model="form.stepsDescription"
         :rows="4"
@@ -46,6 +49,7 @@
       <!-- Rules -->
       <FormField
         label="Rules & Constraints"
+        hint="SLA deadlines, approval thresholds, retry rules. e.g. 'Manager must respond within 48 hours. If no response, escalate to department head. Retry failed steps 3 times.'"
         placeholder="SLA thresholds, approval limits, failure handling, retries, timeouts..."
         v-model="form.rulesAndConstraints"
         :rows="2"
@@ -55,6 +59,7 @@
       <!-- Systems & AI -->
       <FormField
         label="Systems & AI"
+        hint="Which external systems are involved? Any AI processing needed? e.g. 'SAP for PO creation, Slack for notifications, no AI needed.'"
         placeholder="Which systems are involved? Slack, SAP, Salesforce? Any AI steps needed?"
         v-model="form.systemsAndAi"
         :rows="2"
@@ -64,6 +69,7 @@
       <!-- Existing Context (optional) -->
       <div class="space-y-1">
         <label class="text-xs font-medium text-gray-700">Existing Context <span class="text-gray-400">(optional)</span></label>
+        <p class="text-sm text-gray-500 mb-2">Optional. Paste a related email, ticket, or document excerpt to give the AI more context.</p>
         <textarea
           v-model="form.existingContext"
           placeholder="Paste any existing conversation, ticket, or document extract..."
@@ -174,6 +180,7 @@ export const FormField = defineComponent({
   name: 'FormField',
   props: {
     label: { type: String, required: true },
+    hint: { type: String, default: '' },
     placeholder: { type: String, default: '' },
     modelValue: { type: String, default: '' },
     rows: { type: Number, default: 2 },
@@ -188,6 +195,7 @@ export const FormField = defineComponent({
             onTranscript: (t: string) => emit('voiceTranscript', t),
           }),
         ]),
+        ...(props.hint ? [h('p', { class: 'text-sm text-gray-500 mb-2' }, props.hint)] : []),
         h('textarea', {
           value: props.modelValue,
           placeholder: props.placeholder,

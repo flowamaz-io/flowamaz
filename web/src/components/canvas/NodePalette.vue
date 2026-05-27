@@ -1,6 +1,6 @@
 <template>
-  <div class="w-16 bg-gray-900 border-r border-gray-700 flex flex-col items-center py-3 gap-2 select-none">
-    <div class="text-xs text-gray-500 mb-1 font-medium tracking-wide">NODES</div>
+  <div class="w-16 bg-[#F1F5F9] border-r border-[#E5E7EB] flex flex-col items-center py-3 gap-2 select-none">
+    <div class="text-xs text-[#374151] mb-1 font-medium tracking-wide">NODES</div>
     <div
       v-for="item in paletteItems"
       :key="item.type"
