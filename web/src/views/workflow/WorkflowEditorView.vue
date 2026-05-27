@@ -93,7 +93,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-screen overflow-hidden bg-neutral-950">
+  <div class="flex flex-col h-full overflow-hidden bg-neutral-950">
     <!-- Loading -->
     <div v-if="loading" class="flex-1 flex items-center justify-center">
       <div class="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />

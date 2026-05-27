@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
 import CreationMethodSelector from '../../components/creation/CreationMethodSelector.vue';
@@ -59,6 +59,8 @@ function onConversationYaml(yaml: string) {
   error.value = null;
 }
 
+const isCanvasMode = computed(() => selectedMethod.value === 'canvas');
+
 onMounted(() => {
   const method = route.query.method as string | undefined;
   if (method) selectedMethod.value = method;
@@ -66,9 +68,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto px-4 py-8 space-y-8">
-    <!-- Header -->
-    <div>
+  <div :class="isCanvasMode ? 'flex flex-col h-full' : 'max-w-4xl mx-auto px-4 py-8 space-y-8'">
+    <!-- Header — hidden in canvas mode -->
+    <div v-if="!isCanvasMode">
       <h1 class="text-2xl font-bold text-neutral-900">Create a new workflow</h1>
       <p class="text-neutral-500 mt-1">Choose how you'd like to define your process.</p>
     </div>
@@ -108,8 +110,9 @@ onMounted(() => {
       </section>
 
       <!-- Active creation method -->
-      <section v-else class="space-y-6">
+      <section :class="isCanvasMode ? 'flex flex-col flex-1 overflow-hidden' : 'space-y-6'" v-else>
         <button
+          v-if="!isCanvasMode"
           class="text-sm text-neutral-500 hover:text-violet-600 flex items-center gap-1"
           @click="selectedMethod = null; generatedYaml = null"
         >
@@ -145,7 +148,7 @@ onMounted(() => {
           @parsed="onDocumentParsed"
         />
 
-        <div v-else-if="selectedMethod === 'canvas'" class="h-[calc(100vh-12rem)] rounded-2xl overflow-hidden border border-slate-200">
+        <div v-else-if="selectedMethod === 'canvas'" class="flex-1 overflow-hidden">
           <SfgCanvas @yaml-change="generatedYaml = $event" />
         </div>
       </section>

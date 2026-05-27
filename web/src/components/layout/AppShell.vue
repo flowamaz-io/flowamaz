@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import Sidebar from './Sidebar.vue';
 import TopBar from './TopBar.vue';
@@ -16,6 +16,11 @@ const help = useHelp();
 const ws = useWorkspace();
 const route = useRoute();
 const toast = useToast();
+
+const isFullScreen = computed(() =>
+  route.name === 'workflow-editor' ||
+  (route.name === 'workflow-new' && route.query.method === 'canvas'),
+);
 
 // Shift+? opens the help panel globally (FUNCTIONAL.md §10.1). "?" is Shift+/ on most layouts.
 function onKeydown(event: KeyboardEvent): void {
@@ -61,7 +66,7 @@ watch(
     <Sidebar />
     <div class="flex min-w-0 flex-1 flex-col">
       <TopBar />
-      <main class="flex-1 overflow-y-auto bg-slate-50">
+      <main :class="isFullScreen ? 'flex-1 overflow-hidden flex flex-col' : 'flex-1 overflow-y-auto bg-slate-50'">
         <RouterView />
       </main>
     </div>
