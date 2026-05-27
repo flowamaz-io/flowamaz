@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -15,7 +16,8 @@ public class EmailServiceTests
         var httpFactory = new Mock<IHttpClientFactory>(MockBehavior.Strict);
         // Strict mock — if ResendApiKey is empty the service must never reach the HTTP factory.
         var options = Options.Create(new EmailOptions { ResendApiKey = "" });
-        var service = new EmailService(httpFactory.Object, options, NullLogger<EmailService>.Instance);
+        var config = new ConfigurationBuilder().Build();
+        var service = new EmailService(httpFactory.Object, options, config, NullLogger<EmailService>.Instance);
 
         var result = await service.SendAsync(
             to: "user@example.com",

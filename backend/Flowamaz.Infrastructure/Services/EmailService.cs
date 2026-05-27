@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Core.Interfaces.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -25,11 +26,31 @@ public sealed class EmailService : IEmailService
     public EmailService(
         IHttpClientFactory httpClientFactory,
         IOptions<EmailOptions> options,
+        IConfiguration configuration,
         ILogger<EmailService> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _options = options.Value;
         _logger = logger;
+
+        var opt = options.Value;
+        // .NET env var convention requires double-underscore (Email__ResendApiKey) for nested keys.
+        // Docker Compose sets single-underscore names (RESEND_API_KEY, EMAIL_FROM_ADDRESS),
+        // so we check both the bound value and the flat env var name.
+        _options = new EmailOptions
+        {
+            ResendApiKey = NonEmpty(opt.ResendApiKey, configuration["RESEND_API_KEY"]),
+            FromAddress  = NonEmpty(opt.FromAddress,  configuration["EMAIL_FROM_ADDRESS"]),
+            FromName     = opt.FromName,
+            SupportEmail = opt.SupportEmail,
+            SecurityEmail = opt.SecurityEmail,
+        };
+    }
+
+    private static string NonEmpty(params string?[] values)
+    {
+        foreach (var v in values)
+            if (!string.IsNullOrWhiteSpace(v)) return v!;
+        return string.Empty;
     }
 
     public async Task<bool> SendAsync(

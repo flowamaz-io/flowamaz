@@ -6,7 +6,7 @@ public sealed class EmailOptions
     public const string SectionName = "Email";
 
     public string ResendApiKey { get; set; } = string.Empty;
-    public string FromAddress { get; set; } = "noreply@flowamaz.io";
+    public string FromAddress { get; set; } = string.Empty;
     public string FromName { get; set; } = "Flowamaz";
     public string SupportEmail { get; set; } = "support@flowamaz.io";
     public string SecurityEmail { get; set; } = "security@flowamaz.io";
