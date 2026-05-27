@@ -10,6 +10,7 @@ using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Models;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -23,7 +24,9 @@ public class AuthServiceTests
     private readonly Mock<IOrgUserRepository> _orgUserRepo = new();
     private readonly Mock<IWorkspaceMemberRepository> _memberRepo = new();
     private readonly Mock<IRefreshTokenRepository> _refreshRepo = new();
+    private readonly Mock<IPasswordResetTokenRepository> _resetRepo = new();
     private readonly Mock<IJwtService> _jwt = new();
+    private readonly Mock<IEmailService> _email = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
 
@@ -39,11 +42,20 @@ public class AuthServiceTests
         _jwt.Setup(j => j.HashRefreshToken(It.IsAny<string>())).Returns((string p) => $"{p}-hash");
         _memberRepo.Setup(r => r.GetActiveMembershipsForUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
+        _email.Setup(e => e.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Platform:BaseUrl"] = "https://test.flowamaz.io" })
+            .Build();
+
         return new AuthService(
             new RegisterRequestValidator(), new LoginRequestValidator(),
             _orgService.Object, _orgUserService.Object, _orgUserRepo.Object, _memberRepo.Object,
-            _refreshRepo.Object, _jwt.Object, _uow.Object,
+            _refreshRepo.Object, _resetRepo.Object, _jwt.Object, _email.Object, _uow.Object,
             Options.Create(new JwtOptions { AccessTokenExpiryMinutes = 15, RefreshTokenExpiryDays = 7 }),
+            config,
             NullLogger<AuthService>.Instance);
     }
 
@@ -208,5 +220,91 @@ public class AuthServiceTests
     {
         var service = CreateService();
         (await service.RefreshAsync(null, "ip")).Should().BeNull();
+    }
+
+    // ── Password reset ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RequestPasswordResetAsync_unknown_email_returns_success_without_storing_token()
+    {
+        _orgService.Setup(s => s.GetBySlugAsync("acme", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Organisation { Id = Guid.NewGuid(), Slug = "acme" });
+        _orgUserService.Setup(s => s.GetByEmailAndOrgAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((OrgUser?)null);
+
+        var service = CreateService();
+        await service.Invoking(s => s.RequestPasswordResetAsync("nobody@acme.test", "acme"))
+            .Should().NotThrowAsync();
+
+        _resetRepo.Verify(r => r.AddAsync(It.IsAny<PasswordResetToken>(), It.IsAny<CancellationToken>()), Times.Never);
+        _email.Verify(e => e.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RequestPasswordResetAsync_valid_email_stores_token_and_sends_email()
+    {
+        var user = UserWithPassword(GoodPassword);
+        _orgService.Setup(s => s.GetBySlugAsync("acme", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Organisation { Id = user.OrgId, Slug = "acme" });
+        _orgUserService.Setup(s => s.GetByEmailAndOrgAsync(user.Email, user.OrgId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        var service = CreateService();
+        await service.RequestPasswordResetAsync(user.Email, "acme");
+
+        _resetRepo.Verify(r => r.AddAsync(It.Is<PasswordResetToken>(t =>
+            t.OrgUserId == user.Id && t.ExpiresAt > DateTime.UtcNow), It.IsAny<CancellationToken>()), Times.Once);
+        _email.Verify(e => e.SendAsync(user.Email, It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_valid_token_updates_password_and_revokes_refresh_tokens()
+    {
+        var user = UserWithPassword(GoodPassword);
+        var plain = "aabbcc";
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(plain))).ToLowerInvariant();
+        var token = new PasswordResetToken { OrgUserId = user.Id, TokenHash = hash, ExpiresAt = DateTime.UtcNow.AddHours(1) };
+
+        _resetRepo.Setup(r => r.GetByHashAsync(hash, It.IsAny<CancellationToken>())).ReturnsAsync(token);
+        _orgUserRepo.Setup(r => r.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _refreshRepo.Setup(r => r.RevokeAllForUserAsync(user.Id, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var service = CreateService();
+        await service.ResetPasswordAsync(plain, "acme", "NewPass1!");
+
+        user.PasswordHash.Should().NotBe(BCrypt.Net.BCrypt.HashPassword(GoodPassword, 12));
+        BCrypt.Net.BCrypt.Verify("NewPass1!", user.PasswordHash).Should().BeTrue();
+        token.UsedAt.Should().NotBeNull();
+        _refreshRepo.Verify(r => r.RevokeAllForUserAsync(user.Id, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_expired_token_throws_InvalidResetTokenException()
+    {
+        var plain = "expiredtoken";
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(plain))).ToLowerInvariant();
+        var expired = new PasswordResetToken { TokenHash = hash, ExpiresAt = DateTime.UtcNow.AddHours(-1) };
+
+        _resetRepo.Setup(r => r.GetByHashAsync(hash, It.IsAny<CancellationToken>())).ReturnsAsync(expired);
+
+        var service = CreateService();
+        await service.Invoking(s => s.ResetPasswordAsync(plain, "acme", "NewPass1!"))
+            .Should().ThrowAsync<InvalidResetTokenException>();
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_already_used_token_throws_InvalidResetTokenException()
+    {
+        var plain = "usedtoken";
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(plain))).ToLowerInvariant();
+        var used = new PasswordResetToken { TokenHash = hash, ExpiresAt = DateTime.UtcNow.AddHours(1), UsedAt = DateTime.UtcNow.AddMinutes(-5) };
+
+        _resetRepo.Setup(r => r.GetByHashAsync(hash, It.IsAny<CancellationToken>())).ReturnsAsync(used);
+
+        var service = CreateService();
+        await service.Invoking(s => s.ResetPasswordAsync(plain, "acme", "NewPass1!"))
+            .Should().ThrowAsync<InvalidResetTokenException>();
     }
 }

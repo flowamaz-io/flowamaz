@@ -12,6 +12,7 @@ using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Models;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -125,11 +126,16 @@ public class ServiceErrorBranchTests
         jwt.Setup(j => j.GenerateAccessToken(It.IsAny<OrgUser>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<WorkspaceMembership>>())).Returns("access");
         jwt.Setup(j => j.GenerateRefreshToken()).Returns(("plain", "hash"));
 
+        var resetRepo = new Mock<IPasswordResetTokenRepository>();
+        var email = new Mock<IEmailService>();
+        var config = new ConfigurationBuilder().Build();
+
         var service = new AuthService(
             new RegisterRequestValidator(), new LoginRequestValidator(),
             orgService.Object, orgUserService.Object, orgUserRepo.Object, memberRepo.Object,
-            refreshRepo.Object, jwt.Object, uow.Object,
+            refreshRepo.Object, resetRepo.Object, jwt.Object, email.Object, uow.Object,
             Options.Create(new JwtOptions { AccessTokenExpiryMinutes = 15, RefreshTokenExpiryDays = 7 }),
+            config,
             NullLogger<AuthService>.Instance);
 
         await service.Invoking(s => s.RefreshAsync("tok", "1.2.3.4"))

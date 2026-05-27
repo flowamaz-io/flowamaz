@@ -19,6 +19,7 @@ public sealed class AuthController : ControllerBase
     private const string CookiePath = "/api/v1/auth";
     private const int RegisterMaxPerHour = 5;
     private const int LoginMaxPerMinute = 10;
+    private const int ForgotPasswordMaxPerHour = 3;
 
     private readonly AuthService _authService;
     private readonly IRateLimitService _rateLimit;
@@ -95,6 +96,21 @@ public sealed class AuthController : ControllerBase
         return Ok(me);
     }
 
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
+    {
+        await EnforceRateLimitAsync($"forgot-password:{ClientIp}", ForgotPasswordMaxPerHour, windowSeconds: 3600, "password reset", cancellationToken);
+        await _authService.RequestPasswordResetAsync(request.Email, request.OrgSlug, cancellationToken);
+        return Ok(new { message = "If that email exists, a reset link has been sent. Check your inbox." });
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        await _authService.ResetPasswordAsync(request.Token, request.OrgSlug, request.NewPassword, cancellationToken);
+        return Ok(new { message = "Password reset successfully. You can now sign in with your new password." });
+    }
+
     private string ClientIp => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
     private string CorrelationId =>
@@ -111,7 +127,7 @@ public sealed class AuthController : ControllerBase
         {
             HttpOnly = true,
             Secure = !_environment.IsDevelopment(),
-            SameSite = SameSiteMode.Strict,
+            SameSite = SameSiteMode.Lax,
             Path = CookiePath,
             Expires = expiresAt,
         });
@@ -121,7 +137,7 @@ public sealed class AuthController : ControllerBase
         {
             HttpOnly = true,
             Secure = !_environment.IsDevelopment(),
-            SameSite = SameSiteMode.Strict,
+            SameSite = SameSiteMode.Lax,
             Path = CookiePath,
         });
 }

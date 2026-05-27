@@ -19,6 +19,7 @@ const slugTouched = ref(false);
 const fullName = ref('');
 const email = ref('');
 const password = ref('');
+const confirmPassword = ref('');
 const submitting = ref(false);
 const error = ref('');
 
@@ -34,12 +35,16 @@ function onOrgNameInput(value: string): void {
 
 async function submit(): Promise<void> {
   error.value = '';
-  if (!orgName.value || !orgSlug.value || !fullName.value || !email.value || !password.value) {
+  if (!orgName.value || !orgSlug.value || !fullName.value || !email.value || !password.value || !confirmPassword.value) {
     error.value = 'Fill in every field to create your organisation.';
     return;
   }
   if (password.value.length < 8) {
     error.value = 'Choose a password of at least 8 characters for your account security.';
+    return;
+  }
+  if (password.value !== confirmPassword.value) {
+    error.value = 'Passwords do not match. Re-enter your password in both fields.';
     return;
   }
   submitting.value = true;
@@ -166,11 +171,27 @@ async function submit(): Promise<void> {
               <span class="text-xs text-slate-500">{{ strength.label }}</span>
             </div>
           </div>
+          <div>
+            <FmInput
+              v-model="confirmPassword"
+              type="password"
+              label="Confirm password"
+              placeholder="Re-enter your password"
+              autocomplete="new-password"
+            />
+            <p
+              v-if="confirmPassword && confirmPassword !== password"
+              class="mt-1 text-xs text-danger-600"
+            >
+              Passwords do not match.
+            </p>
+          </div>
         </div>
 
         <FmButton
           type="submit"
           :loading="submitting"
+          :disabled="!!confirmPassword && confirmPassword !== password"
           block
           class="mt-6"
         >

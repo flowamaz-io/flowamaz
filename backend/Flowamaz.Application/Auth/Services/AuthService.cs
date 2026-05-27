@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Flowamaz.Application.Auth.DTOs;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Core.Entities.Auth;
@@ -8,6 +10,7 @@ using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
 using FluentValidation;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -34,9 +37,12 @@ public sealed class AuthService
     private readonly IOrgUserRepository _orgUserRepository;
     private readonly IWorkspaceMemberRepository _memberRepository;
     private readonly IRefreshTokenRepository _refreshTokenRepository;
+    private readonly IPasswordResetTokenRepository _passwordResetTokenRepository;
     private readonly IJwtService _jwtService;
+    private readonly IEmailService _emailService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly JwtOptions _jwtOptions;
+    private readonly string _platformBaseUrl;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
@@ -47,9 +53,12 @@ public sealed class AuthService
         IOrgUserRepository orgUserRepository,
         IWorkspaceMemberRepository memberRepository,
         IRefreshTokenRepository refreshTokenRepository,
+        IPasswordResetTokenRepository passwordResetTokenRepository,
         IJwtService jwtService,
+        IEmailService emailService,
         IUnitOfWork unitOfWork,
         IOptions<JwtOptions> jwtOptions,
+        IConfiguration configuration,
         ILogger<AuthService> logger)
     {
         _registerValidator = registerValidator;
@@ -59,9 +68,12 @@ public sealed class AuthService
         _orgUserRepository = orgUserRepository;
         _memberRepository = memberRepository;
         _refreshTokenRepository = refreshTokenRepository;
+        _passwordResetTokenRepository = passwordResetTokenRepository;
         _jwtService = jwtService;
+        _emailService = emailService;
         _unitOfWork = unitOfWork;
         _jwtOptions = jwtOptions.Value;
+        _platformBaseUrl = configuration["PLATFORM_BASE_URL"] ?? configuration["Platform:BaseUrl"] ?? "https://flowamaz.io";
         _logger = logger;
     }
 
@@ -229,6 +241,96 @@ public sealed class AuthService
         }
     }
 
+    public async Task RequestPasswordResetAsync(string email, string orgSlug, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("AuthService.RequestPasswordResetAsync enter orgSlug={Slug}", orgSlug);
+        try
+        {
+            var org = await _organisationService.GetBySlugAsync(orgSlug, cancellationToken);
+            if (org is null)
+            {
+                // No org — return success to prevent org enumeration.
+                _logger.LogDebug("AuthService.RequestPasswordResetAsync exit orgNotFound silenced");
+                return;
+            }
+
+            var user = await _orgUserService.GetByEmailAndOrgAsync(email, org.Id, cancellationToken);
+            if (user is null || !user.IsActive)
+            {
+                // No user — return success to prevent user enumeration.
+                _logger.LogDebug("AuthService.RequestPasswordResetAsync exit userNotFound silenced");
+                return;
+            }
+
+            var plain = GenerateResetToken();
+            var hash = HashToken(plain);
+            var token = new PasswordResetToken
+            {
+                OrgUserId = user.Id,
+                TokenHash = hash,
+                ExpiresAt = DateTime.UtcNow.AddHours(1),
+            };
+
+            await _passwordResetTokenRepository.AddAsync(token, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var resetUrl = $"{_platformBaseUrl}/reset-password?token={plain}&org={orgSlug}";
+            await _emailService.SendAsync(
+                user.Email,
+                "Reset your Flowamaz password",
+                $"<p>Click the link below to reset your password. It expires in 1 hour.</p><p><a href=\"{resetUrl}\">Reset password</a></p><p>If you did not request this, ignore this email — your password has not changed.</p>",
+                $"Reset your password: {resetUrl}\n\nThis link expires in 1 hour. If you did not request this, ignore this email.",
+                cancellationToken);
+
+            _logger.LogInformation("AuthService.RequestPasswordResetAsync exit userId={UserId} tokenSent=true", user.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AuthService.RequestPasswordResetAsync error orgSlug={Slug}", orgSlug);
+            throw;
+        }
+    }
+
+    public async Task ResetPasswordAsync(string plainToken, string orgSlug, string newPassword, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("AuthService.ResetPasswordAsync enter orgSlug={Slug}", orgSlug);
+        try
+        {
+            if (newPassword.Length < 8 ||
+                !newPassword.Any(char.IsUpper) ||
+                !newPassword.Any(char.IsDigit))
+            {
+                throw new InvalidResetTokenException();
+            }
+
+            var hash = HashToken(plainToken);
+            var token = await _passwordResetTokenRepository.GetByHashAsync(hash, cancellationToken);
+            if (token is null || !token.IsValid)
+            {
+                throw new InvalidResetTokenException();
+            }
+
+            var user = await _orgUserRepository.GetByIdAsync(token.OrgUserId, cancellationToken);
+            if (user is null || !user.IsActive)
+            {
+                throw new InvalidResetTokenException();
+            }
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, 12);
+            token.UsedAt = DateTime.UtcNow;
+
+            await _refreshTokenRepository.RevokeAllForUserAsync(user.Id, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("AuthService.ResetPasswordAsync exit userId={UserId} passwordReset=true", user.Id);
+        }
+        catch (Exception ex) when (ex is not InvalidResetTokenException)
+        {
+            _logger.LogError(ex, "AuthService.ResetPasswordAsync error");
+            throw;
+        }
+    }
+
     private async Task<AuthResult> IssueTokensAsync(OrgUser user, string orgSlug, string ip, CancellationToken cancellationToken)
     {
         var memberships = await _memberRepository.GetActiveMembershipsForUserAsync(user.Id, cancellationToken);
@@ -262,6 +364,12 @@ public sealed class AuthService
 
     private static bool IsLockedOut(OrgUser user) =>
         user.LockoutUntil.HasValue && user.LockoutUntil.Value > DateTime.UtcNow;
+
+    private static string GenerateResetToken() =>
+        Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+
+    private static string HashToken(string plain) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(plain))).ToLowerInvariant();
 
     private static DataRegion ParseRegion(string? region) => (region ?? string.Empty).Trim().ToLowerInvariant() switch
     {

@@ -15,4 +15,12 @@ public sealed class RefreshTokenRepository(FlowAmazDbContext db) : IRefreshToken
 
     public Task<RefreshToken?> GetByHashAsync(string tokenHash, CancellationToken cancellationToken = default) =>
         db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == tokenHash, cancellationToken);
+
+    public async Task RevokeAllForUserAsync(Guid orgUserId, CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        await db.RefreshTokens
+            .Where(t => t.OrgUserId == orgUserId && t.RevokedAt == null && t.ExpiresAt > now)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), cancellationToken);
+    }
 }

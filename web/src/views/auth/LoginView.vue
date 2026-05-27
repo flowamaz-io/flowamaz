@@ -5,14 +5,12 @@ import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
 import FmAlert from '@/components/common/FmAlert.vue';
 import { useAuth } from '@/composables/useAuth';
-import { useToast } from '@/composables/useToast';
 import { isOnboardingComplete } from '@/composables/useOnboarding';
 import { toUserFacingError } from '@/utils/error.util';
 import { APP_NAME } from '@/utils/constants';
 
 const router = useRouter();
 const auth = useAuth();
-const toast = useToast();
 
 const email = ref('');
 const orgSlug = ref('');
@@ -36,10 +34,6 @@ async function submit(): Promise<void> {
   } finally {
     submitting.value = false;
   }
-}
-
-function forgotPassword(): void {
-  toast.info('Password reset is coming soon. Contact your org owner if you are locked out.');
 }
 </script>
 
@@ -97,13 +91,12 @@ function forgotPassword(): void {
         </div>
 
         <div class="mt-2 text-right">
-          <button
-            type="button"
+          <RouterLink
+            to="/forgot-password"
             class="text-sm text-primary-600 hover:text-primary-700"
-            @click="forgotPassword"
           >
             Forgot password?
-          </button>
+          </RouterLink>
         </div>
 
         <FmButton

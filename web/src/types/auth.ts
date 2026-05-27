@@ -54,3 +54,14 @@ export interface RegisterRequest {
   planSlug: string;
   dataRegion?: string;
 }
+
+export interface ForgotPasswordRequest {
+  email: string;
+  orgSlug: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  orgSlug: string;
+  newPassword: string;
+}

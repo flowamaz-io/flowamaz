@@ -7,6 +7,7 @@ import { useWorkspace } from '@/composables/useWorkspace';
 import { useAuth } from '@/composables/useAuth';
 import { useOnboarding } from '@/composables/useOnboarding';
 import { useToast } from '@/composables/useToast';
+import { useAuthStore } from '@/stores/auth.store';
 import { slugify } from '@/utils/string.util';
 import { toUserFacingError } from '@/utils/error.util';
 import { CREATION_METHODS } from '@/utils/constants';
@@ -43,6 +44,11 @@ async function createWorkspaceAndAdvance(): Promise<void> {
   submitting.value = true;
   try {
     await ws.createWorkspace({ name: workspaceName.value.trim(), slug: workspaceSlug.value });
+    // Refresh the JWT so the new workspace membership claim is included, then reload
+    // the workspace list so the selector in the app shell reflects it immediately.
+    const authStore = useAuthStore();
+    await authStore.refreshToken();
+    await ws.loadWorkspaces();
     onboarding.markWorkspaceCreated();
     onboarding.setStep(2);
   } catch (e) {
