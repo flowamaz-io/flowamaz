@@ -32,16 +32,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   );
 
   async function loadWorkspaces(): Promise<void> {
-    const result = await workspaceService.list();
-    allWorkspaces.value = result.data;
-    if (!currentWorkspaceId.value && result.data.length > 0) {
-      switchWorkspace(result.data[0]!.id);
-    } else if (
-      currentWorkspaceId.value &&
-      !result.data.some((w) => w.id === currentWorkspaceId.value) &&
-      result.data.length > 0
-    ) {
-      switchWorkspace(result.data[0]!.id);
+    try {
+      const result = await workspaceService.list();
+      allWorkspaces.value = result.data;
+      if (!currentWorkspaceId.value && result.data.length > 0) {
+        switchWorkspace(result.data[0]!.id);
+      } else if (
+        currentWorkspaceId.value &&
+        !result.data.some((w) => w.id === currentWorkspaceId.value) &&
+        result.data.length > 0
+      ) {
+        switchWorkspace(result.data[0]!.id);
+      }
+    } catch (error) {
+      console.error('[WorkspaceStore] loadWorkspaces failed:', error);
+      throw error;
     }
   }
 

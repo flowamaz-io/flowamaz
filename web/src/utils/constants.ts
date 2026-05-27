@@ -81,7 +81,7 @@ export const CREATION_METHODS: { id: string; label: string; icon: Component; met
   { id: 'visual', label: 'Whiteboard photo', icon: Camera, method: 'visual' },
   { id: 'conversation', label: 'Slack conversation', icon: MessagesSquare, method: 'conversation' },
   { id: 'document', label: 'Upload a document', icon: FileText, method: 'document' },
-  { id: 'canvas', label: 'Drag & drop', icon: MousePointer2, method: '' },
+  { id: 'canvas', label: 'Drag & drop', icon: MousePointer2, method: 'canvas' },
 ];
 
 /** Role badge colour classes (Tailwind). */

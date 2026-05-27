@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
 import CreationMethodSelector from '../../components/creation/CreationMethodSelector.vue';
 import NlTemplateForm from '../../components/creation/NlTemplateForm.vue';
+import SfgCanvas from '../../components/canvas/SfgCanvas.vue';
 import VoiceInputButton from '../../components/creation/VoiceInputButton.vue';
 import VisualInputPanel from '../../components/creation/VisualInputPanel.vue';
 import ConversationImportPanel from '../../components/creation/ConversationImportPanel.vue';
@@ -144,8 +145,8 @@ onMounted(() => {
           @parsed="onDocumentParsed"
         />
 
-        <div v-else-if="selectedMethod === 'canvas'" class="bg-neutral-50 rounded-2xl p-10 text-center text-neutral-400">
-          <p>Canvas editor opens here — available in the next step.</p>
+        <div v-else-if="selectedMethod === 'canvas'" class="h-[calc(100vh-12rem)] rounded-2xl overflow-hidden border border-slate-200">
+          <SfgCanvas @yaml-change="generatedYaml = $event" />
         </div>
       </section>
 

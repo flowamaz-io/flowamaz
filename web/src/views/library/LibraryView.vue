@@ -114,7 +114,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 px-8 py-6">
     <!-- Header -->
     <div>
       <h1 class="text-xl font-semibold text-slate-900">Library</h1>

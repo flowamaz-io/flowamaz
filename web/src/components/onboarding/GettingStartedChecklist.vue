@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { RouterLink } from 'vue-router';
+import { useRouter } from 'vue-router';
 import { Check, Circle, X } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
 import { useWorkspace } from '@/composables/useWorkspace';
@@ -8,6 +8,7 @@ import { dismissChecklist, isChecklistDismissed } from '@/composables/useOnboard
 
 const { user } = useAuth();
 const ws = useWorkspace();
+const router = useRouter();
 
 const orgId = computed(() => user.value?.orgId ?? 'anon');
 const dismissed = ref(isChecklistDismissed(orgId.value));
@@ -21,32 +22,24 @@ const items = computed(() => [
     title: 'Create your first workflow',
     description: 'Describe what you want to automate in plain English.',
     to: '/workflows/new',
-    enabled: false,
-    hint: 'Coming next',
     done: false,
   },
   {
     title: 'Connect a system',
     description: 'Link Slack, your database, or any API via the Library.',
     to: '/library',
-    enabled: false,
-    hint: 'Phase 4',
     done: false,
   },
   {
     title: 'Trigger your first run',
     description: 'Watch a workflow execute end to end.',
-    to: '',
-    enabled: false,
-    hint: 'Phase 3',
+    to: '/instances',
     done: false,
   },
   {
     title: 'Invite a team member',
     description: 'Add a teammate to your workspace.',
     to: '/settings/members',
-    enabled: true,
-    hint: '',
     done: teamInvited.value,
   },
 ]);
@@ -87,7 +80,8 @@ function dismiss(): void {
       <li
         v-for="item in items"
         :key="item.title"
-        class="flex items-center gap-3 rounded-lg border border-slate-100 px-3 py-3"
+        class="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-100 px-3 py-3 hover:bg-slate-50"
+        @click="router.push(item.to)"
       >
         <span
           :class="[
@@ -105,25 +99,15 @@ function dismiss(): void {
           />
         </span>
         <div class="min-w-0 flex-1">
-          <p :class="['text-sm font-medium', item.enabled ? 'text-slate-800' : 'text-slate-400']">
+          <p class="text-sm font-medium text-slate-800">
             {{ item.title }}
           </p>
           <p class="truncate text-xs text-slate-400">
             {{ item.description }}
           </p>
         </div>
-        <RouterLink
-          v-if="item.enabled && item.to"
-          :to="item.to"
-          class="shrink-0 text-sm font-medium text-primary-600 hover:text-primary-700"
-        >
-          Start →
-        </RouterLink>
-        <span
-          v-else
-          class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-400"
-        >
-          {{ item.hint }}
+        <span class="shrink-0 text-sm font-medium text-primary-600">
+          {{ item.done ? '✓' : 'Start →' }}
         </span>
       </li>
     </ul>
