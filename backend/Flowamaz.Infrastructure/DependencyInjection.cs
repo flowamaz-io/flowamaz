@@ -43,6 +43,13 @@ public static class DependencyInjection
     {
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
+        services.PostConfigure<AiOptions>(options =>
+        {
+            if (string.IsNullOrEmpty(options.AnthropicPlatformKey))
+                options.AnthropicPlatformKey = configuration["ANTHROPIC_PLATFORM_KEY"] ?? string.Empty;
+            if (string.IsNullOrEmpty(options.GooglePlatformKey))
+                options.GooglePlatformKey = configuration["GOOGLE_PLATFORM_KEY"] ?? string.Empty;
+        });
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
     }
 

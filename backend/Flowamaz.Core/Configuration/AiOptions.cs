@@ -6,6 +6,7 @@ public sealed class AiOptions
     public const string SectionName = "Ai";
 
     public string AnthropicPlatformKey { get; set; } = string.Empty;
+    public string GooglePlatformKey { get; set; } = string.Empty;
 
     /// <summary>
     /// Forces <c>AiCompletionService</c> to return the deterministic local stub instead of calling
