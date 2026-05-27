@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { http, getAuthToken } from './api.service';
 
 export interface NlWorkflowRequest {
   workflowName: string;
@@ -67,9 +67,14 @@ export const creationService = {
     onChunk: (line: string) => void,
     signal?: AbortSignal,
   ): Promise<GenerationDoneEvent> {
+    const token = getAuthToken();
     const response = await fetch(`/api/v1/workspaces/${workspaceId}/workflows/generate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(request),
       signal,
     });
@@ -103,7 +108,7 @@ export const creationService = {
   async parseDocument(workspaceId: string, file: File): Promise<SopParseResult> {
     const form = new FormData();
     form.append('document', file);
-    const { data } = await axios.post<SopParseResult>(
+    const { data } = await http.post<SopParseResult>(
       `/api/v1/workspaces/${workspaceId}/workflows/from-document`,
       form,
       { headers: { 'Content-Type': 'multipart/form-data' } },
@@ -117,7 +122,7 @@ export const creationService = {
     command: string,
     yamlContent?: string,
   ): Promise<CopilotResponse> {
-    const { data } = await axios.post<CopilotResponse>(
+    const { data } = await http.post<CopilotResponse>(
       `/api/v1/workspaces/${workspaceId}/workflows/${workflowId}/copilot`,
       { command, yaml_content: yamlContent },
     );

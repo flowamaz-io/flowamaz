@@ -92,4 +92,9 @@ export function unwrap<T>(response: AxiosResponse<ApiEnvelope<T>>): T {
   return response.data.data;
 }
 
+/** Returns the current access token for callers that cannot use the Axios interceptor (e.g. fetch-based SSE streams). */
+export function getAuthToken(): string | null {
+  return bridge?.getToken() ?? null;
+}
+
 export { BASE_URL };
