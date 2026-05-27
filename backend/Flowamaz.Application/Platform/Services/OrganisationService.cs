@@ -1,3 +1,4 @@
+using Flowamaz.Application.Email;
 using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Exceptions;
@@ -17,9 +18,6 @@ public sealed class OrganisationService : IOrganisationService
 {
     private const int TrialLengthDays = 14;
     private const int BcryptWorkFactor = 12;
-    private const string WelcomeSubject = "Welcome to Flowamaz — your 14-day trial has started";
-    private const string AppUrl = "https://app.flowamaz.io";
-    private const string SupportEmail = "support@flowamaz.io";
 
     private readonly IPlanRepository _planRepository;
     private readonly IOrganisationRepository _organisationRepository;
@@ -123,7 +121,7 @@ public sealed class OrganisationService : IOrganisationService
                 }
             }
 
-            await SendWelcomeEmailAsync(owner, cancellationToken);
+            await SendWelcomeEmailAsync(owner, name, cancellationToken);
 
             _logger.LogDebug(
                 "OrganisationService.RegisterOrganisationAsync exit orgId={OrgId} ownerUserId={OwnerUserId} slug={Slug}",
@@ -200,13 +198,14 @@ public sealed class OrganisationService : IOrganisationService
         }
     }
 
-    private async Task SendWelcomeEmailAsync(OrgUser owner, CancellationToken cancellationToken)
+    private async Task SendWelcomeEmailAsync(OrgUser owner, string orgName, CancellationToken cancellationToken)
     {
         _logger.LogDebug("OrganisationService.SendWelcomeEmailAsync enter ownerUserId={OwnerUserId}", owner.Id);
         try
         {
-            var sent = await _emailService.SendAsync(
-                owner.Email, WelcomeSubject, BuildWelcomeHtml(owner.Name), BuildWelcomeText(owner.Name), cancellationToken);
+            var firstName = owner.Name.Split(' ', 2)[0];
+            var (subject, htmlBody, textBody) = EmailTemplateService.Welcome(firstName, orgName);
+            var sent = await _emailService.SendAsync(owner.Email, subject, htmlBody, textBody, cancellationToken);
 
             if (sent)
             {
@@ -228,26 +227,4 @@ public sealed class OrganisationService : IOrganisationService
                 owner.Id);
         }
     }
-
-    private static string BuildWelcomeHtml(string ownerName) =>
-        $"""
-        <p>Hi {ownerName},</p>
-        <p>Welcome to Flowamaz — your 14-day trial has started.</p>
-        <p>Open your workspace and create your first workflow at <a href="{AppUrl}">{AppUrl}</a>.</p>
-        <p>Need a hand? Email us at <a href="mailto:{SupportEmail}">{SupportEmail}</a>.</p>
-        <p>— The Flowamaz team</p>
-        """;
-
-    private static string BuildWelcomeText(string ownerName) =>
-        $"""
-        Hi {ownerName},
-
-        Welcome to Flowamaz — your 14-day trial has started.
-
-        Open your workspace and create your first workflow at {AppUrl}.
-
-        Need a hand? Email us at {SupportEmail}.
-
-        — The Flowamaz team
-        """;
 }

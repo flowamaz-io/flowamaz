@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flowamaz.Application.Email;
 using Flowamaz.Application.Workflow.Gates;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
@@ -267,9 +268,12 @@ public sealed class HumanGateNodeWorker : INodeWorker
         var approveUrl = $"{platformUrl}/api/v1/gates/{gate.Id}/approve?sig={approveSig}";
         var rejectUrl = $"{platformUrl}/api/v1/gates/{gate.Id}/reject?sig={rejectSig}";
 
-        var subject = $"Approval Required: {gateLabel} — {workflowName}";
-        var html = BuildApprovalEmailHtml(workflowName, gateLabel, gateSummary, approveUrl, rejectUrl);
-        var text = $"Approval Required for {workflowName}\n\n{gateLabel}: {gateSummary}\n\nApprove: {approveUrl}\nReject: {rejectUrl}";
+        var expiryHours = gate.ExpiresAt.HasValue
+            ? (int)Math.Max(1, Math.Ceiling(gate.ExpiresAt.Value.Subtract(DateTime.UtcNow).TotalHours))
+            : DefaultTimeoutHours;
+
+        var (subject, html, text) = EmailTemplateService.GateApproval(
+            workflowName, gateSummary, approveUrl, rejectUrl, expiryHours, platformUrl);
 
         var sent = await _email.SendAsync(gate.AssignedToEmail, subject, html, text, ct);
         if (sent)
@@ -285,30 +289,6 @@ public sealed class HumanGateNodeWorker : INodeWorker
                 gate.AssignedToEmail, gate.Id);
         }
     }
-
-    private static string BuildApprovalEmailHtml(
-        string workflowName, string gateLabel, string gateSummary,
-        string approveUrl, string rejectUrl) =>
-        $"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head><meta charset="utf-8"><title>Approval Required</title></head>
-        <body style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px">
-          <h2 style="color:#1e293b">Approval Required</h2>
-          <p><strong>Workflow:</strong> {HtmlEncode(workflowName)}</p>
-          <p><strong>Gate:</strong> {HtmlEncode(gateLabel)}</p>
-          {(string.IsNullOrWhiteSpace(gateSummary) ? "" : $"<p><strong>Summary:</strong> {HtmlEncode(gateSummary)}</p>")}
-          <div style="margin:32px 0;display:flex;gap:16px">
-            <a href="{approveUrl}" style="background:#16a34a;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">Approve</a>
-            <a href="{rejectUrl}" style="background:#dc2626;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;margin-left:16px">Reject</a>
-          </div>
-          <p style="color:#64748b;font-size:12px">This link expires at the time specified in the workflow configuration.</p>
-        </body>
-        </html>
-        """;
-
-    private static string HtmlEncode(string value) =>
-        System.Net.WebUtility.HtmlEncode(value);
 
     private static string? GetString(JsonElement element, string property) =>
         element.ValueKind == JsonValueKind.Object

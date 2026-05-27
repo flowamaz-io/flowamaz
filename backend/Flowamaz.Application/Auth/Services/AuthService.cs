@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Flowamaz.Application.Auth.DTOs;
+using Flowamaz.Application.Email;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Core.Entities.Auth;
 using Flowamaz.Core.Entities.Platform;
@@ -275,12 +276,9 @@ public sealed class AuthService
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var resetUrl = $"{_platformBaseUrl}/reset-password?token={plain}&org={orgSlug}";
-            await _emailService.SendAsync(
-                user.Email,
-                "Reset your Flowamaz password",
-                $"<p>Click the link below to reset your password. It expires in 1 hour.</p><p><a href=\"{resetUrl}\">Reset password</a></p><p>If you did not request this, ignore this email — your password has not changed.</p>",
-                $"Reset your password: {resetUrl}\n\nThis link expires in 1 hour. If you did not request this, ignore this email.",
-                cancellationToken);
+            var firstName = user.Name.Split(' ', 2)[0];
+            var (subject, htmlBody, textBody) = EmailTemplateService.PasswordReset(firstName, user.Email, resetUrl);
+            await _emailService.SendAsync(user.Email, subject, htmlBody, textBody, cancellationToken);
 
             _logger.LogInformation("AuthService.RequestPasswordResetAsync exit userId={UserId} tokenSent=true", user.Id);
         }
