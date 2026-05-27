@@ -94,8 +94,19 @@ builder.Services.AddCors(options =>
     {
         if (allowedOrigins.Length == 0)
         {
-            // Dev fallback — Vite default port. Production MUST set CORS_ALLOWED_ORIGINS.
-            policy.WithOrigins("http://localhost:5173").AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+            if (!builder.Environment.IsDevelopment())
+            {
+                // Production MUST set CORS_ALLOWED_ORIGINS — log a warning so the misconfiguration is visible.
+                Log.Warning("CORS_ALLOWED_ORIGINS is not set in Production. All cross-origin requests will be blocked.");
+            }
+            // Dev fallback — Docker proxy ports + Vite dev server.
+            policy.WithOrigins(
+                    "http://localhost:8306",
+                    "http://localhost:8443",
+                    "https://localhost:8443",
+                    "http://localhost:3000",
+                    "http://localhost:5173")
+                .AllowAnyHeader().AllowAnyMethod().AllowCredentials();
         }
         else
         {

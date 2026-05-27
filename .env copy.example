@@ -1,0 +1,72 @@
+# Database
+DB_CONNECTION_STRING=Host=localhost;Port=5432;Database=flowamaz;Username=flowamaz;Password=flowamaz_dev
+DB_NAME=flowamaz
+DB_USER=flowamaz
+DB_PASSWORD=flowamaz_dev
+
+# Redis
+REDIS_CONNECTION_STRING=localhost:6379
+
+# JWT
+JWT_SECRET=testing-secret-minimum-32-characters-long-here
+JWT_ISSUER=flowamaz-api
+JWT_AUDIENCE=flowamaz-client
+JWT_ACCESS_TOKEN_EXPIRY_MINUTES=15
+JWT_REFRESH_TOKEN_EXPIRY_DAYS=7
+
+# Security keys (testing values — 64 hex chars each)
+CREDENTIAL_MASTER_KEY=0000000000000000000000000000000000000000000000000000000000000000
+GATE_SIGNING_KEY=1111111111111111111111111111111111111111111111111111111111111111
+
+# AI (leave empty — stub response used when no key)
+ANTHROPIC_PLATFORM_KEY=
+GOOGLE_PLATFORM_KEY=
+
+# Email (leave empty — logs warning, never throws)
+RESEND_API_KEY=
+EMAIL_FROM_ADDRESS=noreply@flowamaz.io
+EMAIL_FROM_NAME=Flowamaz
+SUPPORT_EMAIL=support@flowamaz.io
+SECURITY_EMAIL=security@flowamaz.io
+
+# Git storage
+GIT_REPOS_BASE_PATH=/app/data/repos
+
+# Platform
+PROJECT_NAME=flowamaz
+ASPNETCORE_ENVIRONMENT=Development
+PLATFORM_BASE_URL=http://localhost:5000
+EDITION=community
+
+# Frontend
+VITE_API_BASE_URL=http://localhost:5000
+VITE_APP_NAME=Flowamaz
+VITE_HELP_DOCS_URL=https://docs.flowamaz.io
+
+# Compose
+COMPOSE_PROJECT_NAME=flowamaz
+
+# OAuth (leave empty for testing — OAuth wizard will show error but app still runs)
+SLACK_CLIENT_ID=
+SLACK_CLIENT_SECRET=
+SLACK_SIGNING_SECRET=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+MICROSOFT_TENANT_ID=common
+
+# Library sync (leave empty for testing)
+GITHUB_CONNECTORS_REPO=flowamaz-io/connectors
+GITHUB_TEMPLATES_REPO=flowamaz-io/templates
+GITHUB_APP_ID=
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_WEBHOOK_SECRET=
+LIBRARY_SYNC_INTERVAL_MINUTES=15
+
+# Community limits
+COMMUNITY_MAX_WORKFLOWS=5
+COMMUNITY_MAX_RUNS_MONTH=500
+COMMUNITY_MAX_USERS=1
+# CORS
+CORS_ALLOWED_ORIGINS=http://localhost:8306,http://localhost:8443,https://localhost:8443
