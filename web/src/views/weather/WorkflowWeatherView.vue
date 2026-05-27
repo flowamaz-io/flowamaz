@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { analyticsService } from '../../services/analytics.service';
+import { useWorkspace } from '../../composables/useWorkspace';
 import WeatherInsightsSidebar from '../../components/weather/WeatherInsightsSidebar.vue';
 import type { WeatherResponse, WorkflowWeather } from '../../types/workflow';
 
-const route = useRoute();
 const router = useRouter();
-const workspaceId = route.params.workspaceId as string;
+const ws = useWorkspace();
+const { currentWorkspaceId } = ws;
 
 const data = ref<WeatherResponse | null>(null);
 const loading = ref(true);
@@ -17,8 +18,14 @@ const lastUpdated = ref<Date | null>(null);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 async function load() {
+  const wsId = currentWorkspaceId.value;
+  if (!wsId) {
+    loading.value = false;
+    return;
+  }
+  loading.value = true;
   try {
-    data.value = await analyticsService.weather(workspaceId);
+    data.value = await analyticsService.weather(wsId);
     lastUpdated.value = new Date();
     error.value = null;
   } catch (e: unknown) {
@@ -57,8 +64,13 @@ const STATUS_BORDER: Record<string, string> = {
 };
 
 function navigateToWorkflow(wf: WorkflowWeather) {
-  router.push({ name: 'workflow-detail', params: { workspaceId, id: wf.workflowId } });
+  router.push({ name: 'workflow-detail', params: { id: wf.workflowId } });
 }
+
+// Reload when the active workspace changes.
+watch(currentWorkspaceId, (id) => {
+  if (id) load();
+});
 
 onMounted(() => {
   load();
@@ -162,7 +174,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
 
     <!-- Insights sidebar -->
     <WeatherInsightsSidebar
-      :workspace-id="workspaceId"
+      :workspace-id="currentWorkspaceId ?? ''"
       :open="sidebarOpen"
       @close="sidebarOpen = false"
     />

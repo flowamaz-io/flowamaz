@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { Workflow, Play } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
+import { useRouter } from 'vue-router';
 import FmBadge from '@/components/common/FmBadge.vue';
 import FmButton from '@/components/common/FmButton.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
@@ -18,6 +19,7 @@ import type { WorkflowStatus } from '@/types';
 const store = useWorkflowStore();
 const { workflows, loading, error } = storeToRefs(store);
 const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
+const router = useRouter();
 
 const search = ref('');
 const statusFilter = ref<WorkflowStatus | ''>('');
@@ -35,6 +37,14 @@ const filtered = computed(() =>
 function openTrigger(id?: string): void {
   preselectedId.value = id;
   triggerOpen.value = true;
+}
+
+function openCreationMethod(method: string): void {
+  if (method) {
+    router.push({ name: 'workflow-new', query: { method } });
+  } else {
+    router.push({ name: 'workflow-new' });
+  }
 }
 
 async function reload(): Promise<void> {
@@ -112,21 +122,23 @@ onMounted(reload);
       v-else-if="workflows.length === 0"
       :icon="Workflow"
       title="Create your first workflow"
-      description="Workflow creation methods arrive in Phase 3. Soon you'll build from plain English, a whiteboard photo, a conversation, a document, or the canvas."
+      description="Choose how you want to build — describe it in plain English, upload a document, or draw it on the canvas."
     >
       <template #action>
-        <div class="mt-5 flex flex-wrap justify-center gap-3">
-          <div
+        <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <button
             v-for="method in CREATION_METHODS"
             :key="method.id"
-            class="flex flex-col items-center gap-1 text-slate-300"
+            type="button"
+            class="flex w-[7.5rem] flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-5 text-center transition-colors hover:border-primary-400 hover:bg-primary-50"
+            @click="openCreationMethod(method.method)"
           >
             <component
               :is="method.icon"
-              class="h-6 w-6"
+              class="h-6 w-6 text-primary-600"
             />
-            <span class="text-[10px]">{{ method.label }}</span>
-          </div>
+            <span class="text-xs font-medium text-slate-700">{{ method.label }}</span>
+          </button>
         </div>
       </template>
     </FmEmptyState>

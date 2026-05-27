@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
 import CreationMethodSelector from '../../components/creation/CreationMethodSelector.vue';
@@ -10,11 +10,13 @@ import ConversationImportPanel from '../../components/creation/ConversationImpor
 import DocumentUploadPanel from '../../components/creation/DocumentUploadPanel.vue';
 import CloneSuggestion from '../../components/workflow/CloneSuggestion.vue';
 import { workflowService } from '../../services/workflow.service';
+import { useWorkspace } from '../../composables/useWorkspace';
 import type { SopParseResult } from '../../services/creation.service';
 
 const route = useRoute();
 const router = useRouter();
-const workspaceId = route.params.workspaceId as string;
+const ws = useWorkspace();
+const workspaceId = ws.currentWorkspaceId;
 
 const selectedMethod = ref<string | null>(null);
 const generatedYaml = ref<string | null>(null);
@@ -25,16 +27,16 @@ const cloneSuggestion = ref<{ id: string; name: string; similarityScore: number 
 const cloneDismissed = ref(false);
 
 const checkCloneSuggestion = useDebounceFn(async (name: string) => {
-  if (cloneDismissed.value || name.length < 3) { cloneSuggestion.value = null; return; }
-  cloneSuggestion.value = await workflowService.suggestClone(workspaceId, name);
+  if (cloneDismissed.value || name.length < 3 || !workspaceId.value) { cloneSuggestion.value = null; return; }
+  cloneSuggestion.value = await workflowService.suggestClone(workspaceId.value, name);
 }, 600);
 
 async function cloneWorkflow() {
-  if (!cloneSuggestion.value) return;
+  if (!cloneSuggestion.value || !workspaceId.value) return;
   loading.value = true;
   try {
-    const cloned = await workflowService.clone(workspaceId, cloneSuggestion.value.id);
-    await router.push({ name: 'workflow-editor', params: { workspaceId, id: cloned.id } });
+    const cloned = await workflowService.clone(workspaceId.value, cloneSuggestion.value.id);
+    await router.push({ name: 'workflow-editor', params: { id: cloned.id } });
   } catch (e: unknown) {
     error.value = `Clone failed. ${e instanceof Error ? e.message : 'Please try again.'}`;
     loading.value = false;
@@ -55,6 +57,11 @@ function onConversationYaml(yaml: string) {
   generatedYaml.value = yaml;
   error.value = null;
 }
+
+onMounted(() => {
+  const method = route.query.method as string | undefined;
+  if (method) selectedMethod.value = method;
+});
 </script>
 
 <template>
@@ -110,7 +117,7 @@ function onConversationYaml(yaml: string) {
 
         <NlTemplateForm
           v-if="selectedMethod === 'nl'"
-          :workspace-id="workspaceId"
+          :workspace-id="workspaceId ?? ''"
           @generated="onYamlGenerated"
         />
 
@@ -120,20 +127,20 @@ function onConversationYaml(yaml: string) {
         </div>
 
         <VisualInputPanel
-          v-else-if="selectedMethod === 'image'"
-          :workspace-id="workspaceId"
+          v-else-if="selectedMethod === 'visual'"
+          :workspace-id="workspaceId ?? ''"
           @generated="onYamlGenerated"
         />
 
         <ConversationImportPanel
           v-else-if="selectedMethod === 'conversation'"
-          :workspace-id="workspaceId"
+          :workspace-id="workspaceId ?? ''"
           @generated="onConversationYaml"
         />
 
         <DocumentUploadPanel
           v-else-if="selectedMethod === 'document'"
-          :workspace-id="workspaceId"
+          :workspace-id="workspaceId ?? ''"
           @parsed="onDocumentParsed"
         />
 

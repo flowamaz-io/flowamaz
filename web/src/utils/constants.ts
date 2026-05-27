@@ -74,14 +74,14 @@ export const PLANS: { slug: string; name: string; price: string; blurb: string }
   { slug: 'pro', name: 'Pro', price: '$199/mo', blurb: 'Unlimited workspaces, SSO, priority support.' },
 ];
 
-/** The six workflow creation methods (preview-only in Phase 1). */
-export const CREATION_METHODS: { id: string; label: string; icon: Component }[] = [
-  { id: 'text', label: 'Plain English', icon: Type },
-  { id: 'voice', label: 'Voice', icon: Mic },
-  { id: 'whiteboard', label: 'Whiteboard photo', icon: Camera },
-  { id: 'conversation', label: 'Slack conversation', icon: MessagesSquare },
-  { id: 'document', label: 'Upload a document', icon: FileText },
-  { id: 'canvas', label: 'Drag & drop', icon: MousePointer2 },
+/** The six workflow creation methods. method is the ?method= query param for /workflows/new. */
+export const CREATION_METHODS: { id: string; label: string; icon: Component; method: string }[] = [
+  { id: 'nl', label: 'Plain English', icon: Type, method: 'nl' },
+  { id: 'voice', label: 'Voice', icon: Mic, method: 'voice' },
+  { id: 'visual', label: 'Whiteboard photo', icon: Camera, method: 'visual' },
+  { id: 'conversation', label: 'Slack conversation', icon: MessagesSquare, method: 'conversation' },
+  { id: 'document', label: 'Upload a document', icon: FileText, method: 'document' },
+  { id: 'canvas', label: 'Drag & drop', icon: MousePointer2, method: '' },
 ];
 
 /** Role badge colour classes (Tailwind). */

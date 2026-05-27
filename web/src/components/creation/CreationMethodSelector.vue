@@ -5,7 +5,7 @@ defineEmits<{ 'update:modelValue': [value: string] }>();
 const methods = [
   { id: 'nl', icon: '✍️', label: 'Write a description', description: 'Describe your workflow in plain English using a guided form.' },
   { id: 'voice', icon: '🎤', label: 'Speak it', description: 'Use your microphone to describe the process out loud.' },
-  { id: 'image', icon: '📷', label: 'Upload a photo', description: 'Take a photo of a whiteboard or diagram and let AI parse it.' },
+  { id: 'visual', icon: '📷', label: 'Upload a photo', description: 'Take a photo of a whiteboard or diagram and let AI parse it.' },
   { id: 'conversation', icon: '💬', label: 'Paste a conversation', description: 'Import a Slack thread, email chain, or meeting notes.' },
   { id: 'document', icon: '📄', label: 'Upload a document', description: 'Import a SOP, policy PDF, or DOCX and generate a workflow.' },
   { id: 'canvas', icon: '🎨', label: 'Draw on canvas', description: 'Start from a blank canvas and build your flow visually.' },

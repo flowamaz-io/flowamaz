@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Menu, HelpCircle, ChevronDown, LogOut, Check } from 'lucide-vue-next';
 import FmDropdown from '@/components/common/FmDropdown.vue';
@@ -16,8 +17,14 @@ const { user } = auth;
 const help = useHelp();
 
 const ws = useWorkspace();
-const allWorkspaces = ws.allWorkspaces;
-const current = ws.current;
+const { allWorkspaces, current } = ws;
+
+// Ensure workspaces are loaded if AppShell hasn't loaded them yet (e.g. navigation timing).
+onMounted(async () => {
+  if (allWorkspaces.value.length === 0) {
+    await ws.loadWorkspaces();
+  }
+});
 
 function openHelp(): void {
   help.openForRoute(route.path);
@@ -60,20 +67,20 @@ async function logout(): Promise<void> {
             v-for="w in allWorkspaces"
             :key="w.id"
             type="button"
-            class="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
             @click="selectWorkspace(w.id)"
           >
-            <span class="truncate">{{ w.name }}</span>
+            <span class="min-w-0 flex-1 truncate">{{ w.name }}</span>
             <Check
               v-if="current?.id === w.id"
-              class="h-4 w-4 text-primary-600"
+              class="h-4 w-4 shrink-0 text-primary-600"
             />
           </button>
           <p
             v-if="allWorkspaces.length === 0"
             class="px-3 py-2 text-sm text-slate-400"
           >
-            No workspaces yet
+            Loading workspaces…
           </p>
         </template>
       </FmDropdown>

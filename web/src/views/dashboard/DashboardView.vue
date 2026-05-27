@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
+import { useRouter } from 'vue-router';
 import GettingStartedChecklist from '@/components/onboarding/GettingStartedChecklist.vue';
 import FmWorkflowWeather from '@/components/dashboard/FmWorkflowWeather.vue';
 import { useAuth } from '@/composables/useAuth';
@@ -12,9 +13,10 @@ import type { WeatherResponse } from '@/types';
 
 const { user } = useAuth();
 const ws = useWorkspace();
+const { current, members } = ws;
 const workflowStore = useWorkflowStore();
 const { workflows } = storeToRefs(workflowStore);
-const { members } = ws;
+const router = useRouter();
 
 const weather = ref<WeatherResponse | null>(null);
 
@@ -24,6 +26,14 @@ const metrics = computed(() => [
   { label: 'Runs this month', value: (weather.value?.runsThisMonth ?? 0).toString() },
   { label: 'Team members', value: members.value.length.toString() },
 ]);
+
+function openCreationMethod(method: string): void {
+  if (method) {
+    router.push({ name: 'workflow-new', query: { method } });
+  } else {
+    router.push({ name: 'workflow-new' });
+  }
+}
 
 onMounted(async () => {
   await Promise.allSettled([
@@ -48,7 +58,7 @@ onMounted(async () => {
         Welcome back, {{ user?.name?.split(' ')[0] ?? 'there' }}
       </h1>
       <p class="text-sm text-slate-500">
-        Here's what's happening in {{ ws.current.value?.name ?? 'your workspace' }}.
+        Here's what's happening in {{ current?.name ?? 'your workspace' }}.
       </p>
     </header>
 
@@ -78,20 +88,22 @@ onMounted(async () => {
         What would you like to automate?
       </h2>
       <p class="mt-1 text-sm text-slate-500">
-        Drawing-board creation methods unlock in Phase 3 — the engine and runs are live now.
+        Choose a creation method to build your next workflow.
       </p>
       <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div
+        <button
           v-for="m in CREATION_METHODS"
           :key="m.id"
-          class="flex cursor-not-allowed flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center opacity-70"
+          type="button"
+          class="flex flex-col items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-6 text-center transition-colors hover:border-primary-400 hover:bg-primary-50"
+          @click="openCreationMethod(m.method)"
         >
           <component
             :is="m.icon"
-            class="h-6 w-6 text-slate-400"
+            class="h-6 w-6 text-primary-600"
           />
-          <span class="text-sm font-medium text-slate-500">{{ m.label }}</span>
-        </div>
+          <span class="text-sm font-medium text-slate-700">{{ m.label }}</span>
+        </button>
       </div>
     </section>
   </div>
