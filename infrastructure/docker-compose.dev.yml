@@ -13,7 +13,7 @@ services:
       POSTGRES_USER: flowamaz
       POSTGRES_PASSWORD: flowamaz_dev
     ports:
-      - "5432:5432"
+      - "5442:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

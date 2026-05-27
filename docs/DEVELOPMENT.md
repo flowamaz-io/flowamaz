@@ -11,7 +11,7 @@ The app runs on the host during development; only the datastores run in Docker:
 docker compose -f infrastructure/docker-compose.dev.yml up -d
 docker compose -f infrastructure/docker-compose.dev.yml down   # stop
 ```
-Defaults: Postgres `localhost:5432` (db/user/password `flowamaz`/`flowamaz`/`flowamaz_dev`),
+Defaults: Postgres `localhost:5442` (db/user/password `flowamaz`/`flowamaz`/`flowamaz_dev`),
 Redis `localhost:6379`. These match `backend/Flowamaz.Api/appsettings.Development.json`.
 
 ## Backend
@@ -19,11 +19,11 @@ Redis `localhost:6379`. These match `backend/Flowamaz.Api/appsettings.Developmen
 cd backend
 # Apply migrations to the dev database
 dotnet ef database update --project Flowamaz.Infrastructure --startup-project Flowamaz.Api
-# Run (http://localhost:5000) with hot reload
+# Run (http://localhost:8307) with hot reload
 dotnet watch --project Flowamaz.Api
 ```
-- API docs (Scalar): http://localhost:5000/scalar
-- Health: http://localhost:5000/health
+- API docs (Scalar): http://localhost:8307/scalar
+- Health: http://localhost:8307/health
 - Add a migration: `dotnet ef migrations add <Name> --project Flowamaz.Infrastructure --startup-project Flowamaz.Api --output-dir Persistence/Migrations`
 
 ### Debugging individual concerns
@@ -39,7 +39,7 @@ npm run typecheck
 npm run build
 npm run lint
 ```
-Set `VITE_API_BASE_URL=http://localhost:5000` in `web/.env` (see `web/.env.example`).
+Set `VITE_API_BASE_URL=http://localhost:8307` in `web/.env` (see `web/.env.example`).
 
 ## Tests
 ```bash
