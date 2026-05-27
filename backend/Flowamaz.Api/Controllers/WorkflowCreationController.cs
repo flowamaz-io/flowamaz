@@ -1,5 +1,3 @@
-using System.Text;
-using System.Text.Json;
 using Flowamaz.Api.Authorization;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Workflow;
@@ -28,8 +26,6 @@ public sealed class WorkflowCreationController : ControllerBase
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "text/plain"
     ];
-    private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-
     public WorkflowCreationController(
         INlYamlGenerationService generator,
         ICopilotService copilot,
@@ -48,52 +44,16 @@ public sealed class WorkflowCreationController : ControllerBase
 
     /// <summary>
     /// Generate workflow YAML from a 6-section natural language description.
-    /// Returns SSE stream: lines of YAML content, then a final data:done JSON envelope.
+    /// Returns a complete JSON result once generation finishes.
     /// </summary>
     [HttpPost("generate")]
     [RequireWorkspaceRole(WorkspaceRole.Designer)]
-    public async Task Generate(Guid workspaceId, [FromBody] NlWorkflowRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> GenerateWorkflow(Guid workspaceId, [FromBody] NlWorkflowRequest request, CancellationToken cancellationToken)
     {
-        _log.LogInformation("WorkflowCreationController.Generate entry workspaceId={WorkspaceId}", workspaceId);
-
-        Response.ContentType = "text/event-stream";
-        Response.Headers.CacheControl = "no-cache";
-        Response.Headers.Connection = "keep-alive";
-
-        try
-        {
-            var result = await _generator.GenerateAsync(request, workspaceId, cancellationToken);
-
-            // Stream the YAML line-by-line as SSE events
-            foreach (var line in result.YamlContent.Split('\n'))
-            {
-                var data = $"data: {JsonSerializer.Serialize(new { type = "chunk", content = line })}\n\n";
-                await Response.Body.WriteAsync(Encoding.UTF8.GetBytes(data), cancellationToken);
-                await Response.Body.FlushAsync(cancellationToken);
-            }
-
-            // Final envelope
-            var done = new
-            {
-                type = "done",
-                yaml_content = result.YamlContent,
-                validation_result = result.ValidationResult,
-                tokens_used = result.TokensUsed,
-                cached = result.Cached
-            };
-            var doneData = $"data: {JsonSerializer.Serialize(done, JsonOpts)}\n\n";
-            await Response.Body.WriteAsync(Encoding.UTF8.GetBytes(doneData), cancellationToken);
-            await Response.Body.FlushAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "WorkflowCreationController.Generate error workspaceId={WorkspaceId}", workspaceId);
-            var error = $"data: {JsonSerializer.Serialize(new { type = "error", message = "Generation failed. Check your input and try again." })}\n\n";
-            await Response.Body.WriteAsync(Encoding.UTF8.GetBytes(error), cancellationToken);
-            await Response.Body.FlushAsync(cancellationToken);
-        }
-
-        _log.LogInformation("WorkflowCreationController.Generate exit workspaceId={WorkspaceId}", workspaceId);
+        _log.LogInformation("WorkflowCreationController.GenerateWorkflow entry workspaceId={WorkspaceId}", workspaceId);
+        var result = await _generator.GenerateAsync(request, workspaceId, cancellationToken);
+        _log.LogInformation("WorkflowCreationController.GenerateWorkflow exit workspaceId={WorkspaceId} tokens={Tokens} cached={Cached}", workspaceId, result.TokensUsed, result.Cached);
+        return Ok(result);
     }
 
     /// <summary>

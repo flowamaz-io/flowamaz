@@ -1,4 +1,4 @@
-import { http, getAuthToken } from './api.service';
+import { http } from './api.service';
 
 export interface NlWorkflowRequest {
   workflowName: string;
@@ -27,7 +27,6 @@ export interface ValidationResult {
 }
 
 export interface GenerationDoneEvent {
-  type: 'done';
   yaml_content: string;
   validation_result: ValidationResult;
   tokens_used: number;
@@ -64,45 +63,12 @@ export const creationService = {
   async generateWorkflow(
     workspaceId: string,
     request: NlWorkflowRequest,
-    onChunk: (line: string) => void,
-    signal?: AbortSignal,
   ): Promise<GenerationDoneEvent> {
-    const token = getAuthToken();
-    const response = await fetch(`/api/v1/workspaces/${workspaceId}/workflows/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(request),
-      signal,
-    });
-
-    if (!response.ok) throw new Error(`Generation failed with status ${response.status}. Please check your input and try again.`);
-    if (!response.body) throw new Error('Streaming not supported by this environment.');
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = JSON.parse(line.slice(6));
-        if (data.type === 'chunk') onChunk(data.content);
-        if (data.type === 'done') return data as GenerationDoneEvent;
-        if (data.type === 'error') throw new Error(data.message);
-      }
-    }
-
-    throw new Error('Stream ended unexpectedly. Please try again.');
+    const { data } = await http.post<GenerationDoneEvent>(
+      `/api/v1/workspaces/${workspaceId}/workflows/generate`,
+      request,
+    );
+    return data;
   },
 
   async parseDocument(workspaceId: string, file: File): Promise<SopParseResult> {

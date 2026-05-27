@@ -85,9 +85,8 @@
     </div>
 
     <!-- Progress while generating -->
-    <div v-if="generating" class="p-3 bg-gray-50 border border-gray-200 rounded text-sm font-mono text-gray-700 max-h-48 overflow-y-auto">
-      <div class="text-xs text-teal-600 mb-1">Generating workflow...</div>
-      <pre class="text-xs text-gray-400 whitespace-pre-wrap">{{ yamlPreview }}</pre>
+    <div v-if="generating" class="p-3 bg-gray-50 border border-gray-200 rounded text-sm text-teal-600">
+      Generating workflow — this takes 5–15 seconds...
     </div>
 
     <!-- Actions -->
@@ -99,13 +98,6 @@
       >
         <span v-if="generating">Generating...</span>
         <span v-else>Generate Workflow</span>
-      </button>
-      <button
-        v-if="generating"
-        class="py-2 px-4 rounded bg-gray-200 hover:bg-gray-300 text-sm text-gray-700 transition-colors"
-        @click="abort"
-      >
-        Cancel
       </button>
     </div>
   </div>
@@ -130,8 +122,6 @@ const form = ref<NlWorkflowRequest>({
 
 const generating = ref(false);
 const error = ref<string | null>(null);
-const yamlPreview = ref('');
-let abortController: AbortController | null = null;
 
 const canSubmit = computed(() =>
   form.value.workflowName.trim() &&
@@ -143,29 +133,15 @@ async function submit() {
   if (!canSubmit.value) return;
   generating.value = true;
   error.value = null;
-  yamlPreview.value = '';
-  abortController = new AbortController();
 
   try {
-    const result = await creationService.generateWorkflow(
-      props.workspaceId,
-      form.value,
-      (line) => { yamlPreview.value += line + '\n'; },
-      abortController.signal,
-    );
+    const result = await creationService.generateWorkflow(props.workspaceId, form.value);
     emit('generated', result.yaml_content, form.value.workflowName);
   } catch (e) {
-    if ((e as Error).name !== 'AbortError') {
-      error.value = (e as Error).message;
-    }
+    error.value = (e as Error).message ?? 'Generation failed. Please try again.';
   } finally {
     generating.value = false;
-    abortController = null;
   }
-}
-
-function abort() {
-  abortController?.abort();
 }
 
 // Inline FormField component declared locally to keep file self-contained
