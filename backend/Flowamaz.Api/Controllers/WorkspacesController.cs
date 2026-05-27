@@ -38,10 +38,13 @@ public sealed class WorkspacesController : ControllerBase
 
     [HttpGet]
     [Authorize]
-    public ActionResult<PagedResult<WorkspaceListItem>> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    public async Task<ActionResult<PagedResult<WorkspaceListItem>>> List(
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
     {
-        // Membership snapshot from the JWT — the user's active workspaces at sign-in.
-        var items = _currentUser.WorkspaceMemberships
+        // Query DB directly so newly-created workspaces appear immediately without re-login.
+        var memberships = await _workspaceService.GetUserMembershipsAsync(
+            _currentUser.UserId!.Value, cancellationToken);
+        var items = memberships
             .Select(m => new WorkspaceListItem(m.WorkspaceId, m.WorkspaceName, m.WorkspaceSlug, m.RoleName))
             .ToList();
         return Ok(PagedResult<WorkspaceListItem>.From(items, page, pageSize));

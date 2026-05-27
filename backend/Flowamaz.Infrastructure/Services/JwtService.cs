@@ -53,6 +53,7 @@ public sealed class JwtService : IJwtService
             {
                 workspace_id = m.WorkspaceId,
                 workspace_slug = m.WorkspaceSlug,
+                workspace_name = m.WorkspaceName,
                 role_name = m.RoleName,
                 role_value = m.RoleValue,
             }),
@@ -138,7 +139,7 @@ public sealed class JwtService : IJwtService
         {
             var rows = JsonSerializer.Deserialize<List<WorkspaceClaimRow>>(raw, JsonOptions) ?? [];
             return rows
-                .Select(r => new WorkspaceMembership(r.workspace_id, r.workspace_slug ?? "", "", r.role_name ?? "", r.role_value))
+                .Select(r => new WorkspaceMembership(r.workspace_id, r.workspace_slug ?? "", r.workspace_name ?? "", r.role_name ?? "", r.role_value))
                 .ToList();
         }
         catch (JsonException ex)
@@ -158,5 +159,5 @@ public sealed class JwtService : IJwtService
         return Guid.Empty;
     }
 
-    private sealed record WorkspaceClaimRow(Guid workspace_id, string? workspace_slug, string? role_name, int role_value);
+    private sealed record WorkspaceClaimRow(Guid workspace_id, string? workspace_slug, string? workspace_name, string? role_name, int role_value);
 }

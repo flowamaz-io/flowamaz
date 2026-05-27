@@ -182,6 +182,12 @@ public sealed class WorkspaceService : IWorkspaceService
         }
     }
 
+    public Task<List<WorkspaceMembership>> GetUserMembershipsAsync(Guid orgUserId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("WorkspaceService.GetUserMembershipsAsync enter orgUserId={OrgUserId}", orgUserId);
+        return _memberRepository.GetActiveMembershipsForUserAsync(orgUserId, cancellationToken);
+    }
+
     public async Task SoftDeleteAsync(Guid workspaceId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("WorkspaceService.SoftDeleteAsync enter workspaceId={WorkspaceId}", workspaceId);

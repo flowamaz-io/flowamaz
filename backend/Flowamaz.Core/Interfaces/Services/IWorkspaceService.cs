@@ -22,4 +22,7 @@ public interface IWorkspaceService
 
     Task UpdateSettingsAsync(Guid workspaceId, WorkspaceSettings settings, CancellationToken cancellationToken = default);
     Task SoftDeleteAsync(Guid workspaceId, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns all active workspace memberships for the given org user, fresh from the DB.</summary>
+    Task<List<WorkspaceMembership>> GetUserMembershipsAsync(Guid orgUserId, CancellationToken cancellationToken = default);
 }
