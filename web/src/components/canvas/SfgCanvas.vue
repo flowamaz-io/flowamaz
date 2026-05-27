@@ -157,6 +157,12 @@ function onContextMenu(e: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('click', closeCtxMenu);
+  // Load YAML passed from NL generation via localStorage
+  const storedYaml = localStorage.getItem('fmz_canvas_yaml');
+  if (storedYaml) {
+    localStorage.removeItem('fmz_canvas_yaml');
+    setTimeout(() => syncYamlToCanvas(storedYaml), 200);
+  }
   // Initialize minimap after canvas is ready
   setTimeout(() => {
     if (minimapRef.value && canvas.cy.value) {

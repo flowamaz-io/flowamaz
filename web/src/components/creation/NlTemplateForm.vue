@@ -116,7 +116,7 @@ import { ref, computed } from 'vue';
 import { creationService, type NlWorkflowRequest } from '@/services/creation.service';
 
 const props = defineProps<{ workspaceId: string }>();
-const emit = defineEmits<{ generated: [yaml: string]; close: [] }>();
+const emit = defineEmits<{ generated: [yaml: string, name: string]; close: [] }>();
 
 const form = ref<NlWorkflowRequest>({
   workflowName: '',
@@ -153,7 +153,7 @@ async function submit() {
       (line) => { yamlPreview.value += line + '\n'; },
       abortController.signal,
     );
-    emit('generated', result.yaml_content);
+    emit('generated', result.yaml_content, form.value.workflowName);
   } catch (e) {
     if ((e as Error).name !== 'AbortError') {
       error.value = (e as Error).message;
