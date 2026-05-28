@@ -59,6 +59,17 @@ public sealed class AiTokenMeteringService : IAiTokenMeteringService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+
+                // Resolve org_id from workspace when caller did not supply it
+                if (record.OrgId is null && record.WorkspaceId is not null)
+                {
+                    record.OrgId = await db.Workspaces
+                        .AsNoTracking()
+                        .Where(w => w.Id == record.WorkspaceId.Value)
+                        .Select(w => (Guid?)w.OrgId)
+                        .FirstOrDefaultAsync();
+                }
+
                 await db.AiTokenUsage.AddAsync(record);
                 await db.SaveChangesAsync();
                 _logger.LogDebug(

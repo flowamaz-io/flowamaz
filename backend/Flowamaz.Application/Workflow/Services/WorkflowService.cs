@@ -52,8 +52,10 @@ public sealed class WorkflowService
     {
         _logger.LogInformation("WorkflowService.CreateAsync enter workspace={WorkspaceId} slug={Slug}", workspaceId, request.Slug);
 
-        // Validate the graph before persisting — throws SfgParseException (422) on invalid YAML.
-        await _parser.ParseAsync(request.YamlContent, ct);
+        // Parse AI-generated YAML on creation; skip for canvas — the blank structural template is valid
+        // but intentionally empty (nodes: [], edges: []) until the user draws on the canvas.
+        if (!string.IsNullOrEmpty(request.YamlContent) && request.CreatedByMethod != WorkflowCreatedByMethod.Canvas)
+            await _parser.ParseAsync(request.YamlContent, ct);
 
         if (await _definitions.SlugExistsInWorkspaceAsync(workspaceId, request.Slug, ct))
         {

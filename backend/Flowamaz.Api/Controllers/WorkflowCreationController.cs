@@ -159,7 +159,18 @@ public sealed class WorkflowCreationController : ControllerBase
                 }
 
                 default: // "canvas"
-                    yamlContent = string.Empty;
+                    yamlContent = $"""
+                                  apiVersion: flowamaz/v1
+                                  kind: Workflow
+                                  metadata:
+                                    id: {slug}
+                                    name: "{request.Name}"
+                                  spec:
+                                    trigger:
+                                      type: manual
+                                    nodes: []
+                                    edges: []
+                                  """;
                     break;
             }
         }
