@@ -62,7 +62,7 @@ onMounted(async () => {
       </p>
     </header>
 
-    <GettingStartedChecklist />
+    <GettingStartedChecklist :runs-this-month="weather?.runsThisMonth ?? 0" />
 
     <!-- Metric cards -->
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">

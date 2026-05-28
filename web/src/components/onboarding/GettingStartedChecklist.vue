@@ -1,60 +1,70 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Check, Circle, X } from 'lucide-vue-next';
-import { useAuth } from '@/composables/useAuth';
+import { Check, X } from 'lucide-vue-next';
+import { storeToRefs } from 'pinia';
 import { useWorkspace } from '@/composables/useWorkspace';
-import { dismissChecklist, isChecklistDismissed } from '@/composables/useOnboarding';
+import { useWorkflowStore } from '@/stores/workflow.store';
 
-const { user } = useAuth();
+const props = defineProps<{
+  runsThisMonth?: number;
+}>();
+
 const ws = useWorkspace();
+const workflowStore = useWorkflowStore();
+const { workflows } = storeToRefs(workflowStore);
 const router = useRouter();
 
-const orgId = computed(() => user.value?.orgId ?? 'anon');
-const dismissed = ref(isChecklistDismissed(orgId.value));
+const workspaceId = computed(() => ws.currentWorkspaceId.value ?? 'default');
+const dismissKey = computed(() => `fmz_checklist_dismissed_${workspaceId.value}`);
+const dismissed = ref(localStorage.getItem(dismissKey.value) === 'true');
 
-// Phase 1: only "Invite a team member" is actionable; the rest preview Phase 2/3/4.
-// A member is considered invited once the workspace has more than the lone owner.
-const teamInvited = computed(() => ws.members.value.length > 1);
+// Phase 1: no connector API yet
+const installedConnectorsCount = ref(0);
 
 const items = computed(() => [
   {
+    id: 'first-workflow',
     title: 'Create your first workflow',
     description: 'Describe what you want to automate in plain English.',
     to: '/workflows/new',
-    done: false,
+    done: workflows.value.length > 0,
   },
   {
+    id: 'connect-system',
     title: 'Connect a system',
     description: 'Link Slack, your database, or any API via the Library.',
     to: '/library',
-    done: false,
+    done: installedConnectorsCount.value > 0,
   },
   {
+    id: 'first-run',
     title: 'Trigger your first run',
     description: 'Watch a workflow execute end to end.',
     to: '/instances',
-    done: false,
+    done: (props.runsThisMonth ?? 0) > 0,
   },
   {
+    id: 'invite-member',
     title: 'Invite a team member',
     description: 'Add a teammate to your workspace.',
     to: '/settings/members',
-    done: teamInvited.value,
+    done: ws.members.value.length > 1,
   },
 ]);
 
 const completedCount = computed(() => items.value.filter((i) => i.done).length);
+const showChecklist = computed(() => !dismissed.value && completedCount.value < 4);
 
 function dismiss(): void {
-  dismissChecklist(orgId.value);
+  localStorage.setItem(dismissKey.value, 'true');
   dismissed.value = true;
 }
 </script>
 
 <template>
   <section
-    v-if="!dismissed"
+    v-if="showChecklist"
     class="rounded-xl border border-slate-200 bg-white p-5"
   >
     <div class="flex items-start justify-between">
@@ -63,7 +73,7 @@ function dismiss(): void {
           Get started with Flowamaz
         </h2>
         <p class="mt-0.5 text-sm text-slate-500">
-          {{ completedCount }} of {{ items.length }} complete
+          {{ completedCount }} of 4 complete
         </p>
       </div>
       <button
@@ -76,39 +86,35 @@ function dismiss(): void {
       </button>
     </div>
 
-    <ul class="mt-4 space-y-2">
+    <ul class="mt-4 divide-y divide-slate-100">
+      <!-- Completed item -->
       <li
-        v-for="item in items"
-        :key="item.title"
-        class="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-100 px-3 py-3 hover:bg-slate-50"
+        v-for="item in items.filter((i) => i.done)"
+        :key="item.id"
+        class="flex items-center gap-3 py-4 opacity-60"
+      >
+        <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-500">
+          <Check class="h-3.5 w-3.5 text-white" />
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-medium text-gray-500 line-through">{{ item.title }}</p>
+          <p class="text-xs text-gray-400">{{ item.description }}</p>
+        </div>
+      </li>
+
+      <!-- Incomplete item -->
+      <li
+        v-for="item in items.filter((i) => !i.done)"
+        :key="item.id"
+        class="-mx-2 flex cursor-pointer items-center gap-3 rounded-lg px-2 py-4 transition-colors hover:bg-gray-50"
         @click="router.push(item.to)"
       >
-        <span
-          :class="[
-            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
-            item.done ? 'bg-primary-600 text-white' : 'border border-slate-300 text-transparent',
-          ]"
-        >
-          <Check
-            v-if="item.done"
-            class="h-3 w-3"
-          />
-          <Circle
-            v-else
-            class="h-3 w-3 text-transparent"
-          />
-        </span>
-        <div class="min-w-0 flex-1">
-          <p class="text-sm font-medium text-slate-800">
-            {{ item.title }}
-          </p>
-          <p class="truncate text-xs text-slate-400">
-            {{ item.description }}
-          </p>
+        <div class="h-6 w-6 shrink-0 rounded-full border-2 border-gray-300" />
+        <div class="flex-1">
+          <p class="text-sm font-medium text-gray-900">{{ item.title }}</p>
+          <p class="text-xs text-gray-500">{{ item.description }}</p>
         </div>
-        <span class="shrink-0 text-sm font-medium text-primary-600">
-          {{ item.done ? '✓' : 'Start →' }}
-        </span>
+        <span class="shrink-0 text-sm font-medium text-teal-600">Start →</span>
       </li>
     </ul>
   </section>
