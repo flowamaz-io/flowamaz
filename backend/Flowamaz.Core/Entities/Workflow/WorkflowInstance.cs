@@ -28,6 +28,8 @@ public class WorkflowInstance : WorkspaceEntity
     public string? IdempotencyKey { get; set; }
     public SagaState SagaState { get; set; } = SagaState.None;
     public string? SagaStrategy { get; set; }
+    public bool IsTest { get; set; }
+    public DateTime? TestExpiresAt { get; set; }
 
     /// <summary>Whether <see cref="Status"/> may legally move to <paramref name="target"/>.</summary>
     public bool CanTransitionTo(InstanceStatus target) =>

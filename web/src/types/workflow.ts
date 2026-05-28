@@ -76,6 +76,7 @@ export interface TriggerInstanceRequest {
   workflowDefinitionId: string;
   payload?: string | null;
   idempotencyKey?: string | null;
+  isTest?: boolean;
 }
 
 export interface TriggerInstanceResponse {
@@ -92,6 +93,8 @@ export interface InstanceListItem {
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
+  isTest: boolean;
+  testExpiresAt: string | null;
 }
 
 export interface NodeStateResponse {

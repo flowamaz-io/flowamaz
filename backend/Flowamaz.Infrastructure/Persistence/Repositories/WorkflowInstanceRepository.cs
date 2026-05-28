@@ -24,9 +24,18 @@ public sealed class WorkflowInstanceRepository(FlowAmazDbContext db) : IWorkflow
         db.WorkflowInstances.FirstOrDefaultAsync(
             i => i.WorkspaceId == workspaceId && i.IdempotencyKey == idempotencyKey, cancellationToken);
 
-    public Task<List<WorkflowInstance>> GetForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>
-        db.WorkflowInstances.AsNoTracking().Where(i => i.WorkspaceId == workspaceId)
+    public Task<List<WorkflowInstance>> GetForWorkspaceAsync(Guid workspaceId, bool includeTest = false, CancellationToken cancellationToken = default) =>
+        db.WorkflowInstances.AsNoTracking()
+            .Where(i => i.WorkspaceId == workspaceId && (includeTest || !i.IsTest))
             .OrderByDescending(i => i.CreatedAt).ToListAsync(cancellationToken);
+
+    public async Task<int> SoftDeleteExpiredTestInstancesAsync(DateTime asOf, CancellationToken cancellationToken = default) =>
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            UPDATE workflow_instances
+            SET is_deleted = true, updated_at = NOW()
+            WHERE is_test = true AND test_expires_at < {asOf} AND is_deleted = false
+            """, cancellationToken);
 
     private static readonly InstanceStatus[] ActiveStatuses =
         [InstanceStatus.Pending, InstanceStatus.Running, InstanceStatus.Waiting, InstanceStatus.Compensating];

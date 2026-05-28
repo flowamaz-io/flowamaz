@@ -22,6 +22,7 @@ export interface InstanceListFilters {
   workflowDefinitionId?: string;
   from?: string;
   to?: string;
+  includeTest?: boolean;
   page?: number;
   pageSize?: number;
 }

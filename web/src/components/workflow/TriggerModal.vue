@@ -11,12 +11,15 @@ const props = defineProps<{
   modelValue: boolean;
   workflows: WorkflowDefinitionListItem[];
   preselectedId?: string;
+  forceTestRun?: boolean;
 }>();
 
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; triggered: [instanceId: string] }>();
 
 const store = useWorkflowStore();
 const toast = useToast();
+
+const publishedWorkflows = computed(() => props.workflows.filter((w) => w.status === 'Published'));
 
 const workflowId = ref(props.preselectedId ?? '');
 const payload = ref('');
@@ -28,12 +31,20 @@ watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      workflowId.value = props.preselectedId ?? props.workflows[0]?.id ?? '';
+      workflowId.value = props.preselectedId ?? publishedWorkflows.value[0]?.id ?? '';
       payload.value = '';
       idempotencyKey.value = '';
       payloadError.value = null;
     }
   },
+);
+
+const selectedWorkflow = computed(() =>
+  props.workflows.find((w) => w.id === workflowId.value) ?? null,
+);
+
+const isTestRun = computed(() =>
+  props.forceTestRun === true || selectedWorkflow.value?.status === 'Draft',
 );
 
 const canSubmit = computed(() => workflowId.value.length > 0 && !submitting.value);
@@ -62,8 +73,10 @@ async function submit(): Promise<void> {
       workflowDefinitionId: workflowId.value,
       payload: payload.value.trim().length > 0 ? payload.value : null,
       idempotencyKey: idempotencyKey.value.trim().length > 0 ? idempotencyKey.value : null,
+      isTest: isTestRun.value,
     });
-    toast.success(`Triggered run ${result.instanceId.slice(0, 8)}`);
+    const label = isTestRun.value ? 'Test run' : 'Run';
+    toast.success(`${label} ${result.instanceId.slice(0, 8)} started`);
     emit('triggered', result.instanceId);
     emit('update:modelValue', false);
   } catch (err) {
@@ -77,10 +90,23 @@ async function submit(): Promise<void> {
 <template>
   <FmModal
     :model-value="modelValue"
-    title="Trigger a run"
+    :title="isTestRun ? 'Start a test run' : 'Trigger a production run'"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="space-y-4">
+      <div
+        v-if="isTestRun"
+        class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+      >
+        <p class="font-medium">
+          Test run
+        </p>
+        <p class="mt-1">
+          This run is isolated — no production instances are created. Human gate notifications are
+          suppressed. Test results are deleted automatically after 24 hours.
+        </p>
+      </div>
+
       <div>
         <label
           for="trigger-workflow"
@@ -99,6 +125,12 @@ async function submit(): Promise<void> {
             {{ wf.name }} ({{ wf.status }})
           </option>
         </select>
+        <p
+          v-if="selectedWorkflow?.status === 'Draft'"
+          class="mt-1 text-xs text-amber-600"
+        >
+          Draft workflow — this will run as a test. Publish the workflow to trigger a production run.
+        </p>
       </div>
 
       <div>
@@ -155,9 +187,10 @@ async function submit(): Promise<void> {
       <FmButton
         :loading="submitting"
         :disabled="!canSubmit"
+        :class="isTestRun ? 'border border-amber-500 bg-white text-amber-700 hover:bg-amber-50' : ''"
         @click="submit"
       >
-        Trigger run
+        {{ isTestRun ? 'Start test run' : 'Trigger run' }}
       </FmButton>
     </template>
   </FmModal>

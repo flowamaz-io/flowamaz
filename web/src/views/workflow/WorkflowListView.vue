@@ -67,7 +67,8 @@ onMounted(reload);
         </p>
       </div>
       <FmButton
-        :disabled="workflows.length === 0"
+        :disabled="workflows.filter(w => w.status === 'Published').length === 0"
+        :title="workflows.filter(w => w.status === 'Published').length === 0 ? 'Publish a workflow to trigger a production run' : undefined"
         @click="openTrigger()"
       >
         <template #icon-left>
@@ -204,11 +205,20 @@ onMounted(reload);
                   View
                 </RouterLink>
                 <button
+                  v-if="wf.status === 'Published'"
                   type="button"
                   class="text-sm font-medium text-slate-600 hover:text-slate-900"
                   @click="openTrigger(wf.id)"
                 >
-                  Trigger
+                  Trigger run
+                </button>
+                <button
+                  v-else-if="wf.status === 'Draft'"
+                  type="button"
+                  class="text-sm font-medium text-amber-600 hover:text-amber-800"
+                  @click="openTrigger(wf.id)"
+                >
+                  Test run
                 </button>
               </div>
             </td>

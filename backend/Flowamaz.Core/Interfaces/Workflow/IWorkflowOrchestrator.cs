@@ -11,8 +11,9 @@ namespace Flowamaz.Core.Interfaces.Workflow;
 public interface IWorkflowOrchestrator
 {
     /// <summary>
-    /// Creates and enqueues a new instance for the definition's production version. If
-    /// <paramref name="idempotencyKey"/> matches an existing instance, that instance is returned
+    /// Creates and enqueues a new instance. Production runs require a published version; test runs
+    /// (<paramref name="isTest"/>=true) accept draft workflows and expire after 24 hours.
+    /// If <paramref name="idempotencyKey"/> matches an existing instance, that instance is returned
     /// and nothing new is created (exactly-once trigger).
     /// </summary>
     Task<WorkflowInstance> TriggerAsync(
@@ -22,6 +23,7 @@ public interface IWorkflowOrchestrator
         string? idempotencyKey,
         InstanceTriggerType triggerType = InstanceTriggerType.Manual,
         string? correlationId = null,
+        bool isTest = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>Advances the instance: figures out the next node(s) from the graph and records transitions.</summary>

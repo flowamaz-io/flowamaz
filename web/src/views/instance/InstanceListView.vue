@@ -15,6 +15,8 @@ import { formatDuration, instanceStatusVariant } from '@/utils/workflow.util';
 import type { InstanceListFilters } from '@/services/instance.service';
 import type { InstanceStatus } from '@/types';
 
+type RunTab = 'production' | 'test';
+
 const TERMINAL: InstanceStatus[] = ['Completed', 'Failed', 'Cancelled'];
 const MAX_LIVE_SOCKETS = 20;
 
@@ -23,6 +25,7 @@ const auth = useAuthStore();
 const { instances, loading, error } = storeToRefs(store);
 const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
 
+const activeTab = ref<RunTab>('production');
 const statusFilter = ref<InstanceStatus | ''>('');
 const from = ref('');
 const to = ref('');
@@ -31,6 +34,15 @@ let sockets: InstanceWebSocket[] = [];
 
 const liveCount = computed(() => sockets.filter((s) => s.connectionState.value === 'live').length);
 const anyReconnecting = computed(() => sockets.some((s) => s.connectionState.value === 'reconnecting'));
+
+function hoursUntilExpiry(expiresAt: string | null): string {
+  if (!expiresAt) return '';
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return 'Expired';
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  return h > 0 ? `Expires in ${h}h ${m}m` : `Expires in ${m}m`;
+}
 
 function disconnectAll(): void {
   for (const socket of sockets) socket.disconnect();
@@ -56,12 +68,17 @@ function connectLive(): void {
 
 async function reload(): Promise<void> {
   if (!currentWorkspaceId.value) await loadWorkspaces();
-  const filters: InstanceListFilters = {};
+  const filters: InstanceListFilters = { includeTest: activeTab.value === 'test' };
   if (statusFilter.value) filters.status = statusFilter.value;
   if (from.value) filters.from = from.value;
   if (to.value) filters.to = to.value;
   await store.loadInstances(filters);
   connectLive();
+}
+
+function switchTab(tab: RunTab): void {
+  activeTab.value = tab;
+  reload();
 }
 
 onMounted(reload);
@@ -87,6 +104,33 @@ onUnmounted(disconnectAll);
           {{ liveCount > 0 ? `Live · ${liveCount}` : anyReconnecting ? 'Reconnecting…' : 'Idle' }}
         </span>
       </div>
+    </div>
+
+    <div class="flex gap-1 border-b border-slate-200">
+      <button
+        type="button"
+        :class="[
+          '-mb-px border-b-2 px-4 py-2 text-sm font-medium',
+          activeTab === 'production'
+            ? 'border-primary-600 text-primary-700'
+            : 'border-transparent text-slate-500 hover:text-slate-700',
+        ]"
+        @click="switchTab('production')"
+      >
+        Production
+      </button>
+      <button
+        type="button"
+        :class="[
+          '-mb-px border-b-2 px-4 py-2 text-sm font-medium',
+          activeTab === 'test'
+            ? 'border-amber-500 text-amber-700'
+            : 'border-transparent text-slate-500 hover:text-slate-700',
+        ]"
+        @click="switchTab('test')"
+      >
+        Test
+      </button>
     </div>
 
     <div class="flex flex-wrap items-center gap-3">
@@ -138,8 +182,10 @@ onUnmounted(disconnectAll);
     <FmEmptyState
       v-else-if="instances.length === 0"
       :icon="Activity"
-      title="No runs yet"
-      description="Trigger a workflow from the Workflows list to see runs appear here in real time."
+      :title="activeTab === 'test' ? 'No test runs yet' : 'No production runs yet'"
+      :description="activeTab === 'test'
+        ? 'Click Test run on any workflow to try it without creating a production instance.'
+        : 'Trigger a published workflow from the Workflows list to see runs appear here in real time.'"
     />
 
     <div
@@ -164,6 +210,12 @@ onUnmounted(disconnectAll);
             <th class="px-4 py-3">
               Duration
             </th>
+            <th
+              v-if="activeTab === 'test'"
+              class="px-4 py-3"
+            >
+              Expiry
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
@@ -175,6 +227,12 @@ onUnmounted(disconnectAll);
           >
             <td class="px-4 py-3 font-mono text-xs text-primary-600">
               {{ inst.id.slice(0, 8) }}
+              <span
+                v-if="inst.isTest"
+                class="ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700"
+              >
+                TEST
+              </span>
             </td>
             <td class="px-4 py-3">
               <FmBadge :variant="instanceStatusVariant(inst.status)">
@@ -189,6 +247,12 @@ onUnmounted(disconnectAll);
             </td>
             <td class="px-4 py-3 tabular-nums text-slate-500">
               {{ formatDuration(inst.startedAt, inst.completedAt) }}
+            </td>
+            <td
+              v-if="activeTab === 'test'"
+              class="px-4 py-3 text-xs text-amber-600"
+            >
+              {{ hoursUntilExpiry(inst.testExpiresAt) }}
             </td>
           </tr>
         </tbody>

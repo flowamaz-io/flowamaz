@@ -51,9 +51,10 @@ public sealed class InstanceService
     }
 
     public async Task<List<InstanceListItem>> ListAsync(
-        Guid workspaceId, InstanceStatus? status, Guid? workflowDefinitionId, DateTime? from, DateTime? to, CancellationToken ct = default)
+        Guid workspaceId, InstanceStatus? status, Guid? workflowDefinitionId,
+        DateTime? from, DateTime? to, bool includeTest = false, CancellationToken ct = default)
     {
-        var instances = await _instances.GetForWorkspaceAsync(workspaceId, ct);
+        var instances = await _instances.GetForWorkspaceAsync(workspaceId, includeTest, ct);
         return instances
             .Where(i => status is null || i.Status == status)
             .Where(i => workflowDefinitionId is null || i.WorkflowDefinitionId == workflowDefinitionId)
@@ -61,7 +62,7 @@ public sealed class InstanceService
             .Where(i => to is null || i.CreatedAt <= to)
             .Select(i => new InstanceListItem(
                 i.Id, i.WorkflowDefinitionId, i.Status.ToString(), i.TriggerType.ToString(),
-                i.StartedAt, i.CompletedAt, i.CreatedAt))
+                i.StartedAt, i.CompletedAt, i.CreatedAt, i.IsTest, i.TestExpiresAt))
             .ToList();
     }
 

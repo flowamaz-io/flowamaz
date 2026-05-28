@@ -69,11 +69,12 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         string? idempotencyKey,
         InstanceTriggerType triggerType = InstanceTriggerType.Manual,
         string? correlationId = null,
+        bool isTest = false,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
-            "WorkflowOrchestrator.TriggerAsync enter workspace={WorkspaceId} definition={DefinitionId} idempotencyKey={IdempotencyKey}",
-            workspaceId, workflowDefinitionId, idempotencyKey);
+            "WorkflowOrchestrator.TriggerAsync enter workspace={WorkspaceId} definition={DefinitionId} idempotencyKey={IdempotencyKey} isTest={IsTest}",
+            workspaceId, workflowDefinitionId, idempotencyKey, isTest);
 
         try
         {
@@ -91,8 +92,23 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
 
             var definition = await _definitions.GetByIdForWorkspaceAsync(workflowDefinitionId, workspaceId, cancellationToken)
                 ?? throw new WorkflowNotFoundException(workflowDefinitionId);
-            var version = await _versions.GetProductionAsync(definition.Id, workspaceId, cancellationToken)
-                ?? throw new WorkflowNotPublishedException(workflowDefinitionId);
+
+            WorkflowVersion version;
+            if (isTest)
+            {
+                // Test runs accept draft or published workflows — prefer the production version,
+                // fall back to any saved version, then create a snapshot from the current YAML.
+                version = await _versions.GetProductionAsync(definition.Id, workspaceId, cancellationToken)
+                          ?? await _versions.GetLatestAsync(definition.Id, workspaceId, cancellationToken)
+                          ?? await CreateDraftSnapshotAsync(definition, workspaceId, cancellationToken);
+            }
+            else
+            {
+                if (definition.Status != WorkflowStatus.Published)
+                    throw new WorkflowNotPublishedException(workflowDefinitionId);
+                version = await _versions.GetProductionAsync(definition.Id, workspaceId, cancellationToken)
+                    ?? throw new WorkflowNotPublishedException(workflowDefinitionId);
+            }
 
             var instance = new WorkflowInstance
             {
@@ -104,6 +120,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                 TriggerPayload = string.IsNullOrWhiteSpace(payload) ? null : payload,
                 CorrelationId = correlationId,
                 IdempotencyKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey,
+                IsTest = isTest,
+                TestExpiresAt = isTest ? DateTime.UtcNow.AddHours(24) : null,
             };
 
             await _instances.AddAsync(instance, cancellationToken);
@@ -113,7 +131,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             await _queue.EnqueueAsync(workspaceId, instance.Id, cancellationToken);
 
             _logger.LogInformation(
-                "WorkflowOrchestrator.TriggerAsync exit instance={InstanceId} version={VersionId}", instance.Id, version.Id);
+                "WorkflowOrchestrator.TriggerAsync exit instance={InstanceId} version={VersionId} isTest={IsTest}",
+                instance.Id, version.Id, isTest);
             return instance;
         }
         catch (Exception ex) when (ex is not AppException and not OperationCanceledException)
@@ -123,6 +142,23 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                 workspaceId, workflowDefinitionId);
             throw;
         }
+    }
+
+    private async Task<WorkflowVersion> CreateDraftSnapshotAsync(
+        WorkflowDefinition definition, Guid workspaceId, CancellationToken ct)
+    {
+        var snapshot = new WorkflowVersion
+        {
+            WorkspaceId = workspaceId,
+            WorkflowDefinitionId = definition.Id,
+            YamlContent = definition.YamlContent,
+            CommitSha = $"draft-{DateTime.UtcNow:yyyyMMddHHmmss}",
+            BranchName = "draft",
+            Message = "Test run snapshot",
+            IsProduction = false,
+        };
+        await _versions.AddAsync(snapshot, ct);
+        return snapshot;
     }
 
     public async Task<OrchestratorResult> StepAsync(Guid instanceId, string leaseId, CancellationToken cancellationToken = default)

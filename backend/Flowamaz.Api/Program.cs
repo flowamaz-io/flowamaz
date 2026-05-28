@@ -209,6 +209,12 @@ if (backgroundWorkersEnabled)
         q.AddJob<BatchResultPollerJob>(batchPollerKey);
         q.AddTrigger(t => t.ForJob(batchPollerKey)
             .WithSimpleSchedule(s => s.WithIntervalInMinutes(30).RepeatForever()));
+
+        // Test instance cleanup daily at 03:00 UTC.
+        var testCleanupKey = new JobKey(nameof(TestInstanceCleanupJob));
+        q.AddJob<TestInstanceCleanupJob>(testCleanupKey);
+        q.AddTrigger(t => t.ForJob(testCleanupKey)
+            .WithCronSchedule("0 0 3 * * ?"));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 }

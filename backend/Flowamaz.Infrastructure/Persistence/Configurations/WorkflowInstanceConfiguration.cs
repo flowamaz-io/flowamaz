@@ -23,5 +23,6 @@ public sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<Wor
         builder.HasIndex(i => i.WorkspaceId);
         builder.HasIndex(i => new { i.Status, i.WorkerLeaseExpiresAt });
         builder.HasIndex(i => i.IdempotencyKey).IsUnique();
+        builder.HasIndex(i => new { i.IsTest, i.TestExpiresAt });
     }
 }

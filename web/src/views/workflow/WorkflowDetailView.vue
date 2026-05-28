@@ -2,7 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { Pencil } from 'lucide-vue-next';
+import { Pencil, Play } from 'lucide-vue-next';
+import TriggerModal from '@/components/workflow/TriggerModal.vue';
 import FmBadge from '@/components/common/FmBadge.vue';
 import FmButton from '@/components/common/FmButton.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
@@ -35,6 +36,19 @@ const yamlDirty = ref(false);
 const saving = ref(false);
 const copied = ref(false);
 const validationErrors = ref<Array<{ message: string; code?: string }>>([]);
+
+const triggerOpen = ref(false);
+const forceTestRun = ref(false);
+
+function openTriggerRun(): void {
+  forceTestRun.value = false;
+  triggerOpen.value = true;
+}
+
+function openTestRun(): void {
+  forceTestRun.value = true;
+  triggerOpen.value = true;
+}
 
 watch(currentWorkflow, (wf) => {
   if (wf && !yamlDirty.value) yamlContent.value = wf.yamlContent ?? '';
@@ -139,12 +153,28 @@ watch(id, () => store.loadWorkflow(id.value));
             <Pencil class="w-4 h-4" />
             Edit in Canvas
           </button>
+          <button
+            class="flex items-center gap-2 px-4 py-2 border border-amber-400 rounded-lg text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors"
+            @click="openTestRun"
+          >
+            <Play class="w-4 h-4" />
+            Test run
+          </button>
           <FmButton
+            v-if="currentWorkflow.status !== 'Published'"
             :loading="publishing"
             @click="publish"
           >
             Publish
           </FmButton>
+          <button
+            v-if="currentWorkflow.status === 'Published'"
+            class="flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 transition-colors"
+            @click="openTriggerRun"
+          >
+            <Play class="w-4 h-4" />
+            Trigger run
+          </button>
         </div>
       </div>
 
@@ -360,5 +390,13 @@ watch(id, () => store.loadWorkflow(id.value));
         </div>
       </div>
     </template>
+
+    <TriggerModal
+      v-if="currentWorkflow"
+      v-model="triggerOpen"
+      :workflows="currentWorkflow ? [{ id: currentWorkflow.id, name: currentWorkflow.name, slug: currentWorkflow.slug, status: currentWorkflow.status, healthScore: currentWorkflow.healthScore, updatedAt: currentWorkflow.updatedAt }] : []"
+      :preselected-id="currentWorkflow?.id"
+      :force-test-run="forceTestRun"
+    />
   </div>
 </template>

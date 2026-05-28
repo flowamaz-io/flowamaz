@@ -2,6 +2,7 @@ using FluentAssertions;
 using Flowamaz.Application.Workflow.Orchestrator;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Queue;
 using Flowamaz.Core.Interfaces.Repositories;
@@ -42,7 +43,7 @@ public class WorkflowOrchestratorTests
     public async Task TriggerAsync_creates_instance_records_event_and_enqueues()
     {
         _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WorkflowDefinition { Id = _definitionId, WorkspaceId = _workspaceId, Name = "W", Slug = "w" });
+            .ReturnsAsync(new WorkflowDefinition { Id = _definitionId, WorkspaceId = _workspaceId, Name = "W", Slug = "w", Status = WorkflowStatus.Published });
         _versions.Setup(r => r.GetProductionAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkflowVersion { Id = _versionId, WorkspaceId = _workspaceId, WorkflowDefinitionId = _definitionId });
 
@@ -59,6 +60,44 @@ public class WorkflowOrchestratorTests
         appended!.EventType.Should().Be("InstanceStarted");
         _instances.Verify(r => r.AddAsync(It.IsAny<WorkflowInstance>(), It.IsAny<CancellationToken>()), Times.Once);
         _queue.Verify(q => q.EnqueueAsync(_workspaceId, instance.Id, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TriggerAsync_test_run_sets_IsTest_and_TestExpiresAt()
+    {
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowDefinition { Id = _definitionId, WorkspaceId = _workspaceId, Name = "W", Slug = "w", Status = WorkflowStatus.Draft });
+        _versions.Setup(r => r.GetProductionAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowVersion?)null);
+        _versions.Setup(r => r.GetLatestAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowVersion { Id = _versionId, WorkspaceId = _workspaceId, WorkflowDefinitionId = _definitionId });
+
+        WorkflowInstance? added = null;
+        _instances.Setup(r => r.AddAsync(It.IsAny<WorkflowInstance>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowInstance, CancellationToken>((i, _) => added = i)
+            .Returns(Task.CompletedTask);
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var instance = await NewOrchestrator().TriggerAsync(
+            _workspaceId, _definitionId, null, null, isTest: true);
+
+        instance.IsTest.Should().BeTrue();
+        instance.TestExpiresAt.Should().NotBeNull();
+        instance.TestExpiresAt!.Value.Should().BeCloseTo(DateTime.UtcNow.AddHours(24), precision: TimeSpan.FromSeconds(5));
+        added.Should().NotBeNull();
+        added!.IsTest.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TriggerAsync_production_run_rejects_draft_workflow()
+    {
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowDefinition { Id = _definitionId, WorkspaceId = _workspaceId, Name = "W", Slug = "w", Status = WorkflowStatus.Draft });
+
+        var orchestrator = NewOrchestrator();
+        await Assert.ThrowsAsync<WorkflowNotPublishedException>(
+            () => orchestrator.TriggerAsync(_workspaceId, _definitionId, null, null, isTest: false));
     }
 
     [Fact]

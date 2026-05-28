@@ -44,12 +44,13 @@ public sealed class WorkflowInstancesController : ControllerBase
         [FromQuery] Guid? workflowDefinitionId,
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
+        [FromQuery] bool includeTest = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
         InstanceStatus? statusFilter = Enum.TryParse<InstanceStatus>(status, ignoreCase: true, out var parsed) ? parsed : null;
-        var items = await _instances.ListAsync(workspaceId, statusFilter, workflowDefinitionId, from, to, cancellationToken);
+        var items = await _instances.ListAsync(workspaceId, statusFilter, workflowDefinitionId, from, to, includeTest, cancellationToken);
         return Ok(PagedResult<InstanceListItem>.From(items, page, pageSize));
     }
 
@@ -61,7 +62,7 @@ public sealed class WorkflowInstancesController : ControllerBase
         await _triggerValidator.ValidateAndThrowAsync(request, cancellationToken);
         var instance = await _orchestrator.TriggerAsync(
             workspaceId, request.WorkflowDefinitionId, request.Payload, request.IdempotencyKey,
-            cancellationToken: cancellationToken);
+            isTest: request.IsTest, cancellationToken: cancellationToken);
         return Ok(new TriggerInstanceResponse(instance.Id, instance.Status.ToString(), instance.CreatedAt));
     }
 

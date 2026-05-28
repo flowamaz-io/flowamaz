@@ -14,7 +14,7 @@ public sealed record CreateWorkflowDefinitionRequest(
 
 public sealed record UpdateWorkflowDefinitionRequest(string YamlContent, long? SlaThresholdMs = null);
 
-public sealed record TriggerInstanceRequest(Guid WorkflowDefinitionId, string? Payload, string? IdempotencyKey);
+public sealed record TriggerInstanceRequest(Guid WorkflowDefinitionId, string? Payload, string? IdempotencyKey, bool IsTest = false);
 
 public sealed record GateDecisionRequest(string Decision, string? Note);
 
@@ -48,7 +48,7 @@ public sealed record TriggerInstanceResponse(Guid InstanceId, string Status, Dat
 
 public sealed record InstanceListItem(
     Guid Id, Guid WorkflowDefinitionId, string Status, string TriggerType,
-    DateTime? StartedAt, DateTime? CompletedAt, DateTime CreatedAt);
+    DateTime? StartedAt, DateTime? CompletedAt, DateTime CreatedAt, bool IsTest, DateTime? TestExpiresAt);
 
 public sealed record NodeStateResponse(
     string NodeId, string NodeType, string Status,

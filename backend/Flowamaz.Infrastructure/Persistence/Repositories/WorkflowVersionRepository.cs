@@ -20,6 +20,12 @@ public sealed class WorkflowVersionRepository(FlowAmazDbContext db) : IWorkflowV
             v => v.WorkflowDefinitionId == workflowDefinitionId && v.WorkspaceId == workspaceId && v.IsProduction,
             cancellationToken);
 
+    public Task<WorkflowVersion?> GetLatestAsync(Guid workflowDefinitionId, Guid workspaceId, CancellationToken cancellationToken = default) =>
+        db.WorkflowVersions.AsNoTracking()
+            .Where(v => v.WorkflowDefinitionId == workflowDefinitionId && v.WorkspaceId == workspaceId)
+            .OrderByDescending(v => v.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public async Task AddAsync(WorkflowVersion version, CancellationToken cancellationToken = default) =>
         await db.WorkflowVersions.AddAsync(version, cancellationToken);
 

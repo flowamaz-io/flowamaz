@@ -139,7 +139,7 @@ public class InstanceServiceTests
     {
         var keep = new WorkflowInstance { Id = Guid.NewGuid(), WorkspaceId = _ws, Status = InstanceStatus.Completed, CreatedAt = DateTime.UtcNow };
         var drop = new WorkflowInstance { Id = Guid.NewGuid(), WorkspaceId = _ws, Status = InstanceStatus.Running, CreatedAt = DateTime.UtcNow };
-        _instances.Setup(r => r.GetForWorkspaceAsync(_ws, It.IsAny<CancellationToken>())).ReturnsAsync([keep, drop]);
+        _instances.Setup(r => r.GetForWorkspaceAsync(_ws, It.IsAny<bool>(), It.IsAny<CancellationToken>())).ReturnsAsync([keep, drop]);
 
         var list = await NewService().ListAsync(_ws, InstanceStatus.Completed, null, null, null);
 

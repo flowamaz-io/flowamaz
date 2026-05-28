@@ -19,7 +19,10 @@ public interface IWorkflowInstanceRepository
     /// </summary>
     Task<WorkflowInstance?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<WorkflowInstance?> GetByIdempotencyKeyAsync(Guid workspaceId, string idempotencyKey, CancellationToken cancellationToken = default);
-    Task<List<WorkflowInstance>> GetForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default);
+    Task<List<WorkflowInstance>> GetForWorkspaceAsync(Guid workspaceId, bool includeTest = false, CancellationToken cancellationToken = default);
+
+    /// <summary>Soft-deletes test instances whose <see cref="WorkflowInstance.TestExpiresAt"/> is before <paramref name="asOf"/>.</summary>
+    Task<int> SoftDeleteExpiredTestInstancesAsync(DateTime asOf, CancellationToken cancellationToken = default);
 
     /// <summary>True if the definition has any non-terminal instance (Pending/Running/Waiting/Compensating).</summary>
     Task<bool> HasActiveInstancesAsync(Guid workflowDefinitionId, Guid workspaceId, CancellationToken cancellationToken = default);
