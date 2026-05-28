@@ -62,7 +62,7 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
             {
                 graph = await _sfgParser.ParseAsync(def.YamlContent, ct);
             }
-            catch (SfgParseException ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _log.LogWarning(ex, "WorkflowEmpathyService.AnalyseAsync parse failed id={Id}", workflowDefinitionId);
                 // Return a zero-score analysis rather than throwing — the YAML is malformed

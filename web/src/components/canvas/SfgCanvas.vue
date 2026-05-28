@@ -42,7 +42,10 @@
           v-show="showMinimap"
           class="absolute bottom-4 right-4 w-36 h-28 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-lg pointer-events-none opacity-80"
         >
-          <div ref="minimapRef" class="w-full h-full" />
+          <img v-if="minimapDataUrl" :src="minimapDataUrl" class="w-full h-full object-contain" alt="" />
+          <div v-else class="w-full h-full flex items-center justify-center">
+            <span class="text-gray-300 text-xs">Canvas</span>
+          </div>
         </div>
       </div>
 
@@ -114,7 +117,6 @@ const emit = defineEmits<{ save: []; yamlChange: [yaml: string] }>();
 const route = useRoute();
 const ws = useWorkspace();
 const containerRef = ref<HTMLElement | null>(null);
-const minimapRef = ref<HTMLElement | null>(null);
 const canvasStore = useCanvasStore();
 const { snapshot, performUndo, performRedo } = useCanvasHistory();
 const { openArticle } = useHelp();
@@ -123,6 +125,7 @@ const workflowName = ref('Untitled Workflow');
 const showMinimap = ref(true);
 const yamlContent = ref('');
 const yamlCopied = ref(false);
+const minimapDataUrl = ref('');
 
 const canvas = useCytoscapeCanvas(containerRef);
 const { syncYamlToCanvas } = useYamlCanvasSync(() => canvas.cy.value);
@@ -141,8 +144,8 @@ async function loadWorkflow() {
       yamlContent.value = wf.yamlContent;
       await nextTick();
       syncYamlToCanvas(wf.yamlContent);
-      // Wait for sync debounce to settle, then tidy the layout
-      setTimeout(() => canvas.runLayout(), 350);
+      // Wait for sync debounce to settle, then tidy the layout, then update minimap
+      setTimeout(() => { canvas.runLayout(); setTimeout(updateMinimap, 400); }, 350);
     }
     canvasStore.setDirty(false);
   } catch {
@@ -229,21 +232,8 @@ onMounted(async () => {
   } else {
     await loadWorkflow();
   }
-  // Initialize minimap after canvas is ready
-  setTimeout(() => {
-    if (minimapRef.value && canvas.cy.value) {
-      try {
-        const nav = (canvas.cy.value as unknown as { navigator: (opts: unknown) => void }).navigator;
-        if (nav) {
-          nav({
-            container: minimapRef.value,
-            viewLiveFramerate: 0,
-            thumbnailEventFramerate: 30,
-          });
-        }
-      } catch { /* navigator may not be available */ }
-    }
-  }, 200);
+  // Render initial minimap thumbnail after canvas is ready
+  setTimeout(updateMinimap, 500);
 });
 
 onUnmounted(() => {
@@ -308,18 +298,24 @@ function handleAddGroup() {
   snapshotYaml();
 }
 
+function updateMinimap() {
+  if (!canvas.cy.value) return;
+  try {
+    minimapDataUrl.value = canvas.cy.value.png({ output: 'base64uri', full: true, scale: 0.15 }) as string;
+  } catch { /* ignore if cy not ready */ }
+}
+
 function snapshotYaml() {
   const newYaml = buildYamlFromState();
   yamlContent.value = newYaml;
   snapshot(newYaml);
-  canvasStore.setYaml(newYaml);
   canvasStore.setDirty(true);
   emit('yamlChange', newYaml);
+  updateMinimap();
 }
 
 function buildYamlFromState(): string {
-  const storeNodes = canvasStore.nodes;
-  const storeEdges = canvasStore.edges;
+  const cy = canvas.cy.value;
 
   // Start from the current YAML to preserve all metadata (trigger, variables, node configs).
   // Only replace spec.nodes and spec.edges.
@@ -346,22 +342,40 @@ function buildYamlFromState(): string {
   const existingNodeMap = new Map(existingNodes.map(n => [n.id as string, n]));
   const existingEdgeMap = new Map(existingEdges.map(e => [e.id as string, e]));
 
-  // Merge: preserve per-node config from YAML, update id/type/label from store
-  spec.nodes = storeNodes.map(n => ({
-    ...(existingNodeMap.get(n.id) ?? {}),
-    id: n.id,
-    type: n.type,
-    label: n.label,
-  }));
+  if (cy) {
+    // Use Cytoscape as source of truth — includes pre-loaded nodes and newly-added nodes
+    spec.nodes = cy.nodes().filter(n => !n.data('isGroup') && n.id() !== '').map(n => ({
+      ...(existingNodeMap.get(n.id()) ?? {}),
+      id: n.id(),
+      type: n.data('nodeType') || 'action',
+      label: n.data('label') || n.id(),
+    }));
 
-  // Merge: preserve per-edge extras (via expressions) from YAML
-  spec.edges = storeEdges.map(e => ({
-    ...(existingEdgeMap.get(e.id) ?? {}),
-    id: e.id,
-    from: e.from,
-    to: e.to,
-    ...(e.via ? { via: e.via } : {}),
-  }));
+    spec.edges = cy.edges().map(e => ({
+      ...(existingEdgeMap.get(e.id()) ?? {}),
+      id: e.id(),
+      from: e.data('source'),
+      to: e.data('target'),
+      ...(e.data('via') ? { via: e.data('via') } : {}),
+    }));
+  } else {
+    // Fallback when cy not available
+    const storeNodes = canvasStore.nodes;
+    const storeEdges = canvasStore.edges;
+    spec.nodes = storeNodes.map(n => ({
+      ...(existingNodeMap.get(n.id) ?? {}),
+      id: n.id,
+      type: n.type,
+      label: n.label,
+    }));
+    spec.edges = storeEdges.map(e => ({
+      ...(existingEdgeMap.get(e.id) ?? {}),
+      id: e.id,
+      from: e.from,
+      to: e.to,
+      ...(e.via ? { via: e.via } : {}),
+    }));
+  }
 
   parsed.spec = spec;
   return jsYaml.dump(parsed, { indent: 2, lineWidth: -1 });

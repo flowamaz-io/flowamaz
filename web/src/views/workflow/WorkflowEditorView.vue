@@ -68,8 +68,13 @@ async function onCopilotCommand(cmd: string) {
     return;
   }
   if (isDirty.value) await save();
-  const { patch, pattern } = await sendCopilotCommand(cmd);
-  copilotPanelRef.value?.setResult(patch, pattern);
+  try {
+    const { patch, pattern } = await sendCopilotCommand(cmd);
+    copilotPanelRef.value?.setResult(patch, pattern);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Request failed';
+    copilotPanelRef.value?.setResult(null, null, `Co-pilot request failed: ${msg}. Check your connection and try again.`);
+  }
 }
 
 // Health score badge colour
@@ -186,7 +191,7 @@ onUnmounted(() => {
         />
 
         <!-- Right panel: YAML editor (technical) or Empathy panel -->
-        <div class="flex-1 overflow-hidden">
+        <div class="flex-1 overflow-hidden bg-white">
           <EmpathyPanel
             v-if="empathyMode"
             :workspace-id="workspaceId"
