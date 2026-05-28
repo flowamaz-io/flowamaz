@@ -160,6 +160,7 @@ onUnmounted(() => {
         <!-- Canvas -->
         <div :style="{ width: splitRatio + '%' }" class="relative overflow-hidden border-r border-neutral-700">
           <SfgCanvas
+            :key="workflowId"
             :initial-yaml="yaml"
             @yaml-change="yaml = $event"
             @save="save"

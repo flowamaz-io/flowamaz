@@ -52,6 +52,26 @@
         @update="onNodeUpdate"
         @help="onNodeHelp"
       />
+
+      <!-- YAML panel (shows when no node is selected) -->
+      <div
+        v-if="!canvasStore.selectedNode && yamlContent"
+        class="w-72 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden"
+      >
+        <div class="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50 shrink-0">
+          <span class="text-xs font-medium text-gray-500 uppercase tracking-wider">YAML</span>
+          <button
+            class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-200 transition-colors flex items-center gap-1"
+            @click="copyYaml"
+          >
+            <Clipboard class="w-3.5 h-3.5" />
+            {{ yamlCopied ? 'Copied!' : 'Copy' }}
+          </button>
+        </div>
+        <div class="flex-1 overflow-auto p-3">
+          <pre class="text-xs font-mono text-gray-800 leading-5 whitespace-pre-wrap">{{ yamlContent }}</pre>
+        </div>
+      </div>
     </div>
 
     <!-- Context menu -->
@@ -69,21 +89,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { useRoute } from 'vue-router';
 import { useCytoscapeCanvas } from '@/composables/useCytoscapeCanvas';
 import { useCanvasHistory } from '@/composables/useCanvasHistory';
 import { useYamlCanvasSync } from '@/composables/useYamlCanvasSync';
 import { useCanvasStore } from '@/stores/canvas.store';
+import { useWorkspace } from '@/composables/useWorkspace';
 import { useHelp } from '@/composables/useHelp';
+import { workflowService } from '@/services/workflow.service';
 import NodePalette from './NodePalette.vue';
 import CanvasToolbar from './CanvasToolbar.vue';
 import NodeInspector from './NodeInspector.vue';
 import NodeContextMenu from './NodeContextMenu.vue';
+import { Clipboard } from 'lucide-vue-next';
 import type { NodeType, CanvasNode } from '@/types/canvas.types';
 
 defineProps<{ initialYaml?: string }>();
 const emit = defineEmits<{ save: []; yamlChange: [yaml: string] }>();
 
+const route = useRoute();
+const ws = useWorkspace();
 const containerRef = ref<HTMLElement | null>(null);
 const minimapRef = ref<HTMLElement | null>(null);
 const canvasStore = useCanvasStore();
@@ -92,11 +118,36 @@ const { openArticle } = useHelp();
 
 const workflowName = ref('Untitled Workflow');
 const showMinimap = ref(true);
+const yamlContent = ref('');
+const yamlCopied = ref(false);
 
 const canvas = useCytoscapeCanvas(containerRef);
 const { syncYamlToCanvas } = useYamlCanvasSync(() => canvas.cy.value);
 
 const ctxMenu = ref({ visible: false, x: 0, y: 0, nodeId: '' });
+
+async function loadWorkflow() {
+  const workspaceId = (route.query.workspaceId as string) || ws.currentWorkspaceId.value;
+  const workflowId = route.params.id as string;
+  if (!workspaceId || !workflowId) return;
+  try {
+    const wf = await workflowService.get(workspaceId, workflowId);
+    if (wf.name) workflowName.value = wf.name;
+    if (wf.yamlContent) {
+      yamlContent.value = wf.yamlContent;
+      await nextTick();
+      syncYamlToCanvas(wf.yamlContent);
+    }
+  } catch {
+    // canvas stays empty if load fails
+  }
+}
+
+function copyYaml() {
+  navigator.clipboard.writeText(yamlContent.value);
+  yamlCopied.value = true;
+  setTimeout(() => { yamlCopied.value = false; }, 2000);
+}
 
 // Keyboard shortcuts
 function onKeydown(e: KeyboardEvent) {
@@ -155,13 +206,17 @@ function onContextMenu(e: MouseEvent) {
   ctxMenu.value = { visible: true, x: e.clientX, y: e.clientY, nodeId: selected };
 }
 
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('click', closeCtxMenu);
-  // Load YAML passed from NL generation via localStorage
+  // NL generation flow: localStorage YAML takes priority over saved API data
   const storedYaml = localStorage.getItem('fmz_canvas_yaml');
   if (storedYaml) {
     localStorage.removeItem('fmz_canvas_yaml');
-    setTimeout(() => syncYamlToCanvas(storedYaml), 200);
+    yamlContent.value = storedYaml;
+    await nextTick();
+    syncYamlToCanvas(storedYaml);
+  } else {
+    await loadWorkflow();
   }
   // Initialize minimap after canvas is ready
   setTimeout(() => {
