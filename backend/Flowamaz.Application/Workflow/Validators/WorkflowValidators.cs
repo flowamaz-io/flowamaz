@@ -10,7 +10,6 @@ public sealed class CreateWorkflowDefinitionRequestValidator : AbstractValidator
         RuleFor(x => x.Name).NotEmpty().MaximumLength(256).WithMessage("Enter a workflow name.");
         RuleFor(x => x.Slug).NotEmpty().MaximumLength(128)
             .Matches("^[a-z0-9-]+$").WithMessage("Workflow slug may contain only lowercase letters, numbers and hyphens.");
-        RuleFor(x => x.YamlContent).NotEmpty().WithMessage("Provide the workflow YAML.");
         RuleFor(x => x.CreatedByMethod).IsInEnum().WithMessage("Choose how this workflow was created.");
         RuleFor(x => x.SlaThresholdMs).GreaterThan(0)
             .When(x => x.SlaThresholdMs.HasValue)

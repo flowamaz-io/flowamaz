@@ -72,7 +72,7 @@ export const workflowService = {
   async validate(workspaceId: string, yamlContent: string): Promise<{ errors: Array<{ message: string; line?: number }>; warnings: Array<{ message: string; line?: number }> }> {
     const res = await http.post<ApiEnvelope<{ errors: Array<{ message: string; line?: number }>; warnings: Array<{ message: string; line?: number }> }>>(
       `${base(workspaceId)}/validate`,
-      { yaml_content: yamlContent },
+      { yamlContent },
     );
     return unwrap(res);
   },
