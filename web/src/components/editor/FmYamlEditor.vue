@@ -123,7 +123,7 @@ function initEditor() {
     EditorView.theme({
       '&': { height: '100%', fontSize: '13px' },
       '.cm-scroller': { overflow: 'auto', fontFamily: '"Fira Code", "JetBrains Mono", monospace' },
-      '.cm-field-tooltip': { background: '#1e1e2e', color: '#cdd6f4', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', maxWidth: '320px', lineHeight: '1.5' },
+      '.cm-field-tooltip': { background: '#ffffff', color: '#111827', border: '1px solid #e5e7eb', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', maxWidth: '320px', lineHeight: '1.5', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' },
     }),
   ];
   if (props.darkMode !== false) extensions.push(oneDark);

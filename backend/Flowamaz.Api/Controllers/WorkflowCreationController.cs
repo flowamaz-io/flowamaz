@@ -231,7 +231,16 @@ public sealed class WorkflowCreationController : ControllerBase
         _log.LogInformation("WorkflowCreationController.Copilot entry workspaceId={WorkspaceId} workflowId={Id}", workspaceId, id);
 
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "unknown";
-        var result = await _copilot.ProcessCommandAsync(request.Command, request.YamlContent, workspaceId, userId, cancellationToken);
+        CopilotResult result;
+        try
+        {
+            result = await _copilot.ProcessCommandAsync(request.Command, request.YamlContent, workspaceId, userId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "WorkflowCreationController.Copilot service error workspaceId={WorkspaceId}", workspaceId);
+            return StatusCode(503, new { error = $"Co-pilot is temporarily unavailable. {ex.Message} Please try again in a moment." });
+        }
 
         if (!result.Success)
         {

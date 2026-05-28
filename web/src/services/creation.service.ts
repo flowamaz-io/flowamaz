@@ -57,9 +57,9 @@ export interface GenerationDoneEvent {
 }
 
 export interface CopilotResponse {
-  matched_pattern: string | null;
-  yaml_patch: string | null;
-  cache_hit: boolean;
+  matchedPattern: string | null;
+  yamlPatch: string | null;
+  cacheHit: boolean;
 }
 
 export interface SopParseResult {
@@ -99,10 +99,10 @@ export const creationService = {
     command: string,
     yamlContent?: string,
   ): Promise<CopilotResponse> {
-    const { data } = await http.post<CopilotResponse>(
+    const res = await http.post<ApiEnvelope<CopilotResponse>>(
       `/api/v1/workspaces/${workspaceId}/workflows/${workflowId}/copilot`,
-      { command, yaml_content: yamlContent },
+      { command, yamlContent },
     );
-    return data;
+    return unwrap(res);
   },
 };

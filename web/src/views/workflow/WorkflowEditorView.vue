@@ -56,12 +56,18 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+async function enableEmpathy() {
+  if (isDirty.value) await save();
+  empathyMode.value = true;
+}
+
 // Co-pilot command flow
 async function onCopilotCommand(cmd: string) {
   if (cmd.startsWith('__apply__')) {
     applyPatch(cmd.slice(9));
     return;
   }
+  if (isDirty.value) await save();
   const { patch, pattern } = await sendCopilotCommand(cmd);
   copilotPanelRef.value?.setResult(patch, pattern);
 }
@@ -143,14 +149,14 @@ onUnmounted(() => {
         >✦ Co-pilot <kbd class="ml-1 text-neutral-400">⌘K</kbd></button>
 
         <!-- Mode toggle -->
-        <div class="flex rounded-lg overflow-hidden border border-neutral-600 shrink-0">
+        <div class="flex rounded-lg overflow-hidden border border-gray-300 shrink-0">
           <button
-            :class="['text-xs px-3 py-1.5 transition-colors', !empathyMode ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white']"
+            :class="['text-xs px-3 py-1.5 transition-colors', !empathyMode ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:text-gray-900']"
             @click="empathyMode = false"
           >Technical</button>
           <button
-            :class="['text-xs px-3 py-1.5 transition-colors', empathyMode ? 'bg-violet-600 text-white' : 'bg-neutral-800 text-neutral-400 hover:text-white']"
-            @click="empathyMode = true"
+            :class="['text-xs px-3 py-1.5 transition-colors', empathyMode ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:text-gray-900']"
+            @click="enableEmpathy"
           >Empathy</button>
         </div>
 
@@ -191,7 +197,7 @@ onUnmounted(() => {
             ref="yamlEditorRef"
             v-model="yaml"
             :diagnostics="validationErrors"
-            :dark-mode="true"
+            :dark-mode="false"
           />
         </div>
       </div>

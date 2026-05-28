@@ -61,7 +61,7 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
   async function sendCopilotCommand(command: string): Promise<{ patch: string | null; pattern: string | null }> {
     const result = await creationService.sendCopilotCommand(workspaceId, workflowId, command, yaml.value);
     addToHistory(command);
-    return { patch: result.yaml_patch, pattern: result.matched_pattern };
+    return { patch: result.yamlPatch, pattern: result.matchedPattern };
   }
 
   function applyPatch(patch: string) {
