@@ -203,6 +203,12 @@ if (backgroundWorkersEnabled)
         q.AddTrigger(t => t.ForJob(intelKey)
             .StartAt(DateBuilder.FutureDate(Random.Shared.Next(0, 300), IntervalUnit.Second))
             .WithSimpleSchedule(s => s.WithIntervalInHours(1).RepeatForever()));
+
+        // Batch result poller every 30 minutes — picks up F5 Process Intelligence batch results.
+        var batchPollerKey = new JobKey(nameof(BatchResultPollerJob));
+        q.AddJob<BatchResultPollerJob>(batchPollerKey);
+        q.AddTrigger(t => t.ForJob(batchPollerKey)
+            .WithSimpleSchedule(s => s.WithIntervalInMinutes(30).RepeatForever()));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 }

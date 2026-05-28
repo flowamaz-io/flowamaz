@@ -27,6 +27,7 @@ public class ProcessIntelligenceServiceSlaTests
     private readonly Mock<IAiCompletionService> _completion = new();
     private readonly Mock<IAiTokenMeteringService> _metering = new();
     private readonly Mock<ISemanticCacheService> _semanticCache = new();
+    private readonly Mock<IAiBatchStateService> _batchState = new();
 
     private readonly Guid _ws = Guid.NewGuid();
     private readonly Guid _def = Guid.NewGuid();
@@ -34,7 +35,7 @@ public class ProcessIntelligenceServiceSlaTests
     private ProcessIntelligenceService NewService() => new(
         _analytics.Object, _metrics.Object, _insights.Object, _definitions.Object, _unitOfWork.Object,
         _modelResolution.Object, _completion.Object, _metering.Object, _semanticCache.Object,
-        NullLogger<ProcessIntelligenceService>.Instance);
+        _batchState.Object, NullLogger<ProcessIntelligenceService>.Instance);
 
     private void SetupRun(long? slaThresholdMs, long completedDurationMs)
     {

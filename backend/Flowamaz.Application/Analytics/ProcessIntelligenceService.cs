@@ -29,6 +29,7 @@ public sealed class ProcessIntelligenceService
     private readonly IAiCompletionService _completion;
     private readonly IAiTokenMeteringService _metering;
     private readonly ISemanticCacheService _semanticCache;
+    private readonly IAiBatchStateService _batchState;
     private readonly ILogger<ProcessIntelligenceService> _logger;
 
     public ProcessIntelligenceService(
@@ -41,6 +42,7 @@ public sealed class ProcessIntelligenceService
         IAiCompletionService completion,
         IAiTokenMeteringService metering,
         ISemanticCacheService semanticCache,
+        IAiBatchStateService batchState,
         ILogger<ProcessIntelligenceService> logger)
     {
         _analytics = analytics;
@@ -52,6 +54,7 @@ public sealed class ProcessIntelligenceService
         _completion = completion;
         _metering = metering;
         _semanticCache = semanticCache;
+        _batchState = batchState;
         _logger = logger;
     }
 
@@ -124,28 +127,32 @@ public sealed class ProcessIntelligenceService
         var cacheKey = _semanticCache.ComputeKey(AiFunctionIds.ProcessIntel, workspaceId, payload);
         var cached = await _semanticCache.GetAsync(cacheKey, ct);
 
-        string aiJson;
         if (cached is not null)
         {
-            aiJson = cached;
-        }
-        else
-        {
-            const string systemPrompt =
-                "You are a workflow analytics assistant. Given workflow metrics, identify actionable insights. " +
-                "Return JSON only: [{\"type\":\"Bottleneck|AnomalyDetected|CompletionForecast|PatternChange\",\"severity\":\"Info|Warning|Critical\",\"message\":\"...\",\"data\":{}}]";
-            var config = await _modelResolution.ResolveModelConfigAsync(AiFunctionIds.ProcessIntel, workspaceId, ct);
-            var result = await _completion.CompleteAsync(config, systemPrompt, payload, ct);
-            aiJson = result.Text;
-            _metering.RecordUsage(AiFunctionIds.ProcessIntel, config.ModelId, config.Provider,
-                orgId: null, workspaceId: workspaceId, result.TokensInput, result.TokensOutput, costUsd: 0m);
-            await _semanticCache.SetAsync(cacheKey, aiJson, InsightCacheTtl, ct);
+            // Cache hit — process insights immediately (no AI cost)
+            foreach (var insight in ParseAiInsights(cached, workspaceId, definitionId))
+                await _insights.ReplaceUnacknowledgedAsync(insight, ct);
+            return;
         }
 
-        foreach (var insight in ParseAiInsights(aiJson, workspaceId, definitionId))
-        {
-            await _insights.ReplaceUnacknowledgedAsync(insight, ct);
-        }
+        // FIX 2: Submit to Anthropic Batch API for 50% cost saving — results processed by BatchResultPollerJob
+        const string systemPrompt =
+            "You are a workflow analytics assistant. Given workflow metrics, identify actionable insights. " +
+            "Return JSON only: [{\"type\":\"Bottleneck|AnomalyDetected|CompletionForecast|PatternChange\",\"severity\":\"Info|Warning|Critical\",\"message\":\"...\",\"data\":{}}]";
+        var config = await _modelResolution.ResolveModelConfigAsync(AiFunctionIds.ProcessIntel, workspaceId, ct);
+        var batchId = await _completion.SubmitBatchAsync(config, systemPrompt, payload, ct);
+
+        await _batchState.StoreAsync(new BatchPendingEntry(
+            BatchId: batchId,
+            WorkspaceId: workspaceId,
+            WorkflowDefinitionId: definitionId,
+            CacheKey: cacheKey,
+            ModelId: config.ModelId,
+            Provider: config.Provider), ct);
+
+        _logger.LogInformation(
+            "ProcessIntelligenceService.GenerateAiInsightsAsync batch submitted batchId={BatchId} workspace={WorkspaceId} workflow={WorkflowId}",
+            batchId, workspaceId, definitionId);
     }
 
     /// <summary>

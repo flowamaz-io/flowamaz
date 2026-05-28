@@ -1,4 +1,7 @@
+using FluentValidation;
+using FluentValidation.Results;
 using Flowamaz.Core.Constants;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
@@ -13,6 +16,7 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
     private readonly ISemanticCacheService _cache;
     private readonly IAiTokenMeteringService _metering;
     private readonly IWorkflowValidator _validator;
+    private readonly IAiBudgetService _budget;
     private readonly ILogger<NlYamlGenerationService> _log;
 
     private const string SystemPrompt = """
@@ -217,6 +221,7 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         ISemanticCacheService cache,
         IAiTokenMeteringService metering,
         IWorkflowValidator validator,
+        IAiBudgetService budget,
         ILogger<NlYamlGenerationService> log)
     {
         _ai = ai;
@@ -224,6 +229,7 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         _cache = cache;
         _metering = metering;
         _validator = validator;
+        _budget = budget;
         _log = log;
     }
 
@@ -231,6 +237,11 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
     {
         _log.LogInformation("NlYamlGenerationService.GenerateAsync entry workspaceId={WorkspaceId} workflow={Name}", workspaceId, request.WorkflowName);
 
+        // FIX 4: Pre-screen input — zero AI cost for invalid inputs
+        ValidateInput(request);
+        var estimatedNodes = request.StepsDescription.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length + 2;
+
+        // FIX 1: Cache check with per-field normalised key — identical requests from any user return cached result
         var cacheKey = _cache.ComputeKey(AiFunctionIds.NlYaml, workspaceId, BuildCacheInput(request));
         var cached = await _cache.GetAsync(cacheKey, cancellationToken);
         if (cached is not null)
@@ -240,11 +251,25 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
             return new GenerationResult(cached, cachedValidation, 0, Cached: true);
         }
 
+        // FIX 5: Budget check — only gate actual AI calls, not cache hits
+        if (!await _budget.IsBudgetAvailableAsync(workspaceId, cancellationToken))
+            throw new PlanLimitException("workflow generation");
+
+        // FIX 3: Complexity routing — simple workflows use Haiku (~80% cheaper), complex use Sonnet
         var modelConfig = await _models.ResolveModelConfigAsync(AiFunctionIds.NlYaml, workspaceId, cancellationToken);
+        var complexity = ComplexityScore(request);
+        if (complexity <= 5)
+            modelConfig = modelConfig with { ModelId = "claude-haiku-4-5" };
+
+        // FIX 6: Cap output tokens based on estimated workflow size (nodes * 200, max 4096)
+        var maxTokens = Math.Min(4096, estimatedNodes * 200);
+
         var userPrompt = BuildUserPrompt(request);
 
-        _log.LogInformation("NlYamlGenerationService.GenerateAsync calling AI model={ModelId}", modelConfig.ModelId);
-        var result = await _ai.CompleteAsync(modelConfig, SystemPrompt, userPrompt, cancellationToken);
+        _log.LogInformation("NlYamlGenerationService.GenerateAsync calling AI model={ModelId} complexity={Complexity} maxTokens={MaxTokens}",
+            modelConfig.ModelId, complexity, maxTokens);
+
+        var result = await _ai.CompleteAsync(modelConfig, SystemPrompt, userPrompt, cancellationToken, maxTokens);
 
         var yaml = ExtractYaml(result.Text);
         var validation = await _validator.ValidateAsync(yaml, workspaceId, cancellationToken);
@@ -254,7 +279,7 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         {
             _log.LogWarning("NlYamlGenerationService.GenerateAsync validation_failed errors={Count} attempting self-correction", validation.Errors.Count);
             var correctionPrompt = BuildCorrectionPrompt(userPrompt, yaml, validation);
-            var corrected = await _ai.CompleteAsync(modelConfig, SystemPrompt, correctionPrompt, cancellationToken);
+            var corrected = await _ai.CompleteAsync(modelConfig, SystemPrompt, correctionPrompt, cancellationToken, maxTokens);
             var correctedYaml = ExtractYaml(corrected.Text);
             var correctedValidation = await _validator.ValidateAsync(correctedYaml, workspaceId, cancellationToken);
 
@@ -280,8 +305,44 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         return new GenerationResult(yaml, validation, tokens, Cached: false);
     }
 
-    private static string BuildCacheInput(NlWorkflowRequest r) =>
-        $"{r.WorkflowName}|{r.Purpose}|{r.TriggerDescription}|{r.StepsDescription}|{r.RulesAndConstraints}|{r.SystemsAndAi}|{r.ExistingContext}";
+    // FIX 4: Inline input pre-screening — throws ValidationException for actionable errors (zero AI cost for bad input)
+    private static void ValidateInput(NlWorkflowRequest request)
+    {
+        var failures = new List<ValidationFailure>();
+
+        if (request.WorkflowName.Trim().Length < 3)
+            failures.Add(new ValidationFailure(nameof(request.WorkflowName),
+                "Workflow name is too short. Enter a meaningful name (at least 3 characters)."));
+
+        if (request.StepsDescription.Trim().Length < 30)
+            failures.Add(new ValidationFailure(nameof(request.StepsDescription),
+                "Steps description is too brief. Please describe at least 2-3 process steps in detail."));
+
+        var estimatedNodes = request.StepsDescription.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length + 2;
+        if (estimatedNodes > 25)
+            failures.Add(new ValidationFailure(nameof(request.StepsDescription),
+                "This workflow is very complex. Consider breaking it into smaller sub-workflows for better maintainability."));
+
+        if (failures.Count > 0)
+            throw new ValidationException(failures);
+    }
+
+    // FIX 3: Score determines model: ≤5 → Haiku (simple, cheap), >5 → Sonnet (complex, quality)
+    public static int ComplexityScore(NlWorkflowRequest request)
+    {
+        var score = request.StepsDescription.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+        if (request.StepsDescription.Contains("if", StringComparison.OrdinalIgnoreCase)) score += 2;
+        if (request.StepsDescription.Contains("approval", StringComparison.OrdinalIgnoreCase)) score += 2;
+        if (request.StepsDescription.Contains("parallel", StringComparison.OrdinalIgnoreCase)) score += 3;
+        return score;
+    }
+
+    // FIX 1: Per-field normalisation so "My Workflow" and "my workflow  " hash to the same cache key
+    private static string BuildCacheInput(NlWorkflowRequest r)
+    {
+        static string N(string? s) => (s ?? string.Empty).Trim().ToLowerInvariant();
+        return $"{N(r.WorkflowName)}|{N(r.Purpose)}|{N(r.TriggerDescription)}|{N(r.StepsDescription)}|{N(r.RulesAndConstraints)}|{N(r.SystemsAndAi)}|{N(r.ExistingContext)}";
+    }
 
     private static string BuildUserPrompt(NlWorkflowRequest r)
     {

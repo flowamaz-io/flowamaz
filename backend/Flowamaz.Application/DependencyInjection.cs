@@ -67,8 +67,9 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowInterpreterService, WorkflowInterpreterService>();
         services.AddScoped<IStepDebuggerService, StepDebuggerService>();
 
-        // Process Intelligence + Workflow Weather (prompt 02-07).
+        // Process Intelligence + Workflow Weather (prompt 02-07). Batch processor polls F5 results.
         services.AddScoped<ProcessIntelligenceService>();
+        services.AddScoped<BatchInsightProcessorService>();
         services.AddScoped<WorkflowWeatherService>();
         services.AddScoped<InsightService>();
 

@@ -98,8 +98,8 @@ public class AiNodeWorkerTests
 
         string? capturedPrompt = null;
         _completion.Setup(c => c.CompleteAsync(
-                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<ModelConfig, string, string, CancellationToken>((_, _, prompt, _) =>
+                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<int>()))
+            .Returns<ModelConfig, string, string, CancellationToken, int>((_, _, prompt, _, _) =>
             {
                 capturedPrompt = prompt;
                 return Task.FromResult(new AiCompletionResult("done", 10, 5));
@@ -138,8 +138,8 @@ public class AiNodeWorkerTests
 
         var callCount = 0;
         _completion.Setup(c => c.CompleteAsync(
-                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<ModelConfig, string, string, CancellationToken>((_, _, _, _) =>
+                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<int>()))
+            .Returns<ModelConfig, string, string, CancellationToken, int>((_, _, _, _, _) =>
             {
                 callCount++;
                 if (callCount == 1) throw new HttpRequestException("Primary model unavailable");
@@ -166,8 +166,8 @@ public class AiNodeWorkerTests
 
         var callCount = 0;
         _completion.Setup(c => c.CompleteAsync(
-                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<ModelConfig, string, string, CancellationToken>((_, _, _, _) =>
+                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<int>()))
+            .Returns<ModelConfig, string, string, CancellationToken, int>((_, _, _, _, _) =>
             {
                 callCount++;
                 return Task.FromResult(callCount == 1
@@ -197,8 +197,8 @@ public class AiNodeWorkerTests
 
         // Both attempts return invalid JSON (missing required "name" field).
         _completion.Setup(c => c.CompleteAsync(
-                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<ModelConfig, string, string, CancellationToken>((_, _, _, _) =>
+                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<int>()))
+            .Returns<ModelConfig, string, string, CancellationToken, int>((_, _, _, _, _) =>
                 Task.FromResult(new AiCompletionResult("""{"wrong_field":1}""", 10, 5)));
 
         var schemaJson = """{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}""";

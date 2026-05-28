@@ -51,8 +51,8 @@ public class WorkflowInterpreterServiceTests
         _modelResolution.Setup(r => r.ResolveModelConfigAsync(AiFunctionIds.ProcessIntel, _ws, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ModelConfig("claude-haiku-4-5", "anthropic", AiKeySource.Platform, "key", false, 200_000, true, true));
         // Echo the prompt so the asserted facts flow through to the narrative.
-        _completion.Setup(c => c.CompleteAsync(It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<ModelConfig, string, string, CancellationToken>((_, _, user, _) => Task.FromResult(new AiCompletionResult(user, 12, 8)));
+        _completion.Setup(c => c.CompleteAsync(It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<int>()))
+            .Returns<ModelConfig, string, string, CancellationToken, int>((_, _, user, _, _) => Task.FromResult(new AiCompletionResult(user, 12, 8)));
 
         var narrative = await NewService().GenerateNarrativeAsync(_ws, _instanceId, NarrativeAudience.Ceo);
 

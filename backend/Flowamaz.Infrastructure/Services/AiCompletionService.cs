@@ -22,8 +22,9 @@ public sealed class AiCompletionService : IAiCompletionService
     public const string HttpClientName = "anthropic";
 
     private const string MessagesUrl = "https://api.anthropic.com/v1/messages";
+    private const string BatchesUrl = "https://api.anthropic.com/v1/messages/batches";
     private const string AnthropicVersion = "2023-06-01";
-    private const int MaxTokens = 1024;
+    private const int DefaultMaxTokens = 1024;
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AiOptions _options;
@@ -37,9 +38,11 @@ public sealed class AiCompletionService : IAiCompletionService
     }
 
     public async Task<AiCompletionResult> CompleteAsync(
-        ModelConfig config, string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
+        ModelConfig config, string systemPrompt, string userPrompt,
+        CancellationToken cancellationToken = default, int maxTokens = DefaultMaxTokens)
     {
-        _logger.LogDebug("AiCompletionService.CompleteAsync enter model={ModelId} provider={Provider}", config.ModelId, config.Provider);
+        _logger.LogDebug("AiCompletionService.CompleteAsync enter model={ModelId} provider={Provider} maxTokens={MaxTokens}",
+            config.ModelId, config.Provider, maxTokens);
 
         if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
         {
@@ -51,7 +54,7 @@ public sealed class AiCompletionService : IAiCompletionService
 
         try
         {
-            var result = await CallAnthropicAsync(config, systemPrompt, userPrompt, cancellationToken);
+            var result = await CallAnthropicAsync(config, systemPrompt, userPrompt, maxTokens, cancellationToken);
             _logger.LogDebug(
                 "AiCompletionService.CompleteAsync exit tokensIn={In} tokensOut={Out}", result.TokensInput, result.TokensOutput);
             return result;
@@ -64,7 +67,7 @@ public sealed class AiCompletionService : IAiCompletionService
     }
 
     private async Task<AiCompletionResult> CallAnthropicAsync(
-        ModelConfig config, string systemPrompt, string userPrompt, CancellationToken ct)
+        ModelConfig config, string systemPrompt, string userPrompt, int maxTokens, CancellationToken ct)
     {
         var client = _httpClientFactory.CreateClient(HttpClientName);
         using var request = new HttpRequestMessage(HttpMethod.Post, MessagesUrl);
@@ -73,7 +76,7 @@ public sealed class AiCompletionService : IAiCompletionService
         request.Content = JsonContent.Create(new
         {
             model = config.ModelId,
-            max_tokens = MaxTokens,
+            max_tokens = maxTokens,
             system = systemPrompt,
             messages = new[] { new { role = "user", content = userPrompt } },
         });
@@ -150,7 +153,7 @@ public sealed class AiCompletionService : IAiCompletionService
         request.Content = JsonContent.Create(new
         {
             model = config.ModelId,
-            max_tokens = MaxTokens,
+            max_tokens = DefaultMaxTokens,
             system = systemPrompt,
             messages = new[]
             {
@@ -172,6 +175,117 @@ public sealed class AiCompletionService : IAiCompletionService
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
         return ParseResponse(doc.RootElement);
+    }
+
+    public async Task<string> SubmitBatchAsync(
+        ModelConfig config, string systemPrompt, string userPrompt,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("AiCompletionService.SubmitBatchAsync enter model={ModelId}", config.ModelId);
+
+        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        {
+            var stubId = $"stub-batch-{Guid.NewGuid():N}";
+            _logger.LogWarning("AiCompletionService.SubmitBatchAsync: stub mode → {BatchId}", stubId);
+            return stubId;
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient(HttpClientName);
+            using var request = new HttpRequestMessage(HttpMethod.Post, BatchesUrl);
+            request.Headers.TryAddWithoutValidation("x-api-key", config.ApiKey);
+            request.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
+            request.Content = JsonContent.Create(new
+            {
+                requests = new[]
+                {
+                    new
+                    {
+                        custom_id = "insight",
+                        @params = new
+                        {
+                            model = config.ModelId,
+                            max_tokens = DefaultMaxTokens,
+                            system = systemPrompt,
+                            messages = new[] { new { role = "user", content = userPrompt } },
+                        },
+                    },
+                },
+            });
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var batchId = doc.RootElement.GetProperty("id").GetString()!;
+            _logger.LogInformation("AiCompletionService.SubmitBatchAsync exit batchId={BatchId}", batchId);
+            return batchId;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "AiCompletionService.SubmitBatchAsync error model={ModelId}", config.ModelId);
+            throw;
+        }
+    }
+
+    public async Task<AiCompletionResult?> PollBatchResultAsync(
+        string batchId, ModelConfig config, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("AiCompletionService.PollBatchResultAsync enter batchId={BatchId}", batchId);
+
+        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        {
+            _logger.LogDebug("AiCompletionService.PollBatchResultAsync: stub mode — returning immediate result");
+            return StubResult("batch-system", batchId);
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient(HttpClientName);
+
+            // Check processing status
+            using var statusRequest = new HttpRequestMessage(HttpMethod.Get, $"{BatchesUrl}/{batchId}");
+            statusRequest.Headers.TryAddWithoutValidation("x-api-key", config.ApiKey);
+            statusRequest.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
+            using var statusResponse = await client.SendAsync(statusRequest, cancellationToken);
+            statusResponse.EnsureSuccessStatusCode();
+
+            await using var statusStream = await statusResponse.Content.ReadAsStreamAsync(cancellationToken);
+            using var statusDoc = await JsonDocument.ParseAsync(statusStream, cancellationToken: cancellationToken);
+            var status = statusDoc.RootElement.GetProperty("processing_status").GetString();
+            if (status != "ended")
+            {
+                _logger.LogDebug("AiCompletionService.PollBatchResultAsync batchId={BatchId} still {Status}", batchId, status);
+                return null;
+            }
+
+            // Retrieve JSONL results
+            using var resultsRequest = new HttpRequestMessage(HttpMethod.Get, $"{BatchesUrl}/{batchId}/results");
+            resultsRequest.Headers.TryAddWithoutValidation("x-api-key", config.ApiKey);
+            resultsRequest.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
+            using var resultsResponse = await client.SendAsync(resultsRequest, cancellationToken);
+            resultsResponse.EnsureSuccessStatusCode();
+
+            var jsonl = await resultsResponse.Content.ReadAsStringAsync(cancellationToken);
+            var firstLine = jsonl.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (firstLine is null) return null;
+
+            using var lineDoc = JsonDocument.Parse(firstLine);
+            var result = lineDoc.RootElement.GetProperty("result");
+            if (result.GetProperty("type").GetString() != "succeeded") return null;
+
+            var parsed = ParseResponse(result.GetProperty("message"));
+            _logger.LogInformation("AiCompletionService.PollBatchResultAsync exit batchId={BatchId} tokensIn={In} tokensOut={Out}",
+                batchId, parsed.TokensInput, parsed.TokensOutput);
+            return parsed;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "AiCompletionService.PollBatchResultAsync error batchId={BatchId}", batchId);
+            throw;
+        }
     }
 
     // Deterministic local completion: lead sentence + the supplied facts so instance-specific values

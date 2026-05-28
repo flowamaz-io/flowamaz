@@ -101,9 +101,7 @@ public static class DependencyInjection
             services.AddHostedService<OrchestratorWorker>();
         }
 
-        // Interpreter AI completion + step-debugger state store (prompt 02-05).
-        services.AddHttpClient(AiCompletionService.HttpClientName);
-        services.AddSingleton<IAiCompletionService, AiCompletionService>();
+        // Interpreter step-debugger state store (prompt 02-05). AI completion registered in AddAiServices.
         services.AddSingleton<IDebugStateStore, RedisDebugStateStore>();
     }
 
@@ -129,6 +127,9 @@ public static class DependencyInjection
         services.AddSingleton<IRateLimitService, RateLimitService>();
         services.AddSingleton<ISemanticCacheService, SemanticCacheService>();
         services.AddSingleton<IAiTokenMeteringService, AiTokenMeteringService>();
+        services.AddSingleton<IAiBatchStateService, RedisBatchStateService>();
+        services.AddHttpClient(AiCompletionService.HttpClientName);
+        services.AddSingleton<IAiCompletionService, AiCompletionService>();
     }
 
     private static void AddAuthServices(IServiceCollection services)
