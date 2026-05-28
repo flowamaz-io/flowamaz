@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { creationService } from '../../services/creation.service';
-import type { SopParseResult } from '../../services/creation.service';
+import { useRouter } from 'vue-router';
+import { createWorkflow } from '@/services/creation.service';
 
-const props = defineProps<{ workspaceId: string }>();
-const emit = defineEmits<{ parsed: [result: SopParseResult] }>();
+const props = defineProps<{ workspaceId: string; workflowName: string }>();
 
+const router = useRouter();
 const dragging = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
-const result = ref<SopParseResult | null>(null);
 
 const ALLOWED_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
 const MAX_BYTES = 20 * 1024 * 1024;
+
+let lastFile: File | null = null;
 
 function onDragOver(e: DragEvent) {
   e.preventDefault();
@@ -32,27 +33,45 @@ function onFileInput(e: Event) {
   if (file) handleFile(file);
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 async function handleFile(file: File) {
   error.value = null;
   if (!ALLOWED_TYPES.includes(file.type)) {
-    error.value = `Unsupported file type. Upload a PDF, DOCX, or TXT file.`;
+    error.value = 'Unsupported file type. Upload a PDF, DOCX, or TXT file.';
     return;
   }
   if (file.size > MAX_BYTES) {
     error.value = `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is 20MB.`;
     return;
   }
+  lastFile = file;
   loading.value = true;
+
   try {
-    result.value = await creationService.parseDocument(props.workspaceId, file);
-    emit('parsed', result.value);
+    const documentBase64 = await fileToBase64(file);
+    const result = await createWorkflow(props.workspaceId, {
+      name: props.workflowName || 'Untitled Workflow',
+      method: 'document',
+      documentBase64,
+      documentMimeType: file.type,
+    });
+    await router.push({ name: 'workflow-editor', params: { id: result.workflowId } });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     error.value = `Document parsing failed. ${msg}. Try re-uploading or use a different file.`;
-  } finally {
     loading.value = false;
   }
 }
+
+defineExpose({ retrigger: () => { if (lastFile) handleFile(lastFile); } });
 </script>
 
 <template>
@@ -71,19 +90,12 @@ async function handleFile(file: File) {
       <p v-if="!loading" class="text-sm text-neutral-500">
         Drag a <strong>PDF</strong>, <strong>DOCX</strong>, or <strong>TXT</strong> file here,<br />or click to browse — up to 20MB
       </p>
-      <p v-else class="text-sm text-violet-600 animate-pulse">Parsing document…</p>
+      <div v-else class="space-y-2">
+        <div class="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto" />
+        <p class="text-sm text-violet-600">Parsing document... (20–30 seconds)</p>
+      </div>
     </div>
 
     <p v-if="error" class="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{{ error }}</p>
-
-    <div v-if="result" class="bg-neutral-50 rounded-xl p-4 space-y-2">
-      <p class="text-sm font-medium text-neutral-700">
-        Parsed {{ result.page_count }} page(s) · {{ result.word_count.toLocaleString() }} words · {{ result.tokens_used.toLocaleString() }} tokens
-      </p>
-      <p class="text-xs text-neutral-500 font-medium uppercase tracking-wide">Extracted Steps</p>
-      <ol class="list-decimal list-inside space-y-1">
-        <li v-for="(step, i) in result.extracted_steps" :key="i" class="text-sm text-neutral-700">{{ step }}</li>
-      </ol>
-    </div>
   </div>
 </template>

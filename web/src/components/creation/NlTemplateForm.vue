@@ -80,13 +80,13 @@
     </div>
 
     <!-- Error -->
-    <div v-if="error" class="p-3 bg-red-950 border border-red-700 rounded text-sm text-red-400">
+    <div v-if="error" class="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
       {{ error }}
     </div>
 
     <!-- Progress while generating -->
     <div v-if="generating" class="p-3 bg-gray-50 border border-gray-200 rounded text-sm text-teal-600">
-      Generating workflow — this takes 5–15 seconds...
+      Generating your workflow with AI... (10–15 seconds)
     </div>
 
     <!-- Actions -->
@@ -105,10 +105,12 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { creationService, type NlWorkflowRequest } from '@/services/creation.service';
+import { useRouter } from 'vue-router';
+import { createWorkflow, type NlWorkflowRequest } from '@/services/creation.service';
 
 const props = defineProps<{ workspaceId: string }>();
-const emit = defineEmits<{ generated: [yaml: string, name: string]; close: [] }>();
+
+const router = useRouter();
 
 const form = ref<NlWorkflowRequest>({
   workflowName: '',
@@ -135,16 +137,17 @@ async function submit() {
   error.value = null;
 
   try {
-    const result = await creationService.generateWorkflow(props.workspaceId, form.value);
-    emit('generated', result.yaml_content, form.value.workflowName);
+    const result = await createWorkflow(props.workspaceId, {
+      name: form.value.workflowName,
+      method: 'nl',
+      nlRequest: form.value,
+    });
+    await router.push({ name: 'workflow-editor', params: { id: result.workflowId } });
   } catch (e) {
     error.value = (e as Error).message ?? 'Generation failed. Please try again.';
-  } finally {
     generating.value = false;
   }
 }
-
-// Inline FormField component declared locally to keep file self-contained
 </script>
 
 <!-- FormField is a local sub-component rendered via dynamic component -->

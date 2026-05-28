@@ -1,20 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
 import CreationMethodSelector from '../../components/creation/CreationMethodSelector.vue';
 import NlTemplateForm from '../../components/creation/NlTemplateForm.vue';
-import SfgCanvas from '../../components/canvas/SfgCanvas.vue';
 import VoiceInputButton from '../../components/creation/VoiceInputButton.vue';
 import VisualInputPanel from '../../components/creation/VisualInputPanel.vue';
 import ConversationImportPanel from '../../components/creation/ConversationImportPanel.vue';
 import DocumentUploadPanel from '../../components/creation/DocumentUploadPanel.vue';
 import CloneSuggestion from '../../components/workflow/CloneSuggestion.vue';
-import YamlResultPanel from '../../components/creation/YamlResultPanel.vue';
 import { workflowService } from '../../services/workflow.service';
+import { createWorkflow } from '../../services/creation.service';
 import { useWorkspace } from '../../composables/useWorkspace';
-import type { SopParseResult } from '../../services/creation.service';
-import type { WorkflowCreatedByMethod } from '@/types';
 
 const route = useRoute();
 const router = useRouter();
@@ -27,11 +24,6 @@ const error = ref<string | null>(null);
 const workflowName = ref('');
 const cloneSuggestion = ref<{ id: string; name: string; similarityScore: number } | null>(null);
 const cloneDismissed = ref(false);
-
-const panelOpen = ref(false);
-const panelYaml = ref('');
-const panelName = ref('');
-const panelMethod = ref<WorkflowCreatedByMethod>('NaturalLanguage');
 
 const checkCloneSuggestion = useDebounceFn(async (name: string) => {
   if (cloneDismissed.value || name.length < 3 || !workspaceId.value) { cloneSuggestion.value = null; return; }
@@ -50,65 +42,23 @@ async function cloneWorkflow() {
   }
 }
 
-function onNlGenerated(yaml: string, name: string) {
-  panelYaml.value = yaml;
-  panelName.value = name;
-  panelMethod.value = 'NaturalLanguage';
-  panelOpen.value = true;
-  error.value = null;
-}
-
-function onYamlGenerated(yaml: string) {
-  panelYaml.value = yaml;
-  panelName.value = workflowName.value;
-  panelOpen.value = true;
-  error.value = null;
-}
-
-function onDocumentParsed(result: SopParseResult) {
-  panelYaml.value = result.yaml_content;
-  panelName.value = workflowName.value;
-  panelMethod.value = 'Document';
-  panelOpen.value = true;
-  error.value = null;
-}
-
-function onConversationYaml(yaml: string) {
-  panelYaml.value = yaml;
-  panelName.value = workflowName.value;
-  panelMethod.value = 'Conversation';
-  panelOpen.value = true;
-  error.value = null;
-}
-
-function openInCanvas(yaml: string) {
-  localStorage.setItem('fmz_canvas_yaml', yaml);
-  panelOpen.value = false;
-  selectedMethod.value = 'canvas';
-}
-
-async function saveAsDraft(name: string, yaml: string) {
-  if (!workspaceId.value) return;
-  const slug = (name || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
+// Canvas: create blank workflow immediately on method selection
+watch(selectedMethod, async (method) => {
+  if (method !== 'canvas' || !workspaceId.value) return;
   loading.value = true;
-  panelOpen.value = false;
+  error.value = null;
   try {
-    const created = await workflowService.create(workspaceId.value, {
-      name: name || 'Untitled Workflow',
-      slug,
-      yamlContent: yaml,
-      createdByMethod: panelMethod.value,
+    const result = await createWorkflow(workspaceId.value, {
+      name: workflowName.value || 'Untitled Workflow',
+      method: 'canvas',
     });
-    await router.push({ name: 'workflow-editor', params: { id: created.id } });
+    await router.push({ name: 'workflow-editor', params: { id: result.workflowId } });
   } catch (e: unknown) {
-    error.value = `Save failed. ${e instanceof Error ? e.message : 'Please try again.'}`;
-    panelOpen.value = true;
-  } finally {
+    error.value = `Failed to create canvas workflow. ${e instanceof Error ? e.message : 'Please try again.'}`;
+    selectedMethod.value = null;
     loading.value = false;
   }
-}
-
-const isCanvasMode = computed(() => selectedMethod.value === 'canvas');
+});
 
 onMounted(() => {
   const method = route.query.method as string | undefined;
@@ -117,9 +67,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div :class="isCanvasMode ? 'flex flex-col h-full' : 'max-w-4xl mx-auto px-4 py-8 space-y-8'">
-    <!-- Header — hidden in canvas mode -->
-    <div v-if="!isCanvasMode">
+  <div class="max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <!-- Header -->
+    <div>
       <h1 class="text-2xl font-bold text-neutral-900">Create a new workflow</h1>
       <p class="text-neutral-500 mt-1">Choose how you'd like to define your process.</p>
     </div>
@@ -137,7 +87,6 @@ onMounted(() => {
     <template v-else>
       <!-- Method selector -->
       <section v-if="!selectedMethod" class="space-y-4">
-        <!-- Workflow name + clone suggestion -->
         <div class="space-y-2">
           <label class="text-sm font-medium text-neutral-700">Workflow name</label>
           <input
@@ -159,9 +108,8 @@ onMounted(() => {
       </section>
 
       <!-- Active creation method -->
-      <section :class="isCanvasMode ? 'flex flex-col flex-1 overflow-hidden' : 'space-y-6'" v-else>
+      <section v-else class="space-y-6">
         <button
-          v-if="!isCanvasMode"
           class="text-sm text-neutral-500 hover:text-violet-600 flex items-center gap-1"
           @click="selectedMethod = null"
         >
@@ -171,7 +119,6 @@ onMounted(() => {
         <NlTemplateForm
           v-if="selectedMethod === 'nl'"
           :workspace-id="workspaceId ?? ''"
-          @generated="onNlGenerated"
         />
 
         <div v-else-if="selectedMethod === 'voice'" class="space-y-4">
@@ -182,35 +129,21 @@ onMounted(() => {
         <VisualInputPanel
           v-else-if="selectedMethod === 'visual'"
           :workspace-id="workspaceId ?? ''"
-          @generated="onYamlGenerated"
+          :workflow-name="workflowName"
         />
 
         <ConversationImportPanel
           v-else-if="selectedMethod === 'conversation'"
           :workspace-id="workspaceId ?? ''"
-          @generated="onConversationYaml"
+          :workflow-name="workflowName"
         />
 
         <DocumentUploadPanel
           v-else-if="selectedMethod === 'document'"
           :workspace-id="workspaceId ?? ''"
-          @parsed="onDocumentParsed"
+          :workflow-name="workflowName"
         />
-
-        <div v-else-if="selectedMethod === 'canvas'" class="flex-1 overflow-hidden">
-          <SfgCanvas @yaml-change="panelYaml = $event" />
-        </div>
       </section>
     </template>
   </div>
-
-  <!-- YAML result slide-in panel -->
-  <YamlResultPanel
-    :is-open="panelOpen"
-    :yaml-content="panelYaml"
-    :workflow-name="panelName"
-    @close="panelOpen = false"
-    @open-in-canvas="openInCanvas"
-    @save-as-draft="saveAsDraft"
-  />
 </template>

@@ -43,68 +43,31 @@
       {{ error }}
     </div>
 
-    <!-- Extracted process preview -->
-    <div v-if="extractedProcess && !importing" class="p-4 bg-gray-800 border border-gray-700 rounded space-y-3">
-      <div class="text-sm font-medium text-indigo-300">Extracted Process</div>
-      <p class="text-sm text-gray-300">{{ extractedProcess.summary }}</p>
-
-      <div v-if="extractedProcess.approvers?.length" class="space-y-1">
-        <div class="text-xs text-gray-500 font-medium">Approvers</div>
-        <div class="flex flex-wrap gap-1">
-          <span v-for="a in extractedProcess.approvers" :key="a" class="text-xs px-2 py-0.5 bg-gray-700 text-gray-300 rounded">{{ a }}</span>
-        </div>
-      </div>
-
-      <div v-if="extractedProcess.systems?.length" class="space-y-1">
-        <div class="text-xs text-gray-500 font-medium">Systems</div>
-        <div class="flex flex-wrap gap-1">
-          <span v-for="s in extractedProcess.systems" :key="s" class="text-xs px-2 py-0.5 bg-indigo-950 text-indigo-300 rounded">{{ s }}</span>
-        </div>
-      </div>
-
-      <div class="flex gap-3 pt-2">
-        <button
-          class="flex-1 py-2 px-4 rounded bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white transition-colors"
-          @click="applyToCanvas"
-        >
-          Apply to Canvas
-        </button>
-        <button
-          class="py-2 px-4 rounded bg-gray-700 hover:bg-gray-600 text-sm text-gray-300 transition-colors"
-          @click="reset"
-        >
-          Edit
-        </button>
-      </div>
+    <!-- Loading -->
+    <div v-if="importing" class="p-3 bg-gray-800 border border-gray-700 rounded text-sm text-indigo-400">
+      Extracting process from conversation... (10–15 seconds)
     </div>
 
     <!-- Submit button -->
     <button
-      v-if="!extractedProcess"
-      :disabled="!text.trim() || importing"
+      v-if="!importing"
+      :disabled="!text.trim()"
       class="w-full py-2 px-4 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
       @click="submit"
     >
-      <span v-if="importing">Extracting workflow...</span>
-      <span v-else>Extract Workflow</span>
+      Extract Workflow
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import axios from 'axios';
+import { useRouter } from 'vue-router';
+import { createWorkflow } from '@/services/creation.service';
 
-interface ExtractedProcess {
-  summary: string;
-  steps: string[];
-  approvers: string[];
-  systems: string[];
-  generatedRequest: Record<string, string>;
-}
+const props = defineProps<{ workspaceId: string; workflowName: string }>();
 
-const props = defineProps<{ workspaceId: string }>();
-const emit = defineEmits<{ generated: [yaml: string]; close: [] }>();
+const router = useRouter();
 
 const sources = [
   { value: 'slack', label: 'Slack' },
@@ -117,36 +80,26 @@ const sourceType = ref('generic');
 const text = ref('');
 const importing = ref(false);
 const error = ref<string | null>(null);
-const extractedProcess = ref<ExtractedProcess | null>(null);
-let yamlContent = '';
 
 async function submit() {
   if (!text.value.trim()) return;
   importing.value = true;
   error.value = null;
-  extractedProcess.value = null;
 
   try {
-    const { data } = await axios.post(`/api/v1/workspaces/${props.workspaceId}/workflows/from-conversation`, {
-      text: text.value,
-      source_type: sourceType.value,
+    const result = await createWorkflow(props.workspaceId, {
+      name: props.workflowName || 'Untitled Workflow',
+      method: 'conversation',
+      conversationText: text.value,
+      sourceType: sourceType.value,
     });
-    yamlContent = data.yaml_content;
-    extractedProcess.value = data.extracted_process;
+    await router.push({ name: 'workflow-editor', params: { id: result.workflowId } });
   } catch (e) {
-    const msg = (e as { response?: { data?: { error?: string } } }).response?.data?.error;
+    const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
     error.value = msg ?? 'Extraction failed. Please check your input and try again.';
-  } finally {
     importing.value = false;
   }
 }
 
-function applyToCanvas() {
-  if (yamlContent) emit('generated', yamlContent);
-}
-
-function reset() {
-  extractedProcess.value = null;
-  yamlContent = '';
-}
+defineExpose({ retrigger: submit });
 </script>

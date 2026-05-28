@@ -1,4 +1,5 @@
-import { http } from './api.service';
+import { http, unwrap } from './api.service';
+import type { ApiEnvelope } from '@/types';
 
 export interface NlWorkflowRequest {
   workflowName: string;
@@ -26,10 +27,32 @@ export interface ValidationResult {
   info: ValidationIssue[];
 }
 
+export interface UnifiedWorkflowCreateRequest {
+  name: string;
+  method: 'nl' | 'voice' | 'visual' | 'conversation' | 'document' | 'canvas';
+  nlRequest?: NlWorkflowRequest;
+  imageBase64?: string;
+  imageMimeType?: string;
+  conversationText?: string;
+  sourceType?: string;
+  documentBase64?: string;
+  documentMimeType?: string;
+}
+
+export interface WorkflowCreationResult {
+  workflowId: string;
+  workflowName: string;
+  workflowSlug: string;
+  method: string;
+  validationResult?: ValidationResult;
+  tokensUsed?: number;
+  cached?: boolean;
+}
+
 export interface GenerationDoneEvent {
-  yaml_content: string;
-  validation_result: ValidationResult;
-  tokens_used: number;
+  yamlContent: string;
+  validationResult: ValidationResult;
+  tokensUsed: number;
   cached: boolean;
 }
 
@@ -37,18 +60,6 @@ export interface CopilotResponse {
   matched_pattern: string | null;
   yaml_patch: string | null;
   cache_hit: boolean;
-}
-
-export interface ConversationImportResult {
-  yaml_content: string;
-  extracted_process: {
-    summary: string;
-    steps: string[];
-    approvers: string[];
-    systems: string[];
-  };
-  confidence_score: number;
-  tokens_used: number;
 }
 
 export interface SopParseResult {
@@ -59,27 +70,27 @@ export interface SopParseResult {
   tokens_used: number;
 }
 
+export async function createWorkflow(
+  workspaceId: string,
+  request: UnifiedWorkflowCreateRequest,
+): Promise<WorkflowCreationResult> {
+  const response = await http.post<ApiEnvelope<WorkflowCreationResult>>(
+    `/api/v1/workspaces/${workspaceId}/workflows/create`,
+    request,
+  );
+  return unwrap(response);
+}
+
 export const creationService = {
   async generateWorkflow(
     workspaceId: string,
     request: NlWorkflowRequest,
   ): Promise<GenerationDoneEvent> {
-    const { data } = await http.post<GenerationDoneEvent>(
+    const response = await http.post<ApiEnvelope<GenerationDoneEvent>>(
       `/api/v1/workspaces/${workspaceId}/workflows/generate`,
       request,
     );
-    return data;
-  },
-
-  async parseDocument(workspaceId: string, file: File): Promise<SopParseResult> {
-    const form = new FormData();
-    form.append('document', file);
-    const { data } = await http.post<SopParseResult>(
-      `/api/v1/workspaces/${workspaceId}/workflows/from-document`,
-      form,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
-    );
-    return data;
+    return unwrap(response);
   },
 
   async sendCopilotCommand(
