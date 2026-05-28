@@ -10,9 +10,9 @@ using Microsoft.Extensions.Logging;
 namespace Flowamaz.Application.Workflow.Services;
 
 /// <summary>
-/// Workflow-definition CRUD + publish. YAML is validated through <see cref="SfgParser"/> before any
-/// create/update is saved (invalid YAML surfaces as a 422 SfgParseException). Publishing snapshots
-/// the YAML into a production <see cref="WorkflowVersion"/>. All operations are workspace-scoped.
+/// Workflow-definition CRUD + publish. YAML is validated through <see cref="SfgParser"/> at publish
+/// time only — drafts are saved as-is so AI-generated YAML can be refined before publishing.
+/// All operations are workspace-scoped.
 /// </summary>
 public sealed class WorkflowService
 {
@@ -52,10 +52,9 @@ public sealed class WorkflowService
     {
         _logger.LogInformation("WorkflowService.CreateAsync enter workspace={WorkspaceId} slug={Slug}", workspaceId, request.Slug);
 
-        // Parse AI-generated YAML on creation; skip for canvas — the blank structural template is valid
-        // but intentionally empty (nodes: [], edges: []) until the user draws on the canvas.
-        if (!string.IsNullOrEmpty(request.YamlContent) && request.CreatedByMethod != WorkflowCreatedByMethod.Canvas)
-            await _parser.ParseAsync(request.YamlContent, ct);
+        if (string.IsNullOrWhiteSpace(request.YamlContent) && request.CreatedByMethod != WorkflowCreatedByMethod.Canvas)
+            throw new InvalidOperationException(
+                $"YamlContent cannot be empty for creation method {request.CreatedByMethod}. Ensure the generation step completed before calling CreateAsync.");
 
         if (await _definitions.SlugExistsInWorkspaceAsync(workspaceId, request.Slug, ct))
         {

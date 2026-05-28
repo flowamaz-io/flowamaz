@@ -79,13 +79,27 @@ public class WorkflowServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_InvalidYaml_ThrowsParseExceptionBeforePersisting()
+    public async Task CreateAsync_InvalidYaml_SavesAsDraft_ParserRunsOnPublishOnly()
     {
+        // Structurally invalid YAML is accepted at create time — parser only runs at PublishAsync.
         var bad = new CreateWorkflowDefinitionRequest("Orders", "orders", "not: [valid", null, WorkflowCreatedByMethod.NaturalLanguage);
+        _definitions.Setup(r => r.SlugExistsInWorkspaceAsync(_ws, "orders", It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         var act = async () => await NewService().CreateAsync(_ws, Guid.NewGuid(), bad);
 
-        await act.Should().ThrowAsync<SfgParseException>();
+        await act.Should().NotThrowAsync();
+        _definitions.Verify(r => r.AddAsync(It.IsAny<WorkflowDefinition>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateAsync_EmptyYaml_NonCanvas_ThrowsInvalidOperationException()
+    {
+        var empty = new CreateWorkflowDefinitionRequest("Orders", "orders", "", null, WorkflowCreatedByMethod.NaturalLanguage);
+
+        var act = async () => await NewService().CreateAsync(_ws, Guid.NewGuid(), empty);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*YamlContent cannot be empty*");
         _definitions.Verify(r => r.AddAsync(It.IsAny<WorkflowDefinition>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
