@@ -57,29 +57,32 @@
     <div class="w-px h-5 bg-gray-200 mx-1" />
     <button
       class="toolbar-btn text-xs gap-1.5"
-      :class="isDirty ? 'text-amber-400' : 'text-green-400'"
+      :class="saveButtonClass"
       title="Save Ctrl+S"
-      @click="$emit('save')"
+      :disabled="!props.isDirty || props.saving"
+      @click="onSaveClick"
     >
       <Save class="w-4 h-4" />
-      <span>{{ isDirty ? 'Unsaved' : 'Saved' }}</span>
+      <span>{{ saveLabel }}</span>
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { Undo2, Redo2, LayoutDashboard, Group, ZoomIn, ZoomOut, Maximize2, Map, Save } from 'lucide-vue-next';
 
-defineProps<{
+const props = defineProps<{
   workflowName: string;
   canUndo: boolean;
   canRedo: boolean;
   undoCount: number;
   isDirty: boolean;
   showMinimap: boolean;
+  saving?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   undo: [];
   redo: [];
   tidy: [];
@@ -91,4 +94,19 @@ defineEmits<{
   save: [];
   rename: [name: string];
 }>();
+
+const saveLabel = computed(() => {
+  if (props.saving) return 'Saving...';
+  if (props.isDirty) return 'Unsaved changes';
+  return 'Saved';
+});
+
+const saveButtonClass = computed(() => {
+  if (props.isDirty && !props.saving) return 'text-amber-600 hover:text-amber-700 cursor-pointer';
+  return 'text-gray-400 cursor-default';
+});
+
+function onSaveClick() {
+  if (props.isDirty && !props.saving) emit('save');
+}
 </script>

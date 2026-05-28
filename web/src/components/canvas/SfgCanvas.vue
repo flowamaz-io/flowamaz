@@ -8,6 +8,7 @@
       :undo-count="canvasStore.undoCount"
       :is-dirty="canvasStore.isDirty"
       :show-minimap="showMinimap"
+      :saving="props.saving ?? false"
       @undo="handleUndo"
       @redo="handleRedo"
       @tidy="canvas.runLayout"
@@ -90,6 +91,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import * as jsYaml from 'js-yaml';
 import { useRoute } from 'vue-router';
 import { useCytoscapeCanvas } from '@/composables/useCytoscapeCanvas';
 import { useCanvasHistory } from '@/composables/useCanvasHistory';
@@ -106,7 +108,7 @@ import NodeContextMenu from './NodeContextMenu.vue';
 import { Clipboard } from 'lucide-vue-next';
 import type { NodeType, CanvasNode } from '@/types/canvas.types';
 
-defineProps<{ initialYaml?: string }>();
+const props = defineProps<{ initialYaml?: string; saving?: boolean }>();
 const emit = defineEmits<{ save: []; yamlChange: [yaml: string] }>();
 
 const route = useRoute();
@@ -142,6 +144,7 @@ async function loadWorkflow() {
       // Wait for sync debounce to settle, then tidy the layout
       setTimeout(() => canvas.runLayout(), 350);
     }
+    canvasStore.setDirty(false);
   } catch {
     // canvas stays empty if load fails
   }
@@ -306,40 +309,61 @@ function handleAddGroup() {
 }
 
 function snapshotYaml() {
-  // Build minimal YAML from current state and snapshot it
-  const yaml = buildYamlFromState();
-  snapshot(yaml);
-  canvasStore.setYaml(yaml);
+  const newYaml = buildYamlFromState();
+  yamlContent.value = newYaml;
+  snapshot(newYaml);
+  canvasStore.setYaml(newYaml);
   canvasStore.setDirty(true);
-  emit('yamlChange', yaml);
+  emit('yamlChange', newYaml);
 }
 
 function buildYamlFromState(): string {
-  const nodes = canvasStore.nodes;
-  const edges = canvasStore.edges;
-  const lines = [
-    'apiVersion: flowamaz/v1',
-    'kind: Workflow',
-    'metadata:',
-    `  id: ${workflowName.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`,
-    `  name: "${workflowName.value}"`,
-    'spec:',
-    '  trigger:',
-    '    type: manual',
-    '  nodes:',
-    ...nodes.map(n => [
-      `    - id: ${n.id}`,
-      `      type: ${n.type}`,
-      `      label: "${n.label}"`,
-    ].join('\n')),
-    '  edges:',
-    ...edges.map(e => [
-      `    - id: ${e.id}`,
-      `      from: ${e.from}`,
-      `      to: ${e.to}`,
-      ...(e.via ? [`      via: ${e.via}`] : []),
-    ].join('\n')),
-  ];
-  return lines.join('\n');
+  const storeNodes = canvasStore.nodes;
+  const storeEdges = canvasStore.edges;
+
+  // Start from the current YAML to preserve all metadata (trigger, variables, node configs).
+  // Only replace spec.nodes and spec.edges.
+  let parsed: Record<string, unknown> = {
+    apiVersion: 'flowamaz/v1',
+    kind: 'Workflow',
+    metadata: {
+      id: workflowName.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+      name: workflowName.value,
+    },
+    spec: { trigger: { type: 'manual' }, nodes: [], edges: [] },
+  };
+
+  if (yamlContent.value) {
+    try {
+      const existing = jsYaml.load(yamlContent.value) as Record<string, unknown>;
+      if (existing && typeof existing === 'object') parsed = existing;
+    } catch { /* fall back to blank scaffold */ }
+  }
+
+  const spec = ((parsed.spec as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+  const existingNodes = (spec.nodes as Array<Record<string, unknown>>) ?? [];
+  const existingEdges = (spec.edges as Array<Record<string, unknown>>) ?? [];
+  const existingNodeMap = new Map(existingNodes.map(n => [n.id as string, n]));
+  const existingEdgeMap = new Map(existingEdges.map(e => [e.id as string, e]));
+
+  // Merge: preserve per-node config from YAML, update id/type/label from store
+  spec.nodes = storeNodes.map(n => ({
+    ...(existingNodeMap.get(n.id) ?? {}),
+    id: n.id,
+    type: n.type,
+    label: n.label,
+  }));
+
+  // Merge: preserve per-edge extras (via expressions) from YAML
+  spec.edges = storeEdges.map(e => ({
+    ...(existingEdgeMap.get(e.id) ?? {}),
+    id: e.id,
+    from: e.from,
+    to: e.to,
+    ...(e.via ? { via: e.via } : {}),
+  }));
+
+  parsed.spec = spec;
+  return jsYaml.dump(parsed, { indent: 2, lineWidth: -1 });
 }
 </script>

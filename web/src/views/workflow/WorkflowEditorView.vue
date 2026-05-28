@@ -173,6 +173,7 @@ onUnmounted(() => {
           <SfgCanvas
             :key="workflowId"
             :initial-yaml="yaml"
+            :saving="saveState === 'saving'"
             @yaml-change="yaml = $event"
             @save="save"
           />
