@@ -33,6 +33,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const timeline = ref<TimelineResponse | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const yamlVersion = ref(0);
 
   function requireWorkspace(): string {
     const id = workspace.currentWorkspaceId;
@@ -138,6 +139,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     if (item) item.status = status;
   }
 
+  function bumpYamlVersion() { yamlVersion.value++; }
+
   return {
     workflows,
     currentWorkflow,
@@ -147,6 +150,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     timeline,
     loading,
     error,
+    yamlVersion,
+    bumpYamlVersion,
     loadWorkflows,
     loadWorkflow,
     createWorkflow,

@@ -81,6 +81,7 @@ async function saveYaml(): Promise<void> {
     currentWorkflow.value = updated;
     yamlDirty.value = false;
     validationErrors.value = [];
+    store.bumpYamlVersion();
     toast.success('YAML saved.');
   } catch (err) {
     toast.error(toUserFacingError(err).message);

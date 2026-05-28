@@ -213,10 +213,13 @@ export function useCytoscapeCanvas(containerRef: Ref<HTMLElement | null>) {
     cyAny.layout({
       name: 'dagre',
       rankDir: 'TB',
-      ranksep: 80,
-      nodesep: 60,
+      rankSep: 80,
+      nodeSep: 60,
       animate: true,
       animationDuration: 300,
+      animationEasing: 'ease-in-out-cubic',
+      fit: true,
+      padding: 40,
     }).run();
   }
 

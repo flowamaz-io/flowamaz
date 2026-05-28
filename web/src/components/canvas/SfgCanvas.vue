@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { useCytoscapeCanvas } from '@/composables/useCytoscapeCanvas';
 import { useCanvasHistory } from '@/composables/useCanvasHistory';
@@ -98,6 +98,7 @@ import { useCanvasStore } from '@/stores/canvas.store';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useHelp } from '@/composables/useHelp';
 import { workflowService } from '@/services/workflow.service';
+import { useWorkflowStore } from '@/stores/workflow.store';
 import NodePalette from './NodePalette.vue';
 import CanvasToolbar from './CanvasToolbar.vue';
 import NodeInspector from './NodeInspector.vue';
@@ -123,6 +124,7 @@ const yamlCopied = ref(false);
 
 const canvas = useCytoscapeCanvas(containerRef);
 const { syncYamlToCanvas } = useYamlCanvasSync(() => canvas.cy.value);
+const workflowStore = useWorkflowStore();
 
 const ctxMenu = ref({ visible: false, x: 0, y: 0, nodeId: '' });
 
@@ -137,11 +139,17 @@ async function loadWorkflow() {
       yamlContent.value = wf.yamlContent;
       await nextTick();
       syncYamlToCanvas(wf.yamlContent);
+      // Wait for sync debounce to settle, then tidy the layout
+      setTimeout(() => canvas.runLayout(), 350);
     }
   } catch {
     // canvas stays empty if load fails
   }
 }
+
+watch(() => workflowStore.yamlVersion, (v) => {
+  if (v > 0) loadWorkflow();
+});
 
 function copyYaml() {
   navigator.clipboard.writeText(yamlContent.value);

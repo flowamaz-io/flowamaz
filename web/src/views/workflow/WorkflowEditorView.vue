@@ -8,11 +8,13 @@ import EmpathyPanel from '../../components/editor/EmpathyPanel.vue';
 import { useWorkflowEditor } from '../../composables/useWorkflowEditor';
 import { useHelp } from '../../composables/useHelp';
 import { useWorkspace } from '../../composables/useWorkspace';
+import { useWorkflowStore } from '../../stores/workflow.store';
 
 const route = useRoute();
 const ws = useWorkspace();
 const workspaceId = (route.query.workspaceId as string) || ws.currentWorkspaceId.value || '';
 const workflowId = route.params.id as string;
+const workflowStore = useWorkflowStore();
 
 const {
   yaml, healthScore, saveState, isDirty, validationErrors,
@@ -73,6 +75,9 @@ function healthColour(score: number | null) {
 }
 
 watch(yaml, () => validateDebounced());
+watch(saveState, (next, prev) => {
+  if (next === 'saved' && prev === 'saving') workflowStore.bumpYamlVersion();
+});
 
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
