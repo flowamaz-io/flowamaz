@@ -94,8 +94,6 @@ public sealed class WorkflowService
         var definition = await _definitions.GetByIdForWorkspaceAsync(id, workspaceId, ct);
         if (definition is null) return null;
 
-        await _parser.ParseAsync(yamlContent, ct); // validate before save
-
         definition.YamlContent = yamlContent;
         definition.SlaThresholdMs = slaThresholdMs;
         _definitions.Update(definition);
