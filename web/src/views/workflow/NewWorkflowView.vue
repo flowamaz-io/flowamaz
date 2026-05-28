@@ -35,7 +35,7 @@ async function cloneWorkflow() {
   loading.value = true;
   try {
     const cloned = await workflowService.clone(workspaceId.value, cloneSuggestion.value.id);
-    await router.push({ name: 'workflow-editor', params: { id: cloned.id } });
+    await router.push({ name: 'workflow-editor', params: { id: cloned.id }, query: { workspaceId: workspaceId.value ?? '' } });
   } catch (e: unknown) {
     error.value = `Clone failed. ${e instanceof Error ? e.message : 'Please try again.'}`;
     loading.value = false;
@@ -52,7 +52,7 @@ watch(selectedMethod, async (method) => {
       name: workflowName.value || 'Untitled Workflow',
       method: 'canvas',
     });
-    await router.push({ name: 'workflow-editor', params: { id: result.workflowId } });
+    await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: workspaceId.value ?? '' } });
   } catch (e: unknown) {
     error.value = `Failed to create canvas workflow. ${e instanceof Error ? e.message : 'Please try again.'}`;
     selectedMethod.value = null;

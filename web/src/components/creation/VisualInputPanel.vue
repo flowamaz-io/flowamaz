@@ -69,7 +69,7 @@ async function processFile(file: File) {
       imageBase64,
       imageMimeType: 'image/jpeg',
     });
-    await router.push({ name: 'workflow-editor', params: { id: result.workflowId } });
+    await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e) {
     const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
     error.value = msg ?? 'Image processing failed. Please try again with a clearer photo.';

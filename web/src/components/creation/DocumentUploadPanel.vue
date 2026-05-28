@@ -63,7 +63,7 @@ async function handleFile(file: File) {
       documentBase64,
       documentMimeType: file.type,
     });
-    await router.push({ name: 'workflow-editor', params: { id: result.workflowId } });
+    await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     error.value = `Document parsing failed. ${msg}. Try re-uploading or use a different file.`;

@@ -7,9 +7,11 @@ import CopilotPanel from '../../components/editor/CopilotPanel.vue';
 import EmpathyPanel from '../../components/editor/EmpathyPanel.vue';
 import { useWorkflowEditor } from '../../composables/useWorkflowEditor';
 import { useHelp } from '../../composables/useHelp';
+import { useWorkspace } from '../../composables/useWorkspace';
 
 const route = useRoute();
-const workspaceId = route.params.workspaceId as string;
+const ws = useWorkspace();
+const workspaceId = (route.query.workspaceId as string) || ws.currentWorkspaceId.value || '';
 const workflowId = route.params.id as string;
 
 const {

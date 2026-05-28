@@ -142,7 +142,7 @@ async function submit() {
       method: 'nl',
       nlRequest: form.value,
     });
-    await router.push({ name: 'workflow-editor', params: { id: result.workflowId } });
+    await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e) {
     error.value = (e as Error).message ?? 'Generation failed. Please try again.';
     generating.value = false;

@@ -93,7 +93,7 @@ async function submit() {
       conversationText: text.value,
       sourceType: sourceType.value,
     });
-    await router.push({ name: 'workflow-editor', params: { id: result.workflowId } });
+    await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e) {
     const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
     error.value = msg ?? 'Extraction failed. Please check your input and try again.';
