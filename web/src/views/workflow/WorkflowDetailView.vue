@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
+import { Pencil } from 'lucide-vue-next';
 import FmBadge from '@/components/common/FmBadge.vue';
 import FmButton from '@/components/common/FmButton.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
+import FmYamlEditor from '@/components/editor/FmYamlEditor.vue';
 import { useWorkflowStore } from '@/stores/workflow.store';
+import { useWorkspaceStore } from '@/stores/workspace.store';
+import { workflowService } from '@/services/workflow.service';
 import { useToast } from '@/composables/useToast';
 import { toUserFacingError } from '@/utils/error.util';
 import { fromNow, formatDate } from '@/utils/date.util';
@@ -15,18 +19,32 @@ import { healthColorClass, instanceStatusVariant, workflowStatusVariant } from '
 type Tab = 'overview' | 'instances' | 'versions' | 'yaml';
 
 const route = useRoute();
+const router = useRouter();
 const store = useWorkflowStore();
+const workspaceStore = useWorkspaceStore();
 const toast = useToast();
 const { currentWorkflow, versions, instances, loading, error } = storeToRefs(store);
 
 const id = computed(() => String(route.params.id));
+const workspaceId = computed(() => workspaceStore.currentWorkspaceId ?? '');
 const activeTab = ref<Tab>('overview');
 const publishing = ref(false);
+
+const yamlContent = ref('');
+const yamlDirty = ref(false);
+const saving = ref(false);
+const copied = ref(false);
+const validationErrors = ref<Array<{ message: string; code?: string }>>([]);
+
+watch(currentWorkflow, (wf) => {
+  if (wf && !yamlDirty.value) yamlContent.value = wf.yamlContent ?? '';
+});
 
 async function loadTab(tab: Tab): Promise<void> {
   activeTab.value = tab;
   if (tab === 'versions') await store.loadVersions(id.value);
   if (tab === 'instances') await store.loadInstances({ workflowDefinitionId: id.value });
+  if (tab === 'yaml') yamlContent.value = currentWorkflow.value?.yamlContent ?? '';
 }
 
 async function publish(): Promise<void> {
@@ -42,12 +60,41 @@ async function publish(): Promise<void> {
   }
 }
 
+async function saveYaml(): Promise<void> {
+  saving.value = true;
+  try {
+    const updated = await workflowService.update(workspaceId.value, id.value, { yamlContent: yamlContent.value });
+    currentWorkflow.value = updated;
+    yamlDirty.value = false;
+    validationErrors.value = [];
+    toast.success('YAML saved.');
+  } catch (err) {
+    toast.error(toUserFacingError(err).message);
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function copyYaml(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(yamlContent.value);
+    copied.value = true;
+    setTimeout(() => { copied.value = false; }, 2000);
+  } catch {
+    // clipboard unavailable
+  }
+}
+
+function openInCanvas(): void {
+  router.push({ name: 'workflow-editor', params: { id: id.value }, query: { workspace: workspaceId.value } });
+}
+
 onMounted(() => store.loadWorkflow(id.value));
 watch(id, () => store.loadWorkflow(id.value));
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="px-8 py-6 space-y-6">
     <div
       v-if="loading && !currentWorkflow"
       class="flex justify-center py-12"
@@ -84,12 +131,21 @@ watch(id, () => store.loadWorkflow(id.value));
             <span class="text-slate-400">{{ currentWorkflow.currentVersion }}</span>
           </div>
         </div>
-        <FmButton
-          :loading="publishing"
-          @click="publish"
-        >
-          Publish
-        </FmButton>
+        <div class="flex items-center gap-3">
+          <button
+            class="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            @click="openInCanvas"
+          >
+            <Pencil class="w-4 h-4" />
+            Edit in Canvas
+          </button>
+          <FmButton
+            :loading="publishing"
+            @click="publish"
+          >
+            Publish
+          </FmButton>
+        </div>
       </div>
 
       <div class="flex gap-1 border-b border-slate-200">
@@ -150,6 +206,24 @@ watch(id, () => store.loadWorkflow(id.value));
             </dd>
           </div>
         </dl>
+
+        <div class="mt-6 p-6 border border-gray-200 rounded-lg bg-gray-50 flex items-center justify-between">
+          <div>
+            <p class="font-medium text-gray-900">
+              Ready to edit this workflow?
+            </p>
+            <p class="text-sm text-gray-500 mt-1">
+              Open the visual canvas to drag nodes, connect steps, and build your flow.
+            </p>
+          </div>
+          <button
+            class="flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 transition-colors"
+            @click="openInCanvas"
+          >
+            <Pencil class="w-4 h-4" />
+            Edit in Canvas
+          </button>
+        </div>
       </div>
 
       <div
@@ -238,9 +312,52 @@ watch(id, () => store.loadWorkflow(id.value));
 
       <div
         v-else
-        class="overflow-hidden rounded-xl border border-slate-200 bg-slate-900"
+        class="border border-gray-200 rounded-lg overflow-hidden"
       >
-        <pre class="overflow-x-auto p-4 text-xs leading-relaxed text-slate-100"><code>{{ currentWorkflow.yamlContent }}</code></pre>
+        <div class="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
+          <span class="text-xs font-medium text-gray-500 uppercase tracking-wider">YAML Editor</span>
+          <div class="flex gap-2">
+            <button
+              class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-200 transition-colors"
+              @click="copyYaml"
+            >
+              {{ copied ? 'Copied!' : 'Copy' }}
+            </button>
+            <button
+              :disabled="!yamlDirty || saving"
+              class="text-xs bg-teal-500 text-white px-3 py-1 rounded hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              @click="saveYaml"
+            >
+              {{ saving ? 'Saving...' : 'Save changes' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="h-[600px]">
+          <FmYamlEditor
+            v-model="yamlContent"
+            :dark-mode="false"
+            @update:model-value="yamlDirty = true"
+          />
+        </div>
+
+        <div
+          v-if="validationErrors.length > 0"
+          class="border-t border-amber-200 bg-amber-50 p-3"
+        >
+          <p class="text-xs font-medium text-amber-700 mb-1">
+            Validation issues (workflow saved but cannot be published until resolved):
+          </p>
+          <ul class="space-y-1">
+            <li
+              v-for="err in validationErrors"
+              :key="err.code ?? err.message"
+              class="text-xs text-amber-600"
+            >
+              {{ err.message }}
+            </li>
+          </ul>
+        </div>
       </div>
     </template>
   </div>
