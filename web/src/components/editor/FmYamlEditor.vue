@@ -4,7 +4,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, hoverTooltip } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { yaml } from '@codemirror/lang-yaml';
-import { linter, lintGutter, type Diagnostic } from '@codemirror/lint';
+import { linter, lintGutter, setDiagnostics, type Diagnostic } from '@codemirror/lint';
 import {
   autocompletion,
   completionKeymap,
@@ -148,9 +148,12 @@ watch(() => props.modelValue, (newVal) => {
   });
 });
 
-// Re-run linter when diagnostics change
+// Re-run linter when diagnostics change — clear immediately so stale underlines don't
+// persist during the linter's built-in scheduling delay before the next run fires.
 watch(() => props.diagnostics, () => {
-  view?.dispatch({});
+  if (!view) return;
+  view.dispatch(setDiagnostics(view.state, []));
+  view.dispatch({});
 });
 
 onMounted(initEditor);

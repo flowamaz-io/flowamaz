@@ -36,6 +36,7 @@ const yamlDirty = ref(false);
 const saving = ref(false);
 const copied = ref(false);
 const validating = ref(false);
+const showValid = ref(false);
 const validationErrors = ref<Array<{ message: string; severity: 'error' | 'warning' }>>([]);
 const hasErrors = computed(() => validationErrors.value.some(e => e.severity === 'error'));
 const hasWarnings = computed(() => !hasErrors.value && validationErrors.value.length > 0);
@@ -111,12 +112,18 @@ async function validateYaml(showToast = true): Promise<void> {
   const content = yamlContent.value || currentWorkflow.value?.yamlContent;
   if (!content?.trim()) return;
   validating.value = true;
+  validationErrors.value = [];
+  showValid.value = false;
   try {
     const result = await workflowService.validate(workspaceId.value, content);
     validationErrors.value = [
       ...result.errors.map(e => ({ message: e.message, severity: 'error' as const })),
       ...result.warnings.map(w => ({ message: w.message, severity: 'warning' as const })),
     ];
+    if (result.errors.length === 0 && result.warnings.length === 0) {
+      showValid.value = true;
+      setTimeout(() => { showValid.value = false; }, 2000);
+    }
     if (!showToast) return;
     const errorCount = result.errors.length;
     const warnCount = result.warnings.length;
@@ -230,7 +237,9 @@ watch(id, () => store.loadWorkflow(id.value));
         >
           <span v-if="tab === 'yaml'" class="flex items-center gap-1.5">
             Yaml
-            <span v-if="hasErrors" class="w-2 h-2 rounded-full bg-red-500" />
+            <span v-if="validating" class="w-2 h-2 rounded-full bg-gray-300 animate-pulse" />
+            <span v-else-if="showValid" class="text-emerald-500 text-xs leading-none">✓</span>
+            <span v-else-if="hasErrors" class="w-2 h-2 rounded-full bg-red-500" />
             <span v-else-if="hasWarnings" class="w-2 h-2 rounded-full bg-amber-400" />
           </span>
           <template v-else>{{ tab }}</template>

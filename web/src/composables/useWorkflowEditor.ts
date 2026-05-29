@@ -26,6 +26,7 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
 
   const validateDebounced = useDebounceFn(async () => {
     if (!yaml.value.trim()) { validationErrors.value = []; return; }
+    validationErrors.value = [];
     try {
       const result = await workflowService.validate(workspaceId, yaml.value);
       validationErrors.value = [
@@ -67,6 +68,7 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
 
   async function validate(): Promise<{ errors: Array<{ message: string; line?: number }>; warnings: Array<{ message: string; line?: number }> } | null> {
     if (!yaml.value.trim()) { validationErrors.value = []; return null; }
+    validationErrors.value = [];
     try {
       const result = await workflowService.validate(workspaceId, yaml.value);
       validationErrors.value = [
