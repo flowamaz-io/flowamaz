@@ -65,16 +65,24 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
     return { patch: result.yamlPatch, pattern: result.matchedPattern };
   }
 
-  function applyPatch(patch: string) {
+  function applyPatch(patch: string): string | null {
     try {
+      const patchDoc = jsYaml.load(patch) as Record<string, unknown> | null;
+      if (!patchDoc?.spec) {
+        return 'Could not apply — suggestion was not in the correct format. Try rephrasing your command.';
+      }
+      const patchSpec = patchDoc.spec as Record<string, unknown>;
+      const patchNodes = (patchSpec.nodes as Array<Record<string, unknown>>) ?? [];
+      const patchEdges = (patchSpec.edges as Array<Record<string, unknown>>) ?? [];
+      if (!patchNodes.length && !patchEdges.length) {
+        return 'No changes to apply in this suggestion.';
+      }
+
       const current = jsYaml.load(yaml.value) as Record<string, unknown>;
-      const patchDoc = jsYaml.load(patch) as Record<string, unknown>;
       const currentSpec = (current?.spec ?? {}) as Record<string, unknown>;
-      const patchSpec = (patchDoc?.spec ?? {}) as Record<string, unknown>;
 
       // Merge nodes — update existing by id, add new
       const currentNodes = (currentSpec.nodes as Array<Record<string, unknown>>) ?? [];
-      const patchNodes = (patchSpec.nodes as Array<Record<string, unknown>>) ?? [];
       if (patchNodes.length) {
         for (const node of patchNodes) {
           const existingIdx = currentNodes.findIndex(n => n.id === node.id);
@@ -89,7 +97,6 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
 
       // Merge edges — update existing by id, add new
       const currentEdges = (currentSpec.edges as Array<Record<string, unknown>>) ?? [];
-      const patchEdges = (patchSpec.edges as Array<Record<string, unknown>>) ?? [];
       if (patchEdges.length) {
         const existingEdgeIds = new Set(currentEdges.map(e => e.id));
         for (const edge of patchEdges) {
@@ -110,8 +117,9 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
 
       current.spec = currentSpec;
       yaml.value = jsYaml.dump(current, { indent: 2, lineWidth: -1, quotingType: '"', forceQuotes: false });
+      return null;
     } catch {
-      // Do not corrupt the existing YAML — leave it unchanged
+      return 'Could not apply — invalid YAML patch.';
     }
   }
 

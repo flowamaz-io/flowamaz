@@ -64,7 +64,8 @@ async function enableEmpathy() {
 // Co-pilot command flow
 async function onCopilotCommand(cmd: string) {
   if (cmd.startsWith('__apply__')) {
-    applyPatch(cmd.slice(9));
+    const applyErr = applyPatch(cmd.slice(9));
+    if (applyErr) copilotPanelRef.value?.setResult(null, null, applyErr);
     return;
   }
   if (isDirty.value) await save();

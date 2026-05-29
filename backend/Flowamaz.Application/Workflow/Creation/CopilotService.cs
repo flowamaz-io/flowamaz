@@ -5,6 +5,8 @@ using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace Flowamaz.Application.Workflow.Creation;
 
@@ -21,24 +23,47 @@ public sealed class CopilotService : ICopilotService
 
     private const string FunctionId = AiFunctionIds.Copilot;
     private const string SystemPrompt =
-        "You are Flowamaz Co-pilot. The user is editing a workflow YAML. " +
-        "Given the user's command and optionally the current YAML, produce ONLY a minimal YAML patch " +
-        "(the changed/added nodes and edges). No explanation text. No markdown fences. Return valid YAML.\n\n" +
-        "When the command requires modifying an existing node's configuration " +
-        "(e.g. adding a timeout, changing a label, setting a connector), " +
-        "include the COMPLETE updated node in your patch with all its fields. " +
-        "The patch merger will update the existing node by matching on id.\n\n" +
-        "For node config changes, return the full node:\n" +
+        "You are a workflow YAML editor for Flowamaz workflows.\n" +
+        "The user will give you a command to modify the workflow.\n" +
+        "You must respond with ONLY a valid YAML patch — nothing else.\n" +
+        "No explanation, no markdown, no code blocks, no JSONPath expressions.\n\n" +
+        "The patch MUST follow this exact format:\n\n" +
+        "To ADD a new node:\n" +
         "spec:\n" +
         "  nodes:\n" +
-        "    - id: approver-review\n" +
+        "    - id: new-node-id\n" +
+        "      type: action\n" +
+        "      label: \"Node Label\"\n" +
+        "      config: {}\n\n" +
+        "To MODIFY an existing node (include ALL fields, use id to match):\n" +
+        "spec:\n" +
+        "  nodes:\n" +
+        "    - id: existing-node-id\n" +
         "      type: human-gate\n" +
-        "      label: Approver Review\n" +
+        "      label: \"Existing Label\"\n" +
         "      config:\n" +
         "        timeout:\n" +
         "          seconds: 7200\n\n" +
-        "Do NOT return only the changed fields — return the complete node. " +
-        "The id field is used to find and replace the existing node.";
+        "To ADD a new edge:\n" +
+        "spec:\n" +
+        "  edges:\n" +
+        "    - id: e99\n" +
+        "      from: source-node-id\n" +
+        "      to: target-node-id\n\n" +
+        "To MODIFY an existing edge:\n" +
+        "spec:\n" +
+        "  edges:\n" +
+        "    - id: existing-edge-id\n" +
+        "      from: source-node-id\n" +
+        "      to: new-target-id\n\n" +
+        "You may include both nodes and edges in one patch.\n" +
+        "NEVER use JSONPath, dot notation, or bracket notation like nodes[id=x].field.\n" +
+        "ALWAYS return complete node objects when modifying existing nodes.\n" +
+        "ALWAYS use the node id to identify which node to update.\n" +
+        "If you cannot determine the correct patch, respond with:\n" +
+        "spec:\n" +
+        "  nodes: []\n" +
+        "  edges: []";
 
     public CopilotService(
         IRateLimitService rateLimit,
@@ -108,6 +133,17 @@ public sealed class CopilotService : ICopilotService
         var userPrompt = BuildUserPrompt(command, yamlContent);
         var aiResult = await _ai.CompleteAsync(config, SystemPrompt, userPrompt, cancellationToken);
 
+        // 5a. Retry once if the AI returned an invalid patch format
+        if (!IsValidPatch(aiResult.Text))
+        {
+            _log.LogWarning("CopilotService.ProcessCommandAsync invalid_patch_format — retrying with explicit reminder");
+            var retryPrompt = userPrompt +
+                "\n\nIMPORTANT: Return ONLY valid YAML starting with 'spec:'. " +
+                "Do NOT use JSONPath or dot notation. " +
+                "Return the complete node object with all fields.";
+            aiResult = await _ai.CompleteAsync(config, SystemPrompt, retryPrompt, cancellationToken);
+        }
+
         // 6. Cache write (fire-and-forget)
         _ = _cache.SetAsync(cacheKey, aiResult.Text, TimeSpan.FromHours(24), CancellationToken.None);
 
@@ -136,4 +172,24 @@ public sealed class CopilotService : ICopilotService
         string.IsNullOrWhiteSpace(yamlContent)
             ? $"Command: {command}"
             : $"Command: {command}\n\nCurrent YAML:\n{yamlContent}";
+
+    private static bool IsValidPatch(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        try
+        {
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
+                .Build();
+            var doc = deserializer.Deserialize<Dictionary<string, object>>(text);
+            if (doc is null || !doc.ContainsKey("spec")) return false;
+            if (doc["spec"] is not Dictionary<object, object> spec) return false;
+            return spec.ContainsKey("nodes") || spec.ContainsKey("edges");
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
