@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: flowamaz_test
+          POSTGRES_USER: flowamaz
+          POSTGRES_PASSWORD: test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+      - run: dotnet restore backend/Flowamaz.sln
+      - run: dotnet build backend/Flowamaz.sln --no-restore -c Release
+      - run: dotnet test backend/Flowamaz.sln --no-build -c Release --collect:"XPlat Code Coverage"
+        env:
+          DB_CONNECTION_STRING: Host=localhost;Database=flowamaz_test;Username=flowamaz;Password=test
+          REDIS_CONNECTION_STRING: localhost:6379
+          JWT_SECRET: ci-test-secret-minimum-32-chars-here
+          CREDENTIAL_MASTER_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+          GATE_SIGNING_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+          GIT_REPOS_BASE_PATH: ${{ runner.temp }}/git-repos
+          ASPNETCORE_ENVIRONMENT: Development
+      - uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - run: npm run typecheck --prefix web
+      - run: npm run lint --prefix web
+      - run: npm run test --prefix web
+      - run: npm run build --prefix web
+
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cli/package-lock.json
+      - run: npm ci --prefix cli
+      - run: npm run build --prefix cli
+      - run: npm test --prefix cli
+
+  vscode-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: vscode-extension/package-lock.json
+      - run: npm ci --prefix vscode-extension
+      - run: npm run build --prefix vscode-extension
+      - run: npm test --prefix vscode-extension
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: ./backend
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true

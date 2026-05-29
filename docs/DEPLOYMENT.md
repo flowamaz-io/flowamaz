@@ -72,3 +72,27 @@ curl -fk https://localhost/health     # {"status":"healthy","dependencies":{"db"
 - `GET https://<host>/` → SPA loads
 - `GET http://<host>/` → 301 to https
 - Security headers present (X-Frame-Options, X-Content-Type-Options, HSTS, …)
+
+---
+
+## CI/CD Secrets (GitHub Actions)
+
+Set under repo Settings → Secrets and variables → Actions:
+
+| Secret | Purpose | Required |
+|--------|---------|----------|
+| `NPM_TOKEN` | Publish `@flowamaz/cli` to npm on release | Release only |
+| `CODECOV_TOKEN` | Upload backend coverage (optional — step is non-blocking) | Optional |
+| `GITHUB_TOKEN` | GHCR image push — **auto-provided** by Actions | Automatic |
+
+### Triggering a release
+
+A release runs automatically on merge to `main`. To cut a version, tag the merge commit:
+
+```bash
+git tag v0.5.0 && git push origin v0.5.0
+```
+
+`release.yml` reads the latest tag via `git describe --tags` and tags the GHCR images with it plus
+`latest`. To run a release manually, push to `main` (the workflow has no `workflow_dispatch`; add one
+if ad-hoc runs are needed).

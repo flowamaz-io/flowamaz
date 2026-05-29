@@ -1001,3 +1001,21 @@ Extension `flowamaz-vscode`: hover docs, snippet completions (8 fmz-* snippets),
 - [x] ROI calc deterministic, no AI; roi-config Admin-only; Serilog on new functions
 
 **DEVIATIONS:** No chart library exists in web deps (prompt referenced recharts, which is React) — used a dependency-free CSS bar chart. CSV export is client-side (Blob) rather than server-side; functional and simpler.
+
+---
+
+## 05-05 — CI/CD GitHub Actions  (2026-05-29)
+
+**Status:** Complete · committed to `develop`
+
+- `.github/workflows/ci.yml` — backend (Postgres+Redis services, build/test/coverage), web (typecheck/lint/test/build), cli (build+vitest), vscode-extension (build+vitest), security (Trivy fs CRITICAL/HIGH exit 1). Triggers: push develop/feat/**/fix/**, PR→main/develop.
+- `.github/workflows/release.yml` — on main: GHCR push backend+web images (version from git tag), npm publish @flowamaz/cli.
+- `.github/workflows/e2e.yml` — Playwright nightly (02:00 UTC) + workflow_dispatch.
+- docs/DEVELOPMENT.md: CI jobs, required status checks, `act` local runs, secrets. docs/DEPLOYMENT.md: secrets table + release trigger.
+
+**DoD**
+- [x] All 3 workflow YAMLs valid (js-yaml parse OK)
+- [x] Web scripts (typecheck/lint/test/build) + all 3 lockfiles already present → CI jobs coherent
+- [x] Trivy fs scan exits 1 on Critical/High
+
+**DEVIATION:** Branch-protection status checks are **documented** in DEVELOPMENT.md, not auto-applied — enabling them is a repo-admin action (GitHub ruleset API) outside this codebase and requires admin auth.

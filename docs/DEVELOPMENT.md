@@ -54,3 +54,43 @@ cd web && npm run test
 ```
 The integration suite runs sequentially (container-backed) and boots the real API via
 `WebApplicationFactory`, swapping persistence/cache to throwaway containers.
+
+---
+
+## Continuous Integration (GitHub Actions)
+
+CI is defined in `.github/workflows/`:
+
+- **ci.yml** — runs on every push to `develop`, `feat/**`, `fix/**` and on PRs into `main`/`develop`.
+  Jobs: `backend` (Postgres + Redis service containers, `dotnet build/test`, coverage → Codecov),
+  `web` (typecheck → lint → test → build), `cli` (build + vitest), `vscode-extension` (build + vitest),
+  `security` (Trivy fs scan, fails on CRITICAL/HIGH).
+- **release.yml** — on push to `main`: builds and pushes `flowamaz-backend` / `flowamaz-web` images to
+  GHCR and publishes `@flowamaz/cli` to npm.
+- **e2e.yml** — Playwright suite, nightly at 02:00 UTC and on manual `workflow_dispatch`.
+
+### Required status checks (branch protection)
+
+Configure on `flowamaz-io/flowamaz` (Settings → Rules) — these are **enabled manually by a repo admin**;
+the workflows above provide the checks:
+
+- `develop` ruleset → required checks: `backend`, `web`, `cli`, `vscode-extension`, `security`
+- `main` ruleset → the same **plus** `build-and-push`
+
+### Running CI locally
+
+Install [`act`](https://github.com/nektos/act) and run a job:
+
+```bash
+act -j web                 # run the web job
+act pull_request -j backend # run the backend job as a PR event
+```
+
+`act` needs Docker running. The backend job's Postgres/Redis service containers work under `act`
+with the `--container-architecture linux/amd64` flag on Apple Silicon.
+
+### Secrets
+
+- `NPM_TOKEN` — npm publish token for `@flowamaz/cli` (release only)
+- `CODECOV_TOKEN` — optional, coverage upload (the step is `continue-on-error`)
+- `GITHUB_TOKEN` — auto-provided by Actions; used for GHCR push

@@ -1,0 +1,39 @@
+name: E2E
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 2am UTC daily
+  workflow_dispatch: {}     # manual trigger
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: docker compose -f infrastructure/docker-compose.dev.yml up -d
+      - name: Start backend
+        run: dotnet run --project backend/Flowamaz.Api &
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          JWT_SECRET: ci-test-secret-minimum-32-chars-here
+          GATE_SIGNING_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+          CREDENTIAL_MASTER_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+      - name: Start web
+        run: |
+          npm ci --prefix web
+          npm run dev --prefix web &
+      - run: sleep 20
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: npm run e2e --prefix web
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report/
