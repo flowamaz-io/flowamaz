@@ -72,13 +72,17 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
       const currentSpec = (current?.spec ?? {}) as Record<string, unknown>;
       const patchSpec = (patchDoc?.spec ?? {}) as Record<string, unknown>;
 
-      // Merge nodes — add new, skip duplicates
+      // Merge nodes — update existing by id, add new
       const currentNodes = (currentSpec.nodes as Array<Record<string, unknown>>) ?? [];
       const patchNodes = (patchSpec.nodes as Array<Record<string, unknown>>) ?? [];
       if (patchNodes.length) {
-        const existingIds = new Set(currentNodes.map(n => n.id));
         for (const node of patchNodes) {
-          if (!existingIds.has(node.id)) currentNodes.push(node);
+          const existingIdx = currentNodes.findIndex(n => n.id === node.id);
+          if (existingIdx >= 0) {
+            currentNodes[existingIdx] = node;
+          } else {
+            currentNodes.push(node);
+          }
         }
         currentSpec.nodes = currentNodes;
       }

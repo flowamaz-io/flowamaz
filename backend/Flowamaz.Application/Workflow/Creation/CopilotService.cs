@@ -23,7 +23,22 @@ public sealed class CopilotService : ICopilotService
     private const string SystemPrompt =
         "You are Flowamaz Co-pilot. The user is editing a workflow YAML. " +
         "Given the user's command and optionally the current YAML, produce ONLY a minimal YAML patch " +
-        "(the changed/added nodes and edges). No explanation text. No markdown fences. Return valid YAML.";
+        "(the changed/added nodes and edges). No explanation text. No markdown fences. Return valid YAML.\n\n" +
+        "When the command requires modifying an existing node's configuration " +
+        "(e.g. adding a timeout, changing a label, setting a connector), " +
+        "include the COMPLETE updated node in your patch with all its fields. " +
+        "The patch merger will update the existing node by matching on id.\n\n" +
+        "For node config changes, return the full node:\n" +
+        "spec:\n" +
+        "  nodes:\n" +
+        "    - id: approver-review\n" +
+        "      type: human-gate\n" +
+        "      label: Approver Review\n" +
+        "      config:\n" +
+        "        timeout:\n" +
+        "          seconds: 7200\n\n" +
+        "Do NOT return only the changed fields — return the complete node. " +
+        "The id field is used to find and replace the existing node.";
 
     public CopilotService(
         IRateLimitService rateLimit,
