@@ -1064,3 +1064,22 @@ Extension `flowamaz-vscode`: hover docs, snippet completions (8 fmz-* snippets),
 - [x] install.sh `bash -n` OK; compose YAML valid
 
 **KEY DECISION:** Hard caps enforce in **Community edition only** (`EnsureWithinLimitAsync` returns early for cloud) — cloud editions surface plan limits via /usage + UI but don't hard-block (metered billing). This keeps the integration suite (multi-workflow / member-add tests) green; the fixture now runs as EDITION=enterprise. Community 6th-workflow→429 is unit-tested.
+
+---
+
+## 05-08 — Phase 5 integration + PHASE_COMPLETE  (2026-05-29)
+
+**Status:** Complete · committed to `develop` · **PHASE 05 COMPLETE**
+
+- Integration: `Phase5/Phase5GitTests` (2), `Phase5EditionTests` (2), `Phase5RoiTests` (1, seeds a metric → asserts 240min/$144/900%). All pass (5/5).
+- E2E specs authored: `git.spec.ts` (S40-41), `analytics.spec.ts` (S42-43), `sidebar.spec.ts` (S44-46), `cli.spec.ts` (S47-48). Run in nightly e2e.yml (not executable here — no live stack/browser).
+- Final suites: backend unit 447/447; integration 72/84 (the 12 failures are PRE-EXISTING, characterised in phase-05-report.md — OAuth/Slack env-config gap + validator/NL expectation drift, all predating Phase 5; my Phase-5 integration tests pass; member-add tests green under EDITION=enterprise).
+- `phase-05-report.md` compiled; notify hook fired.
+
+**DoD**
+- [x] Phase5 Git/Edition/Roi integration tests pass
+- [x] Git diff "add node → added[]" verified (Phase5GitTests + GitVersioningTests)
+- [x] Edition 6th-workflow→429 + upgrade_url verified (EditionServiceTests)
+- [x] phase-05-report.md at root; checkpoint PHASE_COMPLETE
+- [~] CI green / Trivy / Playwright S40-48 + S34-39 → run in CI/nightly (not in this environment); branch-protection checks are a repo-admin action
+- [!] 12 pre-existing integration failures carried forward → recommend fix-05
