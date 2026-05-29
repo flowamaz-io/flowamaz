@@ -10,29 +10,6 @@ public sealed class CopilotPatternMatcherTests
     private static ICopilotPatternMatcher Create() => new CopilotPatternMatcher(NullLogger<CopilotPatternMatcher>.Instance);
 
     [Theory]
-    [InlineData("Add 48h timeout to manager-gate", "add-timeout", "172800")]
-    [InlineData("add 30 minute timeout on validate-step", "add-timeout", "1800")]
-    [InlineData("add timeout of 60 seconds to send-email", "add-timeout", "60")]
-    public void AddTimeout_MatchesWithCorrectSeconds(string command, string expectedPattern, string expectedSeconds)
-    {
-        var result = Create().TryMatch(command);
-        result.Should().NotBeNull();
-        result!.PatternName.Should().Be(expectedPattern);
-        result.YamlPatch.Should().Contain(expectedSeconds);
-    }
-
-    [Theory]
-    [InlineData("Retry the SAP step 3 times", "add-retry", "3")]
-    [InlineData("retry 5 times for send-email", "add-retry", "5")]
-    public void AddRetry_MatchesWithCorrectAttempts(string command, string expectedPattern, string expectedAttempts)
-    {
-        var result = Create().TryMatch(command);
-        result.Should().NotBeNull();
-        result!.PatternName.Should().Be(expectedPattern);
-        result.YamlPatch.Should().Contain(expectedAttempts);
-    }
-
-    [Theory]
     [InlineData("connect validate-employee to amount-router", "connect-nodes")]
     [InlineData("Connect start to end", "connect-nodes")]
     public void ConnectNodes_MatchesAndProducesEdge(string command, string expectedPattern)
@@ -55,17 +32,6 @@ public sealed class CopilotPatternMatcherTests
         result.Should().NotBeNull();
         result!.PatternName.Should().Be(expectedPattern);
         result.YamlPatch.Should().Contain("human-gate");
-    }
-
-    [Theory]
-    [InlineData("Set SLA to 48 hours", "set-sla", "172800000")]
-    [InlineData("sla 2 days", "set-sla", "172800000")]
-    public void SetSla_MatchesWithCorrectMs(string command, string expectedPattern, string expectedMs)
-    {
-        var result = Create().TryMatch(command);
-        result.Should().NotBeNull();
-        result!.PatternName.Should().Be(expectedPattern);
-        result.YamlPatch.Should().Contain(expectedMs);
     }
 
     [Theory]

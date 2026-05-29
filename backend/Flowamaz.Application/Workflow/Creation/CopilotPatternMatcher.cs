@@ -36,36 +36,6 @@ public sealed partial class CopilotPatternMatcher : ICopilotPatternMatcher
 
     private static readonly IReadOnlyList<Pattern> Patterns =
     [
-        new("add-timeout",
-            AddTimeoutRegex(),
-            (_, cmd, _) =>
-            {
-                // Search the full command for number+unit (handles both orderings)
-                var numUnitMatch = NumberWithUnitRegex().Match(cmd);
-                if (!numUnitMatch.Success) return null;
-                var value = int.Parse(numUnitMatch.Groups[1].Value);
-                var unit = numUnitMatch.Groups[2].Value.ToLowerInvariant();
-                var seconds = unit is "h" or "hour" or "hours" ? value * 3600
-                    : unit is "m" or "min" or "minute" or "minutes" ? value * 60
-                    : value;
-                var nodeMatch = ToOnNodeRegex().Match(cmd);
-                var nodeId = nodeMatch.Success ? nodeMatch.Groups[1].Value.Trim() : "target-node";
-                return new PatternMatchResult("add-timeout",
-                    $"nodes[id={nodeId}].timeout.seconds: {seconds}",
-                    $"Add {seconds}s timeout to {nodeId}");
-            }),
-
-        new("add-retry",
-            AddRetryRegex(),
-            (m, _, _) =>
-            {
-                var times = int.Parse(m.Groups[1].Value);
-                var nodeId = m.Groups[2].Success && m.Groups[2].Length > 0 ? m.Groups[2].Value.Trim() : "target-node";
-                return new PatternMatchResult("add-retry",
-                    $"nodes[id={nodeId}].retry.max_attempts: {times}",
-                    $"Set retry max_attempts={times} on {nodeId}");
-            }),
-
         new("connect-nodes",
             ConnectNodesRegex(),
             (m, _, _) =>
@@ -89,20 +59,6 @@ public sealed partial class CopilotPatternMatcher : ICopilotPatternMatcher
                     $"nodes:\n  - id: {gateId}\n    type: human-gate\n    label: \"{gateLabel}\"\n    config: {{}}\n    timeout:\n      seconds: 172800\n" +
                     $"edges:\n  - id: e-{afterNode}-{gateId}\n    from: {afterNode}\n    to: {gateId}",
                     $"Add human-gate '{gateLabel}' after {afterNode}");
-            }),
-
-        new("set-sla",
-            SetSlaRegex(),
-            (m, _, _) =>
-            {
-                var value = int.Parse(m.Groups[1].Value);
-                var unit = m.Groups[2].Value.ToLowerInvariant();
-                var ms = unit is "d" or "day" or "days" ? value * 86400000L
-                    : unit is "h" or "hour" or "hours" ? value * 3600000L
-                    : value * 60000L;
-                return new PatternMatchResult("set-sla",
-                    $"spec.sla_threshold_ms: {ms}",
-                    $"Set SLA threshold to {ms}ms");
             }),
 
         new("add-error-handler",
@@ -393,26 +349,11 @@ public sealed partial class CopilotPatternMatcher : ICopilotPatternMatcher
                     "Add SOP document parsing sub-workflow node")),
     ];
 
-    [GeneratedRegex(@"(?:add|set).*?timeout|(?:add|set).*?\d+\s*(?:h|hour|m|min|s|sec|second|minute).*?timeout", RegexOptions.IgnoreCase)]
-    private static partial Regex AddTimeoutRegex();
-
-    [GeneratedRegex(@"(\d+)\s*(h|hour|hours|m|min|minute|minutes|s|sec|second|seconds)", RegexOptions.IgnoreCase)]
-    private static partial Regex NumberWithUnitRegex();
-
-    [GeneratedRegex(@"(?:to|on)\s+(\S+)", RegexOptions.IgnoreCase)]
-    private static partial Regex ToOnNodeRegex();
-
-    [GeneratedRegex(@"retry.*?(\d+)\s*times?(?:.*?(?:the|for|on)\s+(\S+))?", RegexOptions.IgnoreCase)]
-    private static partial Regex AddRetryRegex();
-
     [GeneratedRegex(@"connect\s+(\S+)\s+to\s+(\S+)", RegexOptions.IgnoreCase)]
     private static partial Regex ConnectNodesRegex();
 
     [GeneratedRegex(@"add\s+(manager\s+approval|approval|gate|review|sign.?off)(?:\s+after\s+(\S+))?", RegexOptions.IgnoreCase)]
     private static partial Regex AddHumanGateRegex();
-
-    [GeneratedRegex(@"sla.*?(\d+)\s*(h|hour|hours|d|day|days|m|min|minutes?)", RegexOptions.IgnoreCase)]
-    private static partial Regex SetSlaRegex();
 
     [GeneratedRegex(@"add\s+(?:an?\s+)?(?:error|failure)\s+handler(?:\s+(?:for|on|to)\s+(\S+))?", RegexOptions.IgnoreCase)]
     private static partial Regex AddErrorHandlerRegex();
