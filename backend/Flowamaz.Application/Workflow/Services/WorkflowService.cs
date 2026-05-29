@@ -5,6 +5,8 @@ using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Git;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
+using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Models;
 using Flowamaz.Core.Workflow;
 using Microsoft.Extensions.Logging;
 
@@ -23,6 +25,7 @@ public sealed class WorkflowService
     private readonly IUnitOfWork _unitOfWork;
     private readonly SfgParser _parser;
     private readonly IWorkspaceGitService _git;
+    private readonly IEditionService _edition;
     private readonly ILogger<WorkflowService> _logger;
 
     public WorkflowService(
@@ -32,6 +35,7 @@ public sealed class WorkflowService
         IUnitOfWork unitOfWork,
         SfgParser parser,
         IWorkspaceGitService git,
+        IEditionService edition,
         ILogger<WorkflowService> logger)
     {
         _definitions = definitions;
@@ -40,6 +44,7 @@ public sealed class WorkflowService
         _unitOfWork = unitOfWork;
         _parser = parser;
         _git = git;
+        _edition = edition;
         _logger = logger;
     }
 
@@ -59,6 +64,9 @@ public sealed class WorkflowService
         if (string.IsNullOrWhiteSpace(request.YamlContent) && request.CreatedByMethod != WorkflowCreatedByMethod.Canvas)
             throw new InvalidOperationException(
                 $"YamlContent cannot be empty for creation method {request.CreatedByMethod}. Ensure the generation step completed before calling CreateAsync.");
+
+        // Edition gate (prompt 05-07): Community edition caps the workflow count.
+        await _edition.EnsureWithinLimitAsync(workspaceId, LimitType.WorkflowCount, ct);
 
         if (await _definitions.SlugExistsInWorkspaceAsync(workspaceId, request.Slug, ct))
         {

@@ -4,6 +4,7 @@ using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Git;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
+using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -96,7 +97,8 @@ public class WorkspaceServicesCoverageTests
     private (WorkspaceMemberService svc, Mock<IWorkspaceMemberRepository> repo) NewMemberService()
     {
         var repo = new Mock<IWorkspaceMemberRepository>();
-        return (new WorkspaceMemberService(repo.Object, _uow.Object, NullLogger<WorkspaceMemberService>.Instance), repo);
+        var edition = new Mock<IEditionService>();
+        return (new WorkspaceMemberService(repo.Object, _uow.Object, edition.Object, NullLogger<WorkspaceMemberService>.Instance), repo);
     }
 
     [Fact]

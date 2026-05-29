@@ -50,6 +50,9 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
         // Docker prod path /app/data/repos, which is not writable on the test host).
         _gitReposPath = Path.Combine(Path.GetTempPath(), "flowamaz-it-git", Guid.NewGuid().ToString("N"));
         Environment.SetEnvironmentVariable("Git__ReposBasePath", _gitReposPath);
+        // Run integration tests as a cloud edition — Community hard caps (5 workflows / 1 user) would
+        // otherwise block multi-workflow / member-add scenarios. Community enforcement is unit-tested.
+        Environment.SetEnvironmentVariable("EDITION", "enterprise");
 
         await _postgres.StartAsync();
         await _redis.StartAsync();

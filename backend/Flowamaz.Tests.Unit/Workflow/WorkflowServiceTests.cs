@@ -8,6 +8,7 @@ using Flowamaz.Core.Git;
 using Flowamaz.Core.Interfaces.Git;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
+using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Workflow;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -37,6 +38,7 @@ public class WorkflowServiceTests
     private readonly Mock<IWorkflowInstanceRepository> _instances = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IWorkspaceGitService> _git = new();
+    private readonly Mock<IEditionService> _edition = new();
 
     private readonly Guid _ws = Guid.NewGuid();
     private readonly Guid _id = Guid.NewGuid();
@@ -50,7 +52,7 @@ public class WorkflowServiceTests
 
     private WorkflowService NewService() => new(
         _definitions.Object, _versions.Object, _instances.Object, _unitOfWork.Object,
-        new SfgParser(), _git.Object, NullLogger<WorkflowService>.Instance);
+        new SfgParser(), _git.Object, _edition.Object, NullLogger<WorkflowService>.Instance);
 
     private WorkflowDefinition Definition() => new()
     {

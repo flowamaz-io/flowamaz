@@ -58,6 +58,15 @@ public static class DependencyInjection
             if (string.IsNullOrEmpty(options.ReposBasePath))
                 options.ReposBasePath = configuration["GIT_REPOS_BASE_PATH"] ?? string.Empty;
         });
+
+        services.Configure<CommunityOptions>(configuration.GetSection(CommunityOptions.SectionName));
+        services.Configure<PlatformOptions>(configuration.GetSection(PlatformOptions.SectionName));
+        services.PostConfigure<PlatformOptions>(options =>
+        {
+            // The documented EDITION env var (community/starter/pro/enterprise) wins over appsettings.
+            var edition = configuration["EDITION"];
+            if (!string.IsNullOrWhiteSpace(edition)) options.Edition = edition;
+        });
     }
 
     private static void AddPersistence(IServiceCollection services, IConfiguration configuration)

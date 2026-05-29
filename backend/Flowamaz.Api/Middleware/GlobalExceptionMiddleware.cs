@@ -30,6 +30,22 @@ public sealed class GlobalExceptionMiddleware
         {
             await _next(context);
         }
+        catch (EditionLimitException limitEx)
+        {
+            // Plan/edition limit → 429 with a body the UI uses to render a targeted upgrade prompt.
+            _logger.LogWarning(limitEx,
+                "EditionLimitException handled — limit={LimitType} current={Current} max={Max}",
+                limitEx.LimitTypeKey, limitEx.CurrentValue, limitEx.LimitValue);
+            await WriteRawJsonAsync(context, limitEx.HttpStatusCode, new
+            {
+                error = "plan_limit_exceeded",
+                message = limitEx.Message,
+                upgrade_url = EditionLimitException.UpgradeUrl,
+                limit_type = limitEx.LimitTypeKey,
+                current_value = limitEx.CurrentValue,
+                limit_value = limitEx.LimitValue,
+            });
+        }
         catch (AppException appEx)
         {
             _logger.LogWarning(appEx,
@@ -75,6 +91,15 @@ public sealed class GlobalExceptionMiddleware
     private static async Task WriteJsonAsync(HttpContext context, int status, ErrorResponse body)
     {
         if (context.Response.HasStarted) return; // can't replace a partially-written response
+        context.Response.Clear();
+        context.Response.StatusCode = status;
+        context.Response.ContentType = "application/json; charset=utf-8";
+        await JsonSerializer.SerializeAsync(context.Response.Body, body, JsonOptions);
+    }
+
+    private static async Task WriteRawJsonAsync(HttpContext context, int status, object body)
+    {
+        if (context.Response.HasStarted) return;
         context.Response.Clear();
         context.Response.StatusCode = status;
         context.Response.ContentType = "application/json; charset=utf-8";

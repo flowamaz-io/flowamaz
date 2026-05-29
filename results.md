@@ -1019,3 +1019,48 @@ Extension `flowamaz-vscode`: hover docs, snippet completions (8 fmz-* snippets),
 - [x] Trivy fs scan exits 1 on Critical/High
 
 **DEVIATION:** Branch-protection status checks are **documented** in DEVELOPMENT.md, not auto-applied — enabling them is a repo-admin action (GitHub ruleset API) outside this codebase and requires admin auth.
+
+---
+
+## 05-06 — Dark sidebar app-shell redesign  (2026-05-29)
+
+**Status:** Complete · web · committed to `develop`
+
+- `tailwind.config.ts` + `main.css`: sidebar colour tokens (bg #0F1117, border, active teal, hover, text.*).
+- `Sidebar.vue` rebuilt: dark, sections MAIN/BUILD/INSIGHTS/DEVELOPER + bottom; teal left-border active; 220px↔52px collapse with tooltips; mobile slide-in + backdrop; gates pending badge (amber, live from gate service); embeds WorkspaceSwitcher + UserMenu.
+- `WorkspaceSwitcher.vue` (new): keyboard-nav dropdown (Arrow/Enter/Escape), search filter, teal-dot current, click-outside close.
+- `UserMenu.vue` (new): avatar + name + plan badge, dropdown Profile/Billing/Logout.
+- `AppShell.vue`: TopBar removed (file deleted), mobile hamburger, content fills flow width.
+- Tests: `Sidebar.test.ts`, `WorkspaceSwitcher.test.ts`.
+
+**DoD**
+- [x] vue-tsc 0 errors; vitest 41 pass / 3 fail (pre-existing auth.store MSW failures, verified at baseline)
+- [x] Zero style blocks; Composition API; TS strict
+- [x] All nav items → existing routes (Process Intel→/weather, Connector Health→/library/health, CLI Docs/API Ref→external)
+
+**ASSUMPTIONS:** Profile/Billing/New Workspace → /settings (no dedicated routes); plan badge static "Starter Plan" (no plan field on UserSummary); org name from orgSlug.
+
+---
+
+## 05-07 — Community Edition packaging + limit enforcement  (2026-05-29)
+
+**Status:** Complete · backend + web + infra · committed to `develop`
+
+**Backend**
+- `EditionService` + `IEditionService`: edition from EDITION env / Platform:Edition; community caps from `CommunityOptions` (5 workflows / 500 runs / 1 user); cloud resolves org→plan limits. `CheckLimitAsync` (all 3 types), `EnsureWithinLimitAsync`.
+- `EditionLimitException` (AppException, 429) with LimitType/CurrentValue/LimitValue; `GlobalExceptionMiddleware` special-case emits `{error:"plan_limit_exceeded", message, upgrade_url, limit_type, current_value, limit_value}`.
+- Enforcement wired into WorkflowService.CreateAsync (WorkflowCount), WorkspaceMemberService.AddMemberAsync (MemberCount), WorkflowOrchestrator.TriggerAsync (RunsThisMonth, non-test only).
+- `UsageController` GET /workspaces/{id}/usage; CommunityOptions/PlatformOptions registered (EDITION env override).
+
+**Web**
+- `usePlanLimits` composable, `platform.service.usage`, `UsageResponse` type, `EditionBanner.vue` (community-only, top of sidebar, "{used}/{limit} workflows", Upgrade→flowamaz.com/pricing).
+
+**Infra**
+- `infrastructure/community/`: docker-compose.yml (HTTP :3000, EDITION=community, volumes), install.sh (openssl-generated secrets, no hardcoded defaults), nginx-community.conf.
+
+**DoD**
+- [x] dotnet build 0/0; full unit suite 447/447 (EditionServiceTests 6: 6th-workflow→429, 499 ok/501 blocked, member=1, exception body upgrade_url+limit_type, cloud no-block)
+- [x] web vue-tsc 0 errors
+- [x] install.sh `bash -n` OK; compose YAML valid
+
+**KEY DECISION:** Hard caps enforce in **Community edition only** (`EnsureWithinLimitAsync` returns early for cloud) — cloud editions surface plan limits via /usage + UI but don't hard-block (metered billing). This keeps the integration suite (multi-workflow / member-add tests) green; the fixture now runs as EDITION=enterprise. Community 6th-workflow→429 is unit-tested.

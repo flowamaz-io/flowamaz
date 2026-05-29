@@ -18,15 +18,18 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
 {
     private readonly IWorkspaceMemberRepository _memberRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IEditionService _edition;
     private readonly ILogger<WorkspaceMemberService> _logger;
 
     public WorkspaceMemberService(
         IWorkspaceMemberRepository memberRepository,
         IUnitOfWork unitOfWork,
+        IEditionService edition,
         ILogger<WorkspaceMemberService> logger)
     {
         _memberRepository = memberRepository;
         _unitOfWork = unitOfWork;
+        _edition = edition;
         _logger = logger;
     }
 
@@ -45,6 +48,9 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
                     $"User '{orgUserId}' is already a member of workspace '{workspaceId}'. " +
                     "Update their role instead of adding them again.");
             }
+
+            // Edition gate (prompt 05-07): Community edition caps the active member count.
+            await _edition.EnsureWithinLimitAsync(workspaceId, LimitType.MemberCount, cancellationToken);
 
             var member = new WorkspaceMember
             {

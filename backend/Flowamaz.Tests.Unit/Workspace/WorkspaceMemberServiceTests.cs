@@ -14,12 +14,13 @@ public class WorkspaceMemberServiceTests
 {
     private readonly Mock<IWorkspaceMemberRepository> _memberRepo = new();
     private readonly Mock<IUnitOfWork> _uow = new();
+    private readonly Mock<Flowamaz.Core.Interfaces.Services.IEditionService> _edition = new();
     private readonly Guid _workspaceId = Guid.NewGuid();
 
     private WorkspaceMemberService CreateService()
     {
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        return new WorkspaceMemberService(_memberRepo.Object, _uow.Object, NullLogger<WorkspaceMemberService>.Instance);
+        return new WorkspaceMemberService(_memberRepo.Object, _uow.Object, _edition.Object, NullLogger<WorkspaceMemberService>.Instance);
     }
 
     [Fact]

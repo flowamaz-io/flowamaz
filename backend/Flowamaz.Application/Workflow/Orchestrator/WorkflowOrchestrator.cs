@@ -30,9 +30,11 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
     private readonly IUnitOfWork _unitOfWork;
     private readonly SfgParser _parser;
     private readonly ILogger<WorkflowOrchestrator> _logger;
-    // Optional so unit tests can construct the orchestrator without the saga engine; DI supplies it
-    // at runtime. When present, a terminal failure with a compensation block runs the saga.
+    // Optional so unit tests can construct the orchestrator without these; DI supplies them at
+    // runtime. _sagaEngine: terminal failure with a compensation block runs the saga. _edition:
+    // Community-edition run-limit enforcement (prompt 05-07) — a no-op in cloud editions.
     private readonly ISagaEngine? _sagaEngine;
+    private readonly IEditionService? _edition;
 
     public WorkflowOrchestrator(
         IWorkflowDefinitionRepository definitions,
@@ -46,7 +48,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         IUnitOfWork unitOfWork,
         SfgParser parser,
         ILogger<WorkflowOrchestrator> logger,
-        ISagaEngine? sagaEngine = null)
+        ISagaEngine? sagaEngine = null,
+        IEditionService? edition = null)
     {
         _definitions = definitions;
         _versions = versions;
@@ -60,6 +63,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _parser = parser;
         _logger = logger;
         _sagaEngine = sagaEngine;
+        _edition = edition;
     }
 
     public async Task<WorkflowInstance> TriggerAsync(
@@ -88,6 +92,12 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                         idempotencyKey, existing.Id);
                     return existing;
                 }
+            }
+
+            // Edition gate (prompt 05-07): Community edition caps real (non-test) runs per month.
+            if (!isTest && _edition is not null)
+            {
+                await _edition.EnsureWithinLimitAsync(workspaceId, Core.Models.LimitType.RunsThisMonth, cancellationToken);
             }
 
             var definition = await _definitions.GetByIdForWorkspaceAsync(workflowDefinitionId, workspaceId, cancellationToken)
