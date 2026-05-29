@@ -65,6 +65,31 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
     return { patch: result.yamlPatch, pattern: result.matchedPattern };
   }
 
+  async function validate(): Promise<{ errors: Array<{ message: string; line?: number }>; warnings: Array<{ message: string; line?: number }> } | null> {
+    if (!yaml.value.trim()) { validationErrors.value = []; return null; }
+    try {
+      const result = await workflowService.validate(workspaceId, yaml.value);
+      validationErrors.value = [
+        ...result.errors.map((e: { message: string; line?: number }) => ({
+          from: lineToOffset(yaml.value, (e.line ?? 1) - 1),
+          to: lineToOffset(yaml.value, e.line ?? 1),
+          message: e.message,
+          severity: 'error' as const,
+        })),
+        ...result.warnings.map((w: { message: string; line?: number }) => ({
+          from: lineToOffset(yaml.value, (w.line ?? 1) - 1),
+          to: lineToOffset(yaml.value, w.line ?? 1),
+          message: w.message,
+          severity: 'warning' as const,
+        })),
+      ];
+      return result;
+    } catch {
+      validationErrors.value = [];
+      return null;
+    }
+  }
+
   function applyPatch(patch: string): string | null {
     try {
       const patchDoc = jsYaml.load(patch) as Record<string, unknown> | null;
@@ -116,6 +141,7 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
       }
 
       current.spec = currentSpec;
+      validationErrors.value = []; // clear stale markers before patch lands
       yaml.value = jsYaml.dump(current, { indent: 2, lineWidth: -1, quotingType: '"', forceQuotes: false });
       return null;
     } catch {
@@ -135,7 +161,7 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
 
   return {
     yaml, healthScore, saveState, isDirty, validationErrors, copilotHistory, splitRatio,
-    loadWorkflow, validateDebounced, save, sendCopilotCommand, applyPatch, updateSplitRatio,
+    loadWorkflow, validateDebounced, validate, save, sendCopilotCommand, applyPatch, updateSplitRatio,
   };
 }
 

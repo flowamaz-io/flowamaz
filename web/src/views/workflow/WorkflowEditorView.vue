@@ -9,6 +9,7 @@ import { useWorkflowEditor } from '../../composables/useWorkflowEditor';
 import { useHelp } from '../../composables/useHelp';
 import { useWorkspace } from '../../composables/useWorkspace';
 import { useWorkflowStore } from '../../stores/workflow.store';
+import { useToast } from '../../composables/useToast';
 
 const route = useRoute();
 const ws = useWorkspace();
@@ -19,8 +20,10 @@ const workflowStore = useWorkflowStore();
 const {
   yaml, healthScore, saveState, isDirty, validationErrors,
   copilotHistory, splitRatio,
-  loadWorkflow, validateDebounced, save, sendCopilotCommand, applyPatch, updateSplitRatio,
+  loadWorkflow, validateDebounced, validate, save, sendCopilotCommand, applyPatch, updateSplitRatio,
 } = useWorkflowEditor(workspaceId, workflowId);
+
+const toast = useToast();
 
 const { openArticle } = useHelp();
 
@@ -75,6 +78,20 @@ async function onCopilotCommand(cmd: string) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Request failed';
     copilotPanelRef.value?.setResult(null, null, `Co-pilot request failed: ${msg}. Check your connection and try again.`);
+  }
+}
+
+async function validateAndShowToast() {
+  const result = await validate();
+  if (!result) return;
+  const errorCount = result.errors.length;
+  const warnCount = result.warnings.length;
+  if (errorCount > 0) {
+    toast.error(`Validation failed — ${errorCount} error${errorCount !== 1 ? 's' : ''} found. Fix before publishing.`);
+  } else if (warnCount > 0) {
+    toast.warning(`Valid with ${warnCount} warning${warnCount !== 1 ? 's' : ''} — can publish but review recommended`);
+  } else {
+    toast.success('Workflow is valid — ready to publish');
   }
 }
 
@@ -146,7 +163,7 @@ onUnmounted(() => {
 
         <button
           class="text-xs bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg px-3 py-1.5"
-          @click="validateDebounced()"
+          @click="validateAndShowToast"
         >Validate</button>
 
         <button

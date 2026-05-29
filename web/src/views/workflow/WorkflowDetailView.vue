@@ -35,7 +35,10 @@ const yamlContent = ref('');
 const yamlDirty = ref(false);
 const saving = ref(false);
 const copied = ref(false);
-const validationErrors = ref<Array<{ message: string; code?: string }>>([]);
+const validating = ref(false);
+const validationErrors = ref<Array<{ message: string; severity: 'error' | 'warning' }>>([]);
+const hasErrors = computed(() => validationErrors.value.some(e => e.severity === 'error'));
+const hasWarnings = computed(() => !hasErrors.value && validationErrors.value.length > 0);
 
 const triggerOpen = ref(false);
 const forceTestRun = ref(false);
@@ -104,7 +107,42 @@ function openInCanvas(): void {
   router.push({ name: 'workflow-editor', params: { id: id.value }, query: { workspace: workspaceId.value } });
 }
 
-onMounted(() => store.loadWorkflow(id.value));
+async function validateYaml(showToast = true): Promise<void> {
+  const content = yamlContent.value || currentWorkflow.value?.yamlContent;
+  if (!content?.trim()) return;
+  validating.value = true;
+  try {
+    const result = await workflowService.validate(workspaceId.value, content);
+    validationErrors.value = [
+      ...result.errors.map(e => ({ message: e.message, severity: 'error' as const })),
+      ...result.warnings.map(w => ({ message: w.message, severity: 'warning' as const })),
+    ];
+    if (!showToast) return;
+    const errorCount = result.errors.length;
+    const warnCount = result.warnings.length;
+    if (errorCount > 0) {
+      toast.error(`Validation failed — ${errorCount} error${errorCount !== 1 ? 's' : ''} found. Fix before publishing.`);
+    } else if (warnCount > 0) {
+      toast.warning(`Valid with ${warnCount} warning${warnCount !== 1 ? 's' : ''} — can publish but review recommended`);
+    } else {
+      toast.success('Workflow is valid — ready to publish');
+    }
+  } catch {
+    // silent — validation is best-effort
+  } finally {
+    validating.value = false;
+  }
+}
+
+async function loadAndValidate(): Promise<void> {
+  await store.loadWorkflow(id.value);
+  if (currentWorkflow.value?.yamlContent) {
+    yamlContent.value = currentWorkflow.value.yamlContent;
+    await validateYaml(false); // silent on load — only update dot indicator
+  }
+}
+
+onMounted(loadAndValidate);
 watch(id, () => store.loadWorkflow(id.value));
 </script>
 
@@ -190,7 +228,12 @@ watch(id, () => store.loadWorkflow(id.value));
           ]"
           @click="loadTab(tab)"
         >
-          {{ tab }}
+          <span v-if="tab === 'yaml'" class="flex items-center gap-1.5">
+            Yaml
+            <span v-if="hasErrors" class="w-2 h-2 rounded-full bg-red-500" />
+            <span v-else-if="hasWarnings" class="w-2 h-2 rounded-full bg-amber-400" />
+          </span>
+          <template v-else>{{ tab }}</template>
         </button>
       </div>
 
@@ -355,6 +398,13 @@ watch(id, () => store.loadWorkflow(id.value));
               {{ copied ? 'Copied!' : 'Copy' }}
             </button>
             <button
+              :disabled="validating"
+              class="text-xs text-gray-600 border border-gray-300 px-3 py-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              @click="() => validateYaml(true)"
+            >
+              {{ validating ? 'Validating...' : 'Validate' }}
+            </button>
+            <button
               :disabled="!yamlDirty || saving"
               class="text-xs bg-teal-500 text-white px-3 py-1 rounded hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               @click="saveYaml"
@@ -374,16 +424,16 @@ watch(id, () => store.loadWorkflow(id.value));
 
         <div
           v-if="validationErrors.length > 0"
-          class="border-t border-amber-200 bg-amber-50 p-3"
+          :class="['border-t p-3', hasErrors ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50']"
         >
-          <p class="text-xs font-medium text-amber-700 mb-1">
-            Validation issues (workflow saved but cannot be published until resolved):
+          <p :class="['text-xs font-medium mb-1', hasErrors ? 'text-red-700' : 'text-amber-700']">
+            {{ hasErrors ? 'Validation errors — fix before publishing:' : 'Validation warnings — can publish but review recommended:' }}
           </p>
           <ul class="space-y-1">
             <li
               v-for="err in validationErrors"
-              :key="err.code ?? err.message"
-              class="text-xs text-amber-600"
+              :key="err.message"
+              :class="['text-xs', err.severity === 'error' ? 'text-red-600' : 'text-amber-600']"
             >
               {{ err.message }}
             </li>
