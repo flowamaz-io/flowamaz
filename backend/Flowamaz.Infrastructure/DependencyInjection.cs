@@ -124,6 +124,9 @@ public static class DependencyInjection
 
         services.AddSingleton<IConnectionMultiplexer>(_ =>
             ConnectionMultiplexer.Connect(redisConnection));
+
+        // CLI device-flow auth (prompt 05-02) — device/user codes stored in Redis with TTL.
+        services.AddSingleton<ICliAuthService, Services.CliAuthService>();
     }
 
     private static void AddAiServices(IServiceCollection services)

@@ -942,3 +942,24 @@ Date: 2026-05-26
 - [x] Serilog entry/exit/error on all new functions; zero Vue style blocks
 
 **KNOWN ISSUE (pre-existing, NOT introduced by 05-01):** Full integration suite has 13 failing tests on `develop` HEAD, confirmed by stash-and-run at baseline (no Git code present). Areas: Phase3 NL-generate/validate, Phase3 DNA, Phase4 AI-node/gate/OAuth, Phase2 invalid-yaml, RateLimit window expiry — likely environmental (AI stub / Redis timing) or regressions predating Phase 5. To be triaged in 05-08 (checkpoint flags S34–S39 must be green).
+
+---
+
+## 05-02 — fmz CLI + CLI device-flow auth  (2026-05-29)
+
+**Status:** Complete · TS CLI (`cli/`) + backend device-flow auth · committed to `develop`
+
+**CLI (`cli/`, `@flowamaz/cli`, bin `fmz`)** — Commander, axios, chalk@4, cli-table3, js-yaml, open; keytar optional (dynamic require, file fallback). Commands: auth (login/logout/whoami), workspace (list/use/create/members), workflow (list/get/create/update/validate/publish/deploy), instance (trigger/status/logs/cancel/retry), library + connector/template scaffolding, version (history/diff/checkout). Global --json/--yaml/--quiet. FMZ_API_KEY (CI) > stored token; FMZ_API_URL, FMZ_WORKSPACE, FMZ_CONFIG_DIR honored. Vitest: 4 files / 17 tests pass (api-client FMZ_API_KEY precedence, output table, config round-trip, validate render+exit-code). `npm install`/`build`/`test` all green.
+
+**Backend — CLI device flow**
+- `Flowamaz.Core/Models/CliAuth.cs` — CliDeviceAuthorization, CliTokenResult
+- `Flowamaz.Core/Interfaces/Services/ICliAuthService.cs`
+- `Flowamaz.Infrastructure/Services/CliAuthService.cs` — Redis-backed device/user codes (10-min TTL, unambiguous user-code alphabet), one-time token hand-off; binds approving user's bearer token
+- `Flowamaz.Api/Controllers/CliAuthController.cs` — POST device, POST approve (auth), GET token (202/200), GET callback (HTML "CLI connected ✓")
+- DI: ICliAuthService singleton (Redis)
+
+**DoD**
+- [x] dotnet build 0/0; CliAuthControllerTests 7/7 pass
+- [x] CLI: build 0 errors, 17/17 vitest
+- [x] FMZ_API_KEY env used instead of user token (unit-tested both layers)
+- [x] Serilog entry/exit/error on CliAuthService
