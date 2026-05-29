@@ -963,3 +963,16 @@ Date: 2026-05-26
 - [x] CLI: build 0 errors, 17/17 vitest
 - [x] FMZ_API_KEY env used instead of user token (unit-tested both layers)
 - [x] Serilog entry/exit/error on CliAuthService
+
+---
+
+## 05-03 — VS Code extension  (2026-05-29)
+
+**Status:** Complete · `vscode-extension/` · committed to `develop`
+
+Extension `flowamaz-vscode`: hover docs, snippet completions (8 fmz-* snippets), graph diagnostics (orphan/missing-edge/no-trigger/no-end via js-yaml + `fmz validate` subprocess), CodeLens (▶ Trigger / 📊 Open in App / ✓ Validate above workflow header), instance tree view (workspace workflows, FMZ_API_KEY), status bar, 6 palette commands, workflow-v1 JSON schema. Architecture: pure vscode-free `core/` modules (testable) + thin `providers/` wrappers. Activation gated on isFlowamazWorkflow so it doesn't fire on unrelated YAML.
+
+**DoD**
+- [x] npm install / build (tsc strict) 0 errors / test all green
+- [x] Vitest 22 tests (6 files) — hoverDocs, snippets, graphDiagnostics, codeLens, workflowMapper, isFlowamazDoc — NO Electron download
+- [x] Tests assert: hover `type` doc, `fmz-action` snippet present, orphaned-node diagnostic, 3 CodeLenses on workflow file
