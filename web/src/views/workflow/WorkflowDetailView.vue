@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { Pencil, Play } from 'lucide-vue-next';
+import { Pencil, Play, XCircle, AlertTriangle } from 'lucide-vue-next';
 import TriggerModal from '@/components/workflow/TriggerModal.vue';
 import FmBadge from '@/components/common/FmBadge.vue';
 import FmButton from '@/components/common/FmButton.vue';
@@ -36,11 +36,8 @@ const yamlDirty = ref(false);
 const saving = ref(false);
 const copied = ref(false);
 const validating = ref(false);
-const showValid = ref(false);
-const validationErrors = ref<Array<{ message: string; severity: 'error' | 'warning' }>>([]);
-const hasErrors = computed(() => validationErrors.value.some(e => e.severity === 'error'));
-const tabHasErrors = ref(false);
-const tabHasWarnings = ref(false);
+const validationErrors = ref<Array<{ message: string; line?: number }>>([]);
+const validationWarnings = ref<Array<{ message: string; line?: number }>>([]);
 
 const triggerOpen = ref(false);
 const forceTestRun = ref(false);
@@ -85,9 +82,9 @@ async function saveYaml(): Promise<void> {
     const updated = await workflowService.update(workspaceId.value, id.value, { yamlContent: yamlContent.value });
     currentWorkflow.value = updated;
     yamlDirty.value = false;
-    validationErrors.value = [];
     store.bumpYamlVersion();
     toast.success('YAML saved.');
+    await validateYaml(false);
   } catch (err) {
     toast.error(toUserFacingError(err).message);
   } finally {
@@ -114,19 +111,11 @@ async function validateYaml(showToast = true): Promise<void> {
   if (!content?.trim()) return;
   validating.value = true;
   validationErrors.value = [];
-  showValid.value = false;
+  validationWarnings.value = [];
   try {
     const result = await workflowService.validate(workspaceId.value, content);
-    validationErrors.value = [
-      ...result.errors.map(e => ({ message: e.message, severity: 'error' as const })),
-      ...result.warnings.map(w => ({ message: w.message, severity: 'warning' as const })),
-    ];
-    tabHasErrors.value = result.errors.length > 0;
-    tabHasWarnings.value = result.warnings.length > 0 && result.errors.length === 0;
-    if (result.errors.length === 0 && result.warnings.length === 0) {
-      showValid.value = true;
-      setTimeout(() => { showValid.value = false; }, 2000);
-    }
+    validationErrors.value = result.errors ?? [];
+    validationWarnings.value = result.warnings ?? [];
     if (!showToast) return;
     const errorCount = result.errors.length;
     const warnCount = result.warnings.length;
@@ -241,10 +230,14 @@ watch(id, () => store.loadWorkflow(id.value));
         >
           <span v-if="tab === 'yaml'" class="flex items-center gap-1.5">
             Yaml
-            <span v-if="validating" class="w-2 h-2 rounded-full bg-gray-300 animate-pulse" />
-            <span v-else-if="tabHasErrors" class="w-2 h-2 rounded-full bg-red-500" />
-            <span v-else-if="tabHasWarnings" class="w-2 h-2 rounded-full bg-amber-400" />
-            <span v-else-if="showValid" class="text-emerald-500 text-xs leading-none">✓</span>
+            <span v-if="validationWarnings.length > 0 && validationErrors.length === 0"
+              class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+              {{ validationWarnings.length }}
+            </span>
+            <span v-if="validationErrors.length > 0"
+              class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+              {{ validationErrors.length }}
+            </span>
           </span>
           <template v-else>{{ tab }}</template>
         </button>
@@ -436,21 +429,43 @@ watch(id, () => store.loadWorkflow(id.value));
         </div>
 
         <div
-          v-if="validationErrors.length > 0"
-          :class="['border-t p-3', hasErrors ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50']"
+          v-if="validationErrors.length > 0 || validationWarnings.length > 0"
+          class="border-t border-gray-200 bg-gray-50"
         >
-          <p :class="['text-xs font-medium mb-1', hasErrors ? 'text-red-700' : 'text-amber-700']">
-            {{ hasErrors ? 'Validation errors — fix before publishing:' : 'Validation warnings — can publish but review recommended:' }}
-          </p>
-          <ul class="space-y-1">
-            <li
-              v-for="err in validationErrors"
-              :key="err.message"
-              :class="['text-xs', err.severity === 'error' ? 'text-red-600' : 'text-amber-600']"
-            >
-              {{ err.message }}
-            </li>
-          </ul>
+          <div v-if="validationErrors.length > 0" class="p-3">
+            <p class="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">
+              Errors ({{ validationErrors.length }}) — must fix before publishing
+            </p>
+            <ul class="space-y-1">
+              <li
+                v-for="err in validationErrors"
+                :key="err.message"
+                class="flex items-start gap-2 text-sm text-red-700"
+              >
+                <XCircle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{{ err.message }}</span>
+              </li>
+            </ul>
+          </div>
+          <div
+            v-if="validationWarnings.length > 0"
+            class="p-3"
+            :class="validationErrors.length > 0 ? 'border-t border-gray-200' : ''"
+          >
+            <p class="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">
+              Warnings ({{ validationWarnings.length }}) — can publish but review recommended
+            </p>
+            <ul class="space-y-1">
+              <li
+                v-for="warn in validationWarnings"
+                :key="warn.message"
+                class="flex items-start gap-2 text-sm text-amber-700"
+              >
+                <AlertTriangle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{{ warn.message }}</span>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
     </template>
