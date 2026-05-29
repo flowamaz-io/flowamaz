@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { Pencil, Play } from 'lucide-vue-next';
@@ -39,7 +39,8 @@ const validating = ref(false);
 const showValid = ref(false);
 const validationErrors = ref<Array<{ message: string; severity: 'error' | 'warning' }>>([]);
 const hasErrors = computed(() => validationErrors.value.some(e => e.severity === 'error'));
-const hasWarnings = computed(() => !hasErrors.value && validationErrors.value.length > 0);
+const tabHasErrors = ref(false);
+const tabHasWarnings = ref(false);
 
 const triggerOpen = ref(false);
 const forceTestRun = ref(false);
@@ -120,6 +121,8 @@ async function validateYaml(showToast = true): Promise<void> {
       ...result.errors.map(e => ({ message: e.message, severity: 'error' as const })),
       ...result.warnings.map(w => ({ message: w.message, severity: 'warning' as const })),
     ];
+    tabHasErrors.value = result.errors.length > 0;
+    tabHasWarnings.value = result.warnings.length > 0 && result.errors.length === 0;
     if (result.errors.length === 0 && result.warnings.length === 0) {
       showValid.value = true;
       setTimeout(() => { showValid.value = false; }, 2000);
@@ -143,9 +146,10 @@ async function validateYaml(showToast = true): Promise<void> {
 
 async function loadAndValidate(): Promise<void> {
   await store.loadWorkflow(id.value);
+  await nextTick();
   if (currentWorkflow.value?.yamlContent) {
     yamlContent.value = currentWorkflow.value.yamlContent;
-    await validateYaml(false); // silent on load — only update dot indicator
+    await validateYaml(false);
   }
 }
 
@@ -238,9 +242,9 @@ watch(id, () => store.loadWorkflow(id.value));
           <span v-if="tab === 'yaml'" class="flex items-center gap-1.5">
             Yaml
             <span v-if="validating" class="w-2 h-2 rounded-full bg-gray-300 animate-pulse" />
+            <span v-else-if="tabHasErrors" class="w-2 h-2 rounded-full bg-red-500" />
+            <span v-else-if="tabHasWarnings" class="w-2 h-2 rounded-full bg-amber-400" />
             <span v-else-if="showValid" class="text-emerald-500 text-xs leading-none">✓</span>
-            <span v-else-if="hasErrors" class="w-2 h-2 rounded-full bg-red-500" />
-            <span v-else-if="hasWarnings" class="w-2 h-2 rounded-full bg-amber-400" />
           </span>
           <template v-else>{{ tab }}</template>
         </button>
