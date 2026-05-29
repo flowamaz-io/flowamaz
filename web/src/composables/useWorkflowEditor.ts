@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
+import * as jsYaml from 'js-yaml';
 import { workflowService } from '@/services/workflow.service';
 import { creationService } from '@/services/creation.service';
 
@@ -65,7 +66,49 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
   }
 
   function applyPatch(patch: string) {
-    yaml.value = yaml.value + '\n# Co-pilot patch\n' + patch;
+    try {
+      const current = jsYaml.load(yaml.value) as Record<string, unknown>;
+      const patchDoc = jsYaml.load(patch) as Record<string, unknown>;
+      const currentSpec = (current?.spec ?? {}) as Record<string, unknown>;
+      const patchSpec = (patchDoc?.spec ?? {}) as Record<string, unknown>;
+
+      // Merge nodes — add new, skip duplicates
+      const currentNodes = (currentSpec.nodes as Array<Record<string, unknown>>) ?? [];
+      const patchNodes = (patchSpec.nodes as Array<Record<string, unknown>>) ?? [];
+      if (patchNodes.length) {
+        const existingIds = new Set(currentNodes.map(n => n.id));
+        for (const node of patchNodes) {
+          if (!existingIds.has(node.id)) currentNodes.push(node);
+        }
+        currentSpec.nodes = currentNodes;
+      }
+
+      // Merge edges — update existing by id, add new
+      const currentEdges = (currentSpec.edges as Array<Record<string, unknown>>) ?? [];
+      const patchEdges = (patchSpec.edges as Array<Record<string, unknown>>) ?? [];
+      if (patchEdges.length) {
+        const existingEdgeIds = new Set(currentEdges.map(e => e.id));
+        for (const edge of patchEdges) {
+          if (existingEdgeIds.has(edge.id)) {
+            const idx = currentEdges.findIndex(e => e.id === edge.id);
+            currentEdges[idx] = edge;
+          } else {
+            currentEdges.push(edge);
+          }
+        }
+        currentSpec.edges = currentEdges;
+      }
+
+      // Merge variables if present
+      if (patchSpec.variables) {
+        currentSpec.variables = { ...(currentSpec.variables as object ?? {}), ...(patchSpec.variables as object) };
+      }
+
+      current.spec = currentSpec;
+      yaml.value = jsYaml.dump(current, { indent: 2, lineWidth: -1, quotingType: '"', forceQuotes: false });
+    } catch {
+      // Do not corrupt the existing YAML — leave it unchanged
+    }
   }
 
   function updateSplitRatio(ratio: number) {
