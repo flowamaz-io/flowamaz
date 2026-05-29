@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Flowamaz.Application.Workflow.Creation;
+using Flowamaz.Core.Constants;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
@@ -181,7 +182,7 @@ public sealed class CopilotServiceTests
         result.YamlPatch.Should().Be("patch: value");
         result.CacheHit.Should().BeFalse();
         metering.Verify(m => m.RecordUsage(
-            "F1", It.IsAny<string>(), It.IsAny<string>(), null, WorkspaceId,
+            AiFunctionIds.Copilot, It.IsAny<string>(), It.IsAny<string>(), null, WorkspaceId,
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<decimal>()), Times.Once);
     }
 }

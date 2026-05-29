@@ -1,6 +1,7 @@
 using System.Text;
 using FluentAssertions;
 using Flowamaz.Application.Workflow.Creation;
+using Flowamaz.Core.Constants;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
@@ -69,7 +70,7 @@ public sealed class SopParsingServiceTests
         result.PageCount.Should().Be(1);
         result.WordCount.Should().BeGreaterThan(0);
         metering.Verify(m => m.RecordUsage(
-            "F7", It.IsAny<string>(), It.IsAny<string>(), null, WorkspaceId,
+            AiFunctionIds.DocParse, It.IsAny<string>(), It.IsAny<string>(), null, WorkspaceId,
             It.IsAny<int>(), It.IsAny<int>(), It.IsAny<decimal>()), Times.Once);
     }
 

@@ -1,4 +1,5 @@
 using System.Text;
+using Flowamaz.Core.Constants;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
@@ -18,7 +19,7 @@ public sealed class SopParsingService : ISopParsingService
     private readonly INlYamlGenerationService _nlGenerator;
     private readonly ILogger<SopParsingService> _log;
 
-    private const string FunctionId = "F7";
+    private const string FunctionId = AiFunctionIds.DocParse;
 
     private const string ExtractionSystemPrompt =
         "You are a process analyst. Given a document extract, identify the process steps. " +

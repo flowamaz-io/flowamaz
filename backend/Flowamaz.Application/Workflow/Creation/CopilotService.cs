@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Flowamaz.Core.Constants;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
@@ -18,7 +19,7 @@ public sealed class CopilotService : ICopilotService
     private readonly IAiTokenMeteringService _metering;
     private readonly ILogger<CopilotService> _log;
 
-    private const string FunctionId = "F1";
+    private const string FunctionId = AiFunctionIds.Copilot;
     private const string SystemPrompt =
         "You are Flowamaz Co-pilot. The user is editing a workflow YAML. " +
         "Given the user's command and optionally the current YAML, produce ONLY a minimal YAML patch " +
