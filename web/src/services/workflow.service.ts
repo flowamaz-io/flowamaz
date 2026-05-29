@@ -4,8 +4,11 @@ import type {
   CreateWorkflowDefinitionRequest,
   PagedResult,
   UpdateWorkflowDefinitionRequest,
+  WorkflowAtCommitResponse,
+  WorkflowCommit,
   WorkflowDefinitionListItem,
   WorkflowDefinitionResponse,
+  WorkflowDiff,
   WorkflowVersionResponse,
 } from '@/types';
 
@@ -46,6 +49,21 @@ export const workflowService = {
 
   async publish(workspaceId: string, id: string): Promise<WorkflowVersionResponse> {
     const res = await http.post<ApiEnvelope<WorkflowVersionResponse>>(`${base(workspaceId)}/${id}/publish`, {});
+    return unwrap(res);
+  },
+
+  async history(workspaceId: string, id: string): Promise<WorkflowCommit[]> {
+    const res = await http.get<ApiEnvelope<WorkflowCommit[]>>(`${base(workspaceId)}/${id}/history`);
+    return unwrap(res);
+  },
+
+  async diff(workspaceId: string, id: string, from: string, to: string): Promise<WorkflowDiff> {
+    const res = await http.get<ApiEnvelope<WorkflowDiff>>(`${base(workspaceId)}/${id}/diff`, { params: { from, to } });
+    return unwrap(res);
+  },
+
+  async at(workspaceId: string, id: string, commitSha: string): Promise<WorkflowAtCommitResponse> {
+    const res = await http.get<ApiEnvelope<WorkflowAtCommitResponse>>(`${base(workspaceId)}/${id}/at/${commitSha}`);
     return unwrap(res);
   },
 

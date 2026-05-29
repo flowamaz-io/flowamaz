@@ -60,6 +60,41 @@ export interface WorkflowVersionResponse {
   createdAt: string;
 }
 
+export interface WorkflowCommit {
+  sha: string;
+  shortSha: string;
+  message: string;
+  authorName: string;
+  authorEmail: string;
+  committedAt: string;
+}
+
+export interface WorkflowDiffLine {
+  type: 'added' | 'removed' | 'context';
+  content: string;
+  oldLineNumber: number | null;
+  newLineNumber: number | null;
+}
+
+export interface WorkflowDiffSummary {
+  addedNodes: string[];
+  removedNodes: string[];
+  modifiedNodes: string[];
+}
+
+export interface WorkflowDiff {
+  fromSha: string;
+  toSha: string;
+  lines: WorkflowDiffLine[];
+  summary: WorkflowDiffSummary;
+}
+
+export interface WorkflowAtCommitResponse {
+  workflowId: string;
+  commitSha: string;
+  yamlContent: string;
+}
+
 export interface CreateWorkflowDefinitionRequest {
   name: string;
   slug: string;

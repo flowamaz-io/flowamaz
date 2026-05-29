@@ -1,6 +1,7 @@
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Exceptions;
+using Flowamaz.Core.Interfaces.Git;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
@@ -18,17 +19,20 @@ public sealed class WorkspaceService : IWorkspaceService
     private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IWorkspaceMemberRepository _memberRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IWorkspaceGitService _git;
     private readonly ILogger<WorkspaceService> _logger;
 
     public WorkspaceService(
         IWorkspaceRepository workspaceRepository,
         IWorkspaceMemberRepository memberRepository,
         IUnitOfWork unitOfWork,
+        IWorkspaceGitService git,
         ILogger<WorkspaceService> logger)
     {
         _workspaceRepository = workspaceRepository;
         _memberRepository = memberRepository;
         _unitOfWork = unitOfWork;
+        _git = git;
         _logger = logger;
     }
 
@@ -85,6 +89,20 @@ public sealed class WorkspaceService : IWorkspaceService
                     await transaction.RollbackAsync(cancellationToken);
                     throw;
                 }
+            }
+
+            // Provision the workspace's bare Git repository (FUNCTIONAL.md §2.6). Repo init failures
+            // must not roll back an already-committed workspace — the migration job + lazy self-heal
+            // in WorkspaceGitService recover any workspace that ends up without a repo.
+            try
+            {
+                await _git.InitialiseRepoAsync(workspace.Id, cancellationToken);
+            }
+            catch (Exception gitEx)
+            {
+                _logger.LogWarning(gitEx,
+                    "WorkspaceService.CreateWorkspaceAsync git-init-deferred workspaceId={WorkspaceId} — repo will be created on first commit",
+                    workspace.Id);
             }
 
             _logger.LogInformation(

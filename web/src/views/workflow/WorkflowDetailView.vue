@@ -9,6 +9,8 @@ import FmButton from '@/components/common/FmButton.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import FmYamlEditor from '@/components/editor/FmYamlEditor.vue';
+import FmVersionDiffView from '@/components/workflow/FmVersionDiffView.vue';
+import type { WorkflowCommit } from '@/types';
 import { useWorkflowStore } from '@/stores/workflow.store';
 import { useWorkspaceStore } from '@/stores/workspace.store';
 import { workflowService } from '@/services/workflow.service';
@@ -24,7 +26,7 @@ const router = useRouter();
 const store = useWorkflowStore();
 const workspaceStore = useWorkspaceStore();
 const toast = useToast();
-const { currentWorkflow, versions, instances, loading, error } = storeToRefs(store);
+const { currentWorkflow, instances, loading, error } = storeToRefs(store);
 
 const id = computed(() => String(route.params.id));
 const workspaceId = computed(() => workspaceStore.currentWorkspaceId ?? '');
@@ -42,6 +44,55 @@ const validationWarnings = ref<Array<{ message: string; line?: number }>>([]);
 const triggerOpen = ref(false);
 const forceTestRun = ref(false);
 
+// Git version history (prompt 05-01).
+const history = ref<WorkflowCommit[]>([]);
+const historyLoading = ref(false);
+const historyError = ref<string | null>(null);
+
+const diffOpen = ref(false);
+const diffFrom = ref('');
+const diffTo = ref('');
+
+const viewOpen = ref(false);
+const viewSha = ref('');
+const viewYaml = ref('');
+const viewLoading = ref(false);
+
+async function loadHistory(): Promise<void> {
+  historyLoading.value = true;
+  historyError.value = null;
+  try {
+    history.value = await workflowService.history(workspaceId.value, id.value);
+  } catch (err) {
+    historyError.value = toUserFacingError(err).message;
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+function openDiff(commit: WorkflowCommit): void {
+  // Compare this commit (from) against the most recent commit (to).
+  diffFrom.value = commit.sha;
+  diffTo.value = history.value[0]?.sha ?? commit.sha;
+  diffOpen.value = true;
+}
+
+async function openView(commit: WorkflowCommit): Promise<void> {
+  viewSha.value = commit.sha;
+  viewYaml.value = '';
+  viewOpen.value = true;
+  viewLoading.value = true;
+  try {
+    const result = await workflowService.at(workspaceId.value, id.value, commit.sha);
+    viewYaml.value = result.yamlContent;
+  } catch (err) {
+    toast.error(toUserFacingError(err).message);
+    viewOpen.value = false;
+  } finally {
+    viewLoading.value = false;
+  }
+}
+
 function openTriggerRun(): void {
   forceTestRun.value = false;
   triggerOpen.value = true;
@@ -58,7 +109,7 @@ watch(currentWorkflow, (wf) => {
 
 async function loadTab(tab: Tab): Promise<void> {
   activeTab.value = tab;
-  if (tab === 'versions') await store.loadVersions(id.value);
+  if (tab === 'versions') await loadHistory();
   if (tab === 'instances') await store.loadInstances({ workflowDefinitionId: id.value });
   if (tab === 'yaml') yamlContent.value = currentWorkflow.value?.yamlContent ?? '';
 }
@@ -68,7 +119,7 @@ async function publish(): Promise<void> {
   try {
     await store.publishWorkflow(id.value);
     toast.success('Workflow published.');
-    if (activeTab.value === 'versions') await store.loadVersions(id.value);
+    if (activeTab.value === 'versions') await loadHistory();
   } catch (err) {
     toast.error(toUserFacingError(err).message);
   } finally {
@@ -363,29 +414,75 @@ watch(id, () => store.loadWorkflow(id.value));
         v-else-if="activeTab === 'versions'"
         class="overflow-hidden rounded-xl border border-slate-200 bg-white"
       >
-        <ul class="divide-y divide-slate-100 text-sm">
+        <div
+          v-if="historyLoading"
+          class="flex justify-center py-10"
+        >
+          <FmSpinner />
+        </div>
+
+        <FmErrorState
+          v-else-if="historyError"
+          title="Couldn't load version history"
+          :description="historyError"
+          action-label="Retry"
+          @action="loadHistory"
+        />
+
+        <ul
+          v-else
+          class="divide-y divide-slate-100 text-sm"
+        >
           <li
-            v-for="v in versions"
-            :key="v.id"
-            class="flex items-center justify-between px-4 py-3"
+            v-for="(commit, i) in history"
+            :key="commit.sha"
+            class="flex items-center justify-between gap-4 px-4 py-3"
           >
-            <div>
-              <span class="font-mono text-xs text-slate-700">{{ v.commitSha.slice(0, 12) }}</span>
+            <div class="flex min-w-0 items-center gap-3">
               <span
-                v-if="v.isProduction"
-                class="ml-2"
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold uppercase text-primary-700"
+                :title="commit.authorName"
               >
-                <FmBadge variant="primary">production</FmBadge>
+                {{ (commit.authorName || '?').charAt(0) }}
               </span>
-              <p class="text-xs text-slate-400">{{ v.message }}</p>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600">{{ commit.shortSha }}</span>
+                  <span
+                    v-if="currentWorkflow && currentWorkflow.currentVersion === commit.sha"
+                    class="inline-flex"
+                  >
+                    <FmBadge variant="primary">production</FmBadge>
+                  </span>
+                </div>
+                <p class="truncate text-sm text-slate-700">{{ commit.message }}</p>
+                <p class="text-xs text-slate-400">{{ commit.authorName }} · {{ fromNow(commit.committedAt) }}</p>
+              </div>
             </div>
-            <span class="text-slate-500">{{ formatDate(v.createdAt) }}</span>
+            <div class="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                class="rounded border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                @click="openView(commit)"
+              >
+                View
+              </button>
+              <button
+                type="button"
+                :disabled="i === 0"
+                class="rounded border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                :title="i === 0 ? 'This is the latest version' : 'Compare with the latest version'"
+                @click="openDiff(commit)"
+              >
+                Diff
+              </button>
+            </div>
           </li>
           <li
-            v-if="versions.length === 0"
+            v-if="history.length === 0"
             class="px-4 py-6 text-center text-slate-400"
           >
-            No versions yet. Publish to create the first production version.
+            No history yet. Save or publish this workflow to record its first version.
           </li>
         </ul>
       </div>
@@ -477,5 +574,50 @@ watch(id, () => store.loadWorkflow(id.value));
       :preselected-id="currentWorkflow?.id"
       :force-test-run="forceTestRun"
     />
+
+    <FmVersionDiffView
+      v-model="diffOpen"
+      :workspace-id="workspaceId"
+      :workflow-id="id"
+      :from-sha="diffFrom"
+      :to-sha="diffTo"
+    />
+
+    <Teleport to="body">
+      <div
+        v-if="viewOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        @click.self="viewOpen = false"
+      >
+        <div class="flex h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+          <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+            <h2 class="text-sm font-semibold text-slate-900">
+              Version <span class="font-mono text-xs text-slate-500">{{ viewSha.slice(0, 7) }}</span>
+              <span class="ml-1 text-xs font-normal text-slate-400">(read-only)</span>
+            </h2>
+            <button
+              type="button"
+              class="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Close"
+              @click="viewOpen = false"
+            >
+              <XCircle class="h-5 w-5" />
+            </button>
+          </div>
+          <div class="flex-1 overflow-auto">
+            <div
+              v-if="viewLoading"
+              class="flex h-full items-center justify-center"
+            >
+              <FmSpinner />
+            </div>
+            <pre
+              v-else
+              class="h-full overflow-auto bg-slate-50 p-4 text-xs leading-5 text-slate-700"
+            >{{ viewYaml }}</pre>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

@@ -44,6 +44,9 @@ public sealed record WorkflowVersionResponse(
     Guid Id, Guid WorkflowDefinitionId, string CommitSha, string? TagName,
     string BranchName, string Message, bool IsProduction, DateTime CreatedAt);
 
+/// <summary>Workflow YAML reconstructed from a specific Git commit (read-only history view).</summary>
+public sealed record WorkflowAtCommitResponse(Guid WorkflowId, string CommitSha, string YamlContent);
+
 public sealed record TriggerInstanceResponse(Guid InstanceId, string Status, DateTime TriggeredAt);
 
 public sealed record InstanceListItem(

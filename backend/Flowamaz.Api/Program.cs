@@ -215,6 +215,11 @@ if (backgroundWorkersEnabled)
         q.AddJob<TestInstanceCleanupJob>(testCleanupKey);
         q.AddTrigger(t => t.ForJob(testCleanupKey)
             .WithCronSchedule("0 0 3 * * ?"));
+
+        // One-time Git repo backfill — fires once on startup (prompt 05-01). Idempotent.
+        var gitInitKey = new JobKey(nameof(WorkspaceGitInitialisationJob));
+        q.AddJob<WorkspaceGitInitialisationJob>(gitInitKey);
+        q.AddTrigger(t => t.ForJob(gitInitKey).StartNow());
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 }
@@ -291,6 +296,28 @@ if (!app.Environment.IsDevelopment())
         throw new InvalidOperationException(
             "GATE_SIGNING_KEY must be set in non-Development environments. " +
             "Generate with: openssl rand -hex 32");
+}
+
+// Git repos base path must exist and be writable — workflow versioning depends on it (prompt 05-01).
+// Mirror WorkspaceGitService's resolution: Git:ReposBasePath → GIT_REPOS_BASE_PATH → bin/git-repos.
+var gitReposBasePath = app.Configuration["Git:ReposBasePath"];
+if (string.IsNullOrWhiteSpace(gitReposBasePath))
+    gitReposBasePath = app.Configuration["GIT_REPOS_BASE_PATH"];
+if (string.IsNullOrWhiteSpace(gitReposBasePath))
+    gitReposBasePath = Path.Combine(AppContext.BaseDirectory, "git-repos");
+try
+{
+    Directory.CreateDirectory(gitReposBasePath);
+    var probe = Path.Combine(gitReposBasePath, $".write-probe-{Guid.NewGuid():N}");
+    await File.WriteAllTextAsync(probe, "ok", app.Lifetime.ApplicationStopping);
+    File.Delete(probe);
+    Log.Information("Git repos base path is writable: {Path}", gitReposBasePath);
+}
+catch (Exception ex)
+{
+    throw new InvalidOperationException(
+        $"GIT_REPOS_BASE_PATH '{gitReposBasePath}' is not writable. Workflow Git versioning requires a " +
+        "writable directory. Create it and grant the service write access, or set GIT_REPOS_BASE_PATH.", ex);
 }
 
 try

@@ -1,22 +1,17 @@
 ## Checkpoint
-Phase: fix-phase-04
-Phase Title: Phase 4 Fix — Security Hardening + Coverage + OAuth
-Total Prompts This Phase: 2
-Completed: 2
-Current Prompt: PHASE_COMPLETE
-Next Prompt: phase-05-01 (pending phase report)
-Phase End Status: phase-end-agents-required
-Session Tokens: Low
-Last Updated: 2026-05-26
+Phase: 05
+Phase Title: Git Versioning + CLI + Developer Tools + Analytics + Community Edition
+Total Prompts This Phase: 8
+Completed: 1
+Current Prompt: 05-02-fmz-cli
+Next Prompt: 05-03-vscode-extension
+Phase End Status: not started
+Session Tokens: Medium
+Last Updated: 2026-05-29
 Notes: |
-  fix-04-01: GATE_SIGNING_KEY startup enforcement, SLACK_SIGNING_SECRET 503 production guard,
-    CredentialVaultService DB-level workspace isolation, .env.example + FUNCTIONAL.md updated,
-    GateHmacHelper shared ephemeral dev key, integration test fixture updated.
-  fix-04-02: ConnectorCatalogueServiceTests (8 tests), ConnectorSandboxTests (5 tests),
-    ByomProviderServiceTests (3 tests), OAuthService real Slack/GitHub/Microsoft token exchange,
-    OAuthException created, OAuthServiceTests extended (8 tests), mock_token stub removed.
-  Build: 0 errors 0 warnings.
-  Tests: 401 unit tests pass.
-  grep "default-dev-key" backend/ → 0 results.
-  grep "mock_token" backend/ → 0 results.
-  Phase-end agents still required: Verifier deep review, Security scan, Testing Agent.
+  05-01 complete: Git-native versioning (WorkspaceGitService/LibGit2Sharp, WorkflowVersionsController,
+  init job, FmVersionDiffView, history tab). Unit 422/422, my Git integration tests green.
+  PRE-EXISTING: 13 integration tests fail on develop HEAD (confirmed at baseline, no Git code).
+  Areas: Phase3 NL/validate/DNA, Phase4 AI-node/gate/OAuth, Phase2 invalid-yaml, RateLimit.
+  Triage these in 05-08 (S34-S39 must be confirmed green).
+  Phase report: phase-05-report.md

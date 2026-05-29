@@ -15,6 +15,9 @@ public interface IWorkspaceRepository
     Task<Workspace?> GetByIdForOrgAsync(Guid id, Guid orgId, CancellationToken cancellationToken = default);
 
     Task<List<Workspace>> GetForOrgAsync(Guid orgId, CancellationToken cancellationToken = default);
+
+    /// <summary>All non-deleted workspaces across every org. Used by the one-time Git-init migration job.</summary>
+    Task<List<Workspace>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<bool> SlugExistsInOrgAsync(Guid orgId, string slug, CancellationToken cancellationToken = default);
 
     Task AddAsync(Workspace workspace, CancellationToken cancellationToken = default);

@@ -2,6 +2,7 @@ using Flowamaz.Application.Workspace.Services;
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Exceptions;
+using Flowamaz.Core.Interfaces.Git;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
 using FluentAssertions;
@@ -16,13 +17,14 @@ public class WorkspaceServiceTests
     private readonly Mock<IWorkspaceMemberRepository> _memberRepo = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
+    private readonly Mock<IWorkspaceGitService> _git = new();
 
     private WorkspaceService CreateService()
     {
         _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_tx.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         return new WorkspaceService(
-            _workspaceRepo.Object, _memberRepo.Object, _uow.Object, NullLogger<WorkspaceService>.Instance);
+            _workspaceRepo.Object, _memberRepo.Object, _uow.Object, _git.Object, NullLogger<WorkspaceService>.Instance);
     }
 
     [Fact]
@@ -85,7 +87,7 @@ public class WorkspaceServiceTests
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db down"));
 
         var service = new WorkspaceService(
-            _workspaceRepo.Object, _memberRepo.Object, _uow.Object, NullLogger<WorkspaceService>.Instance);
+            _workspaceRepo.Object, _memberRepo.Object, _uow.Object, _git.Object, NullLogger<WorkspaceService>.Instance);
 
         var act = () => service.CreateWorkspaceAsync(orgId, "Acme", "acme", Guid.NewGuid());
 

@@ -888,3 +888,57 @@ Date: 2026-05-26
 - [x] grep "mock_token" backend/ → 0 results
 - [x] dotnet build — 0 errors, 0 warnings
 - [x] dotnet test — 401 unit tests pass
+
+---
+
+## fix-04 — Canvas light theme, API URL verification, NL form hints  (2026-05-27)
+
+**Status:** Complete · pushed to `develop` (d69ffa0)
+
+**Changes**
+- `SfgCanvas.vue`: Canvas background `bg-gray-950` → `bg-[#F8FAFC]`; minimap container → white background with subtle border
+- `useCytoscapeCanvas.ts`: Selected node border `#818CF8` → `#1D9E75` (teal); edges `#6B7280` → `#94A3B8`; edge label background → white; group/parent label color → `#374151` (dark, readable on light canvas)
+- `NodePalette.vue`: Background `bg-gray-900` → `bg-[#F1F5F9]`; text `text-gray-500` → `text-[#374151]`
+- `CanvasToolbar.vue`: Background `bg-gray-900` → `bg-white`; dividers `bg-gray-700` → `bg-gray-200`; workflow name input → `text-gray-700`; active minimap indicator → `text-primary-600`
+- `main.css`: Added `.toolbar-btn` CSS class (flex, rounded, hover:bg-gray-100, disabled:opacity-40)
+- `creation.service.ts`: Verified — already uses relative URLs. `grep localhost web/src/services/ web/src/stores/` returns 0 results
+- `NlTemplateForm.vue`: Added `hint` prop to `FormField` render component; hint `<p class="text-sm text-gray-500 mb-2">` renders between label and textarea; hints added for Purpose, Trigger, Steps, Rules & Constraints, Systems & AI, and Existing Context
+
+**DoD checklist**
+- [x] npm run build — 0 TypeScript errors, 0 warnings
+- [x] Zero style blocks
+- [x] No hardcoded localhost URLs in services or stores
+- [x] Canvas light theme: `#F8FAFC` background, `#94A3B8` edges, `#1D9E75` selected border
+- [x] Minimap: white background with `border-gray-200`
+- [x] NL form hints always visible above each textarea
+
+---
+
+## 05-01 — Git-native workflow versioning  (2026-05-29)
+
+**Status:** Complete · backend + web · committed to `develop`
+
+**Backend**
+- `Flowamaz.Core/Git/GitResults.cs` — CommitResult, WorkflowCommit, WorkflowDiff, WorkflowDiffLine, WorkflowDiffSummary, MergeResult
+- `Flowamaz.Core/Interfaces/Git/IWorkspaceGitService.cs` — init/commit/publish/at-commit/diff/history/branch/checkout/merge
+- `Flowamaz.Core/Configuration/GitOptions.cs` — Git:ReposBasePath (env GIT_REPOS_BASE_PATH)
+- `Flowamaz.Infrastructure/Git/WorkspaceGitService.cs` — LibGit2Sharp 0.31.0, bare repos, object-DB writes (blob→tree→commit→ref). HEAD kept symbolic on `main`. History walks topological order; diff parses unified patch + node-level summary via YamlDotNet
+- `Flowamaz.Infrastructure/Jobs/WorkspaceGitInitialisationJob.cs` — one-time StartNow backfill, idempotent
+- WorkspaceService inits repo on create (non-fatal); WorkflowService commits on create/update/publish + tags on publish (replaced Phase-2 GUID placeholder SHA)
+- `WorkflowVersionsController` — GET history / diff / at/{sha} (Viewer/Designer/Viewer)
+- Program.cs: registered job (StartNow) + writable-path startup gate; appsettings.Development Git:ReposBasePath="" → bin/git-repos
+
+**Web**
+- `FmVersionDiffView.vue` — side-by-side colour-coded diff (added green / removed red / modified amber chips), node summary header, loading/error/empty states
+- WorkflowDetailView versions tab → Git commit history (short SHA, author initial, message, relative time) with View (read-only YAML modal) + Diff buttons
+- workflow.service: history/diff/at; types: WorkflowCommit/WorkflowDiff/WorkflowAtCommitResponse
+
+**DoD**
+- [x] dotnet build — 0 errors, 0 warnings
+- [x] vue-tsc — 0 errors
+- [x] Unit: WorkspaceGitServiceTests — 7/7 (init, idempotent, commit round-trip, historical YAML, node diff, history order, tag)
+- [x] Integration: GitVersioningTests — 2/2 (create→edit→publish→history=2, diff added/modified, at/{sha} reconstructs v1; bad-request guard)
+- [x] Full unit suite — 422/422 pass
+- [x] Serilog entry/exit/error on all new functions; zero Vue style blocks
+
+**KNOWN ISSUE (pre-existing, NOT introduced by 05-01):** Full integration suite has 13 failing tests on `develop` HEAD, confirmed by stash-and-run at baseline (no Git code present). Areas: Phase3 NL-generate/validate, Phase3 DNA, Phase4 AI-node/gate/OAuth, Phase2 invalid-yaml, RateLimit window expiry — likely environmental (AI stub / Redis timing) or regressions predating Phase 5. To be triaged in 05-08 (checkpoint flags S34–S39 must be green).

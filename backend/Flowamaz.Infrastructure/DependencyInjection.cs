@@ -36,6 +36,7 @@ public static class DependencyInjection
         AddAuthServices(services);
         AddEmail(services);
         AddConnectors(services);
+        AddGit(services);
         return services;
     }
 
@@ -51,6 +52,12 @@ public static class DependencyInjection
                 options.GooglePlatformKey = configuration["GOOGLE_PLATFORM_KEY"] ?? string.Empty;
         });
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
+        services.Configure<GitOptions>(configuration.GetSection(GitOptions.SectionName));
+        services.PostConfigure<GitOptions>(options =>
+        {
+            if (string.IsNullOrEmpty(options.ReposBasePath))
+                options.ReposBasePath = configuration["GIT_REPOS_BASE_PATH"] ?? string.Empty;
+        });
     }
 
     private static void AddPersistence(IServiceCollection services, IConfiguration configuration)
@@ -141,6 +148,11 @@ public static class DependencyInjection
     {
         services.AddHttpClient(EmailService.HttpClientName);
         services.AddSingleton<IEmailService, EmailService>();
+    }
+
+    private static void AddGit(IServiceCollection services)
+    {
+        services.AddScoped<Core.Interfaces.Git.IWorkspaceGitService, Git.WorkspaceGitService>();
     }
 
     private static void AddConnectors(IServiceCollection services)

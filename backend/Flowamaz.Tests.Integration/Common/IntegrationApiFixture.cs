@@ -28,6 +28,7 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
 
     private WebApplicationFactory<Flowamaz.Api.Program> _factory = null!;
     private ConnectionMultiplexer _redisClient = null!;
+    private string _gitReposPath = null!;
 
     /// <summary>Fixed signing key used for gate HMAC in integration tests. Known value so tests can reproduce signatures.</summary>
     public const string GateSigningKey = "integration-test-gate-signing-key-32!!";
@@ -45,6 +46,10 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("Ai__UseStubCompletion", "true");
         // Known gate signing key so integration tests can reproduce HMAC signatures.
         Environment.SetEnvironmentVariable("GATE_SIGNING_KEY", GateSigningKey);
+        // Isolate per-workspace Git repos to a throwaway temp dir (the appsettings default is the
+        // Docker prod path /app/data/repos, which is not writable on the test host).
+        _gitReposPath = Path.Combine(Path.GetTempPath(), "flowamaz-it-git", Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("Git__ReposBasePath", _gitReposPath);
 
         await _postgres.StartAsync();
         await _redis.StartAsync();

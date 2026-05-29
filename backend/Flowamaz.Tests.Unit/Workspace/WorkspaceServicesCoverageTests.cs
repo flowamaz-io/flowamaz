@@ -1,6 +1,7 @@
 using Flowamaz.Application.Workspace.Services;
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Enums;
+using Flowamaz.Core.Interfaces.Git;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Models;
@@ -29,7 +30,8 @@ public class WorkspaceServicesCoverageTests
     {
         var repo = new Mock<IWorkspaceRepository>();
         var members = new Mock<IWorkspaceMemberRepository>();
-        return (new WorkspaceService(repo.Object, members.Object, _uow.Object, NullLogger<WorkspaceService>.Instance), repo);
+        var git = new Mock<IWorkspaceGitService>();
+        return (new WorkspaceService(repo.Object, members.Object, _uow.Object, git.Object, NullLogger<WorkspaceService>.Instance), repo);
     }
 
     [Fact]

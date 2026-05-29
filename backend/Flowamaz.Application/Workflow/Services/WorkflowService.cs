@@ -2,6 +2,7 @@ using Flowamaz.Application.Workflow.DTOs;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Exceptions;
+using Flowamaz.Core.Interfaces.Git;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Workflow;
@@ -21,6 +22,7 @@ public sealed class WorkflowService
     private readonly IWorkflowInstanceRepository _instances;
     private readonly IUnitOfWork _unitOfWork;
     private readonly SfgParser _parser;
+    private readonly IWorkspaceGitService _git;
     private readonly ILogger<WorkflowService> _logger;
 
     public WorkflowService(
@@ -29,6 +31,7 @@ public sealed class WorkflowService
         IWorkflowInstanceRepository instances,
         IUnitOfWork unitOfWork,
         SfgParser parser,
+        IWorkspaceGitService git,
         ILogger<WorkflowService> logger)
     {
         _definitions = definitions;
@@ -36,6 +39,7 @@ public sealed class WorkflowService
         _instances = instances;
         _unitOfWork = unitOfWork;
         _parser = parser;
+        _git = git;
         _logger = logger;
     }
 
@@ -76,9 +80,17 @@ public sealed class WorkflowService
         };
 
         await _definitions.AddAsync(definition, ct);
+
+        // Git-native versioning: every save is a commit. The commit SHA becomes CurrentVersion so the
+        // exact YAML can be reconstructed for any historical instance (FUNCTIONAL.md §2.6).
+        var commit = await _git.CommitWorkflowAsync(
+            workspaceId, definition.Id, definition.YamlContent ?? string.Empty,
+            $"Create {definition.Name}", string.Empty, string.Empty, ct);
+        if (commit is not null) definition.CurrentVersion = commit.CommitSha;
+
         await _unitOfWork.SaveChangesAsync(ct);
 
-        _logger.LogInformation("WorkflowService.CreateAsync exit workflow={WorkflowId}", definition.Id);
+        _logger.LogInformation("WorkflowService.CreateAsync exit workflow={WorkflowId} commit={Commit}", definition.Id, definition.CurrentVersion);
         return ToResponse(definition);
     }
 
@@ -96,6 +108,12 @@ public sealed class WorkflowService
 
         definition.YamlContent = yamlContent;
         definition.SlaThresholdMs = slaThresholdMs;
+
+        var commit = await _git.CommitWorkflowAsync(
+            workspaceId, definition.Id, yamlContent ?? string.Empty,
+            $"Update {definition.Name}", string.Empty, string.Empty, ct);
+        if (commit is not null) definition.CurrentVersion = commit.CommitSha;
+
         _definitions.Update(definition);
         await _unitOfWork.SaveChangesAsync(ct);
         return ToResponse(definition);
@@ -144,14 +162,25 @@ public sealed class WorkflowService
             _versions.Update(current);
         }
 
-        // Phase 2 placeholder commit SHA — real Git versioning arrives in Phase 5 (WorkspaceGitService).
-        var commitSha = Guid.NewGuid().ToString("N");
+        // Git-native versioning (FUNCTIONAL.md §2.6): commit the published YAML, then tag it as a
+        // release. The commit SHA is the immutable reference instances pin to forever.
+        var commit = await _git.CommitWorkflowAsync(
+            workspaceId, id, definition.YamlContent,
+            $"Published {definition.Name}", string.Empty, string.Empty, ct);
+        var commitSha = commit?.CommitSha ?? Guid.NewGuid().ToString("N");
+        var branchName = commit?.BranchName ?? "main";
+
+        var existingVersions = await _versions.GetForDefinitionAsync(id, workspaceId, ct);
+        var versionNumber = (existingVersions?.Count ?? 0) + 1;
+        var tagName = await _git.PublishWorkflowAsync(workspaceId, id, versionNumber, ct);
+
         var version = new WorkflowVersion
         {
             WorkspaceId = workspaceId,
             WorkflowDefinitionId = id,
             CommitSha = commitSha,
-            BranchName = "main",
+            TagName = tagName,
+            BranchName = branchName,
             YamlContent = definition.YamlContent,
             Message = $"Published {definition.Name}",
             IsProduction = true,

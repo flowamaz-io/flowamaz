@@ -4,6 +4,8 @@ using Flowamaz.Application.Workflow.Services;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Exceptions;
+using Flowamaz.Core.Git;
+using Flowamaz.Core.Interfaces.Git;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Workflow;
@@ -34,13 +36,21 @@ public class WorkflowServiceTests
     private readonly Mock<IWorkflowVersionRepository> _versions = new();
     private readonly Mock<IWorkflowInstanceRepository> _instances = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<IWorkspaceGitService> _git = new();
 
     private readonly Guid _ws = Guid.NewGuid();
     private readonly Guid _id = Guid.NewGuid();
 
+    public WorkflowServiceTests() =>
+        _git.Setup(g => g.CommitWorkflowAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid ws, Guid wf, string yaml, string msg, string an, string ae, CancellationToken _) =>
+                new CommitResult("abc1234def5678", "main", null));
+
     private WorkflowService NewService() => new(
         _definitions.Object, _versions.Object, _instances.Object, _unitOfWork.Object,
-        new SfgParser(), NullLogger<WorkflowService>.Instance);
+        new SfgParser(), _git.Object, NullLogger<WorkflowService>.Instance);
 
     private WorkflowDefinition Definition() => new()
     {
