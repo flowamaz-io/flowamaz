@@ -31,7 +31,7 @@ public class ProcessIntelligenceJobWrapperTests
     private ProcessIntelligenceService NewService() => new(
         _analytics.Object, _metrics.Object, _insights.Object, _definitions.Object, _unitOfWork.Object,
         _modelResolution.Object, _completion.Object, _metering.Object, _semanticCache.Object,
-        _batchState.Object, NullLogger<ProcessIntelligenceService>.Instance);
+        _batchState.Object, new ProcessTrendAnalyzer(), NullLogger<ProcessIntelligenceService>.Instance);
 
     private ProcessIntelligenceJob NewJob() =>
         new(NewService(), NullLogger<ProcessIntelligenceJob>.Instance);

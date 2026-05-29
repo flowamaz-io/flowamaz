@@ -55,4 +55,9 @@ public sealed class WorkflowMetricRepository(FlowAmazDbContext db) : IWorkflowMe
         db.WorkflowMetrics.AsNoTracking()
             .Where(m => m.WorkspaceId == workspaceId && m.PeriodHour >= since)
             .SumAsync(m => m.RunsTotal, cancellationToken);
+
+    public Task<List<WorkflowMetric>> GetForWorkspaceInRangeAsync(Guid workspaceId, DateTime from, DateTime to, CancellationToken cancellationToken = default) =>
+        db.WorkflowMetrics.AsNoTracking()
+            .Where(m => m.WorkspaceId == workspaceId && m.PeriodHour >= from && m.PeriodHour < to)
+            .ToListAsync(cancellationToken);
 }

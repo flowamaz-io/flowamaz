@@ -15,4 +15,7 @@ public interface IWorkflowMetricRepository
 
     /// <summary>Sum of RunsTotal across all metric rows since <paramref name="since"/> — for the dashboard.</summary>
     Task<int> GetRunCountSinceAsync(Guid workspaceId, DateTime since, CancellationToken cancellationToken = default);
+
+    /// <summary>All metric rows for the workspace whose hour falls in [from, to) — backs ROI aggregation.</summary>
+    Task<List<WorkflowMetric>> GetForWorkspaceInRangeAsync(Guid workspaceId, DateTime from, DateTime to, CancellationToken cancellationToken = default);
 }

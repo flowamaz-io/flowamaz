@@ -9,22 +9,29 @@ import { useWorkspace } from '@/composables/useWorkspace';
 import { useWorkflowStore } from '@/stores/workflow.store';
 import { analyticsService } from '@/services/analytics.service';
 import { CREATION_METHODS } from '@/utils/constants';
-import type { WeatherResponse } from '@/types';
+import type { WeatherResponse, WorkspaceRoiSummary } from '@/types';
 
 const { user } = useAuth();
 const ws = useWorkspace();
-const { current, members } = ws;
+const { current } = ws;
 const workflowStore = useWorkflowStore();
 const { workflows } = storeToRefs(workflowStore);
 const router = useRouter();
 
 const weather = ref<WeatherResponse | null>(null);
+const roi = ref<WorkspaceRoiSummary | null>(null);
+
+const costAvoided = computed(() => {
+  if (!roi.value) return '--';
+  const currency = roi.value.byWorkflow.find((w) => w.configured)?.currency ?? 'MYR';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(roi.value.totalCostAvoided);
+});
 
 const metrics = computed(() => [
   { label: 'Total workflows', value: workflows.value.length.toString() },
   { label: 'Active instances', value: (weather.value?.activeInstances ?? 0).toString() },
   { label: 'Runs this month', value: (weather.value?.runsThisMonth ?? 0).toString() },
-  { label: 'Team members', value: members.value.length.toString() },
+  { label: 'Cost avoided', value: costAvoided.value },
 ]);
 
 function openCreationMethod(method: string): void {
@@ -46,6 +53,13 @@ onMounted(async () => {
       weather.value = await analyticsService.weather(wsId);
     } catch {
       weather.value = null;
+    }
+    try {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      roi.value = await analyticsService.roi(wsId, from, now.toISOString());
+    } catch {
+      roi.value = null;
     }
   }
 });

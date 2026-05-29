@@ -73,6 +73,10 @@ public static class DependencyInjection
         services.AddScoped<WorkflowWeatherService>();
         services.AddScoped<InsightService>();
 
+        // ROI analytics + deterministic trend/anomaly detection (prompt 05-04).
+        services.AddScoped<IRoiAnalyticsService, RoiAnalyticsService>();
+        services.AddSingleton<ProcessTrendAnalyzer>();
+
         // Workflow validator (prompt 03-01).
         services.AddScoped<IWorkflowValidator, WorkflowValidator>();
 

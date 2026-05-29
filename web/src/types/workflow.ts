@@ -236,6 +236,37 @@ export interface WeatherResponse {
   workflows: WorkflowWeather[];
 }
 
+export interface WorkflowRoiDetail {
+  workflowDefinitionId: string;
+  workflowName: string;
+  configured: boolean;
+  runs: number;
+  successfulRuns: number;
+  timeSavedMinutes: number;
+  costAvoided: number;
+  roiPercentage: number;
+  currency: string;
+}
+
+export interface WorkspaceRoiSummary {
+  periodStart: string;
+  periodEnd: string;
+  totalRunsInPeriod: number;
+  successfulRuns: number;
+  totalTimeSavedMinutes: number;
+  totalCostAvoided: number;
+  roiPercentage: number;
+  avgCostPerRun: number;
+  byWorkflow: WorkflowRoiDetail[];
+}
+
+export interface RoiConfigDto {
+  manualProcessTimeMinutes: number;
+  manualProcessCostPerRunUsd: number;
+  automationCostPerRunUsd: number;
+  monthlyCurrency: string;
+}
+
 export interface InsightResponse {
   id: string;
   workflowDefinitionId: string;

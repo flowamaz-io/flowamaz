@@ -30,6 +30,7 @@ public sealed class ProcessIntelligenceService
     private readonly IAiTokenMeteringService _metering;
     private readonly ISemanticCacheService _semanticCache;
     private readonly IAiBatchStateService _batchState;
+    private readonly ProcessTrendAnalyzer _trendAnalyzer;
     private readonly ILogger<ProcessIntelligenceService> _logger;
 
     public ProcessIntelligenceService(
@@ -43,6 +44,7 @@ public sealed class ProcessIntelligenceService
         IAiTokenMeteringService metering,
         ISemanticCacheService semanticCache,
         IAiBatchStateService batchState,
+        ProcessTrendAnalyzer trendAnalyzer,
         ILogger<ProcessIntelligenceService> logger)
     {
         _analytics = analytics;
@@ -55,6 +57,7 @@ public sealed class ProcessIntelligenceService
         _metering = metering;
         _semanticCache = semanticCache;
         _batchState = batchState;
+        _trendAnalyzer = trendAnalyzer;
         _logger = logger;
     }
 
@@ -105,8 +108,66 @@ public sealed class ProcessIntelligenceService
             }, ct);
         }
 
+        await DetectTrendsAsync(workspaceId, definitionId, definition?.Name ?? definitionId.ToString(), ct);
+
         await GenerateAiInsightsAsync(workspaceId, definitionId, ct);
         await _unitOfWork.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Deterministic week-over-week trend + volume-anomaly detection (prompt 05-04). Pure rules live
+    /// in <see cref="ProcessTrendAnalyzer"/>; here we just shape the metric history and persist hits.
+    /// </summary>
+    private async Task DetectTrendsAsync(Guid workspaceId, Guid definitionId, string workflowName, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var history = await _metrics.GetForDefinitionSinceAsync(definitionId, workspaceId, now.AddDays(-30), ct);
+        if (history.Count == 0) return;
+
+        var thisWeek = history.Where(m => m.PeriodHour >= now.AddDays(-7)).ToList();
+        var lastWeek = history.Where(m => m.PeriodHour >= now.AddDays(-14) && m.PeriodHour < now.AddDays(-7)).ToList();
+
+        var insights = new List<TrendInsight?>
+        {
+            _trendAnalyzer.DetectFailureRateTrend(workflowName, FailureRate(lastWeek), FailureRate(thisWeek)),
+            _trendAnalyzer.DetectDurationTrend(workflowName, AverageDurationMs(lastWeek), AverageDurationMs(thisWeek)),
+        };
+
+        // Volume spike: today's run count vs the prior-days daily distribution.
+        var byDay = history.GroupBy(m => m.PeriodHour.Date).ToDictionary(g => g.Key, g => g.Sum(x => x.RunsTotal));
+        var todayRuns = byDay.TryGetValue(now.Date, out var t) ? t : 0;
+        var priorDays = byDay.Where(kv => kv.Key < now.Date).Select(kv => kv.Value).ToList();
+        if (priorDays.Count >= 5)
+        {
+            insights.Add(_trendAnalyzer.DetectVolumeSpike(
+                workflowName, todayRuns, priorDays.Average(), ProcessTrendAnalyzer.StandardDeviation(priorDays)));
+        }
+
+        foreach (var insight in insights)
+        {
+            if (insight is null) continue;
+            await _insights.ReplaceUnacknowledgedAsync(new WorkflowInsight
+            {
+                WorkspaceId = workspaceId,
+                WorkflowDefinitionId = definitionId,
+                InsightType = insight.Type,
+                Severity = insight.Severity,
+                Message = insight.Message,
+                Data = insight.DataJson,
+            }, ct);
+        }
+    }
+
+    private static double FailureRate(List<WorkflowMetric> metrics)
+    {
+        var total = metrics.Sum(m => m.RunsTotal);
+        return total > 0 ? metrics.Sum(m => m.RunsFailed) / (double)total : 0;
+    }
+
+    private static long AverageDurationMs(List<WorkflowMetric> metrics)
+    {
+        var withRuns = metrics.Where(m => m.RunsCompleted > 0 && m.AvgDurationMs > 0).ToList();
+        return withRuns.Count > 0 ? (long)withRuns.Average(m => m.AvgDurationMs) : 0;
     }
 
     private async Task GenerateAiInsightsAsync(Guid workspaceId, Guid definitionId, CancellationToken ct)

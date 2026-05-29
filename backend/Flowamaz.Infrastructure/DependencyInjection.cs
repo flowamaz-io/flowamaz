@@ -94,6 +94,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowMetricRepository, WorkflowMetricRepository>();
         services.AddScoped<IWorkflowInsightRepository, WorkflowInsightRepository>();
         services.AddScoped<IWorkflowAnalyticsRepository, WorkflowAnalyticsRepository>();
+        services.AddScoped<IWorkflowRoiConfigRepository, WorkflowRoiConfigRepository>();
     }
 
     private static void AddWorkflowEngine(IServiceCollection services, IConfiguration configuration)

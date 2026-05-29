@@ -29,3 +29,34 @@ public sealed record InsightResponse(
     DateTime? AcknowledgedAt,
     DateTime? ExpiresAt,
     DateTime CreatedAt);
+
+// ── ROI analytics (prompt 05-04) ──────────────────────────────────────────────
+
+public sealed record WorkspaceRoiSummary(
+    DateTime PeriodStart,
+    DateTime PeriodEnd,
+    int TotalRunsInPeriod,
+    int SuccessfulRuns,
+    long TotalTimeSavedMinutes,
+    decimal TotalCostAvoided,
+    decimal RoiPercentage,
+    decimal AvgCostPerRun,
+    IReadOnlyList<WorkflowRoiDetail> ByWorkflow);
+
+public sealed record WorkflowRoiDetail(
+    Guid WorkflowDefinitionId,
+    string WorkflowName,
+    bool Configured,
+    int Runs,
+    int SuccessfulRuns,
+    long TimeSavedMinutes,
+    decimal CostAvoided,
+    decimal RoiPercentage,
+    string Currency);
+
+/// <summary>Admin-set ROI baseline (read/write).</summary>
+public sealed record RoiConfigDto(
+    int ManualProcessTimeMinutes,
+    decimal ManualProcessCostPerRunUsd,
+    decimal AutomationCostPerRunUsd,
+    string MonthlyCurrency);

@@ -2,7 +2,7 @@
 import { storeToRefs } from 'pinia';
 import {
   LayoutDashboard, Settings, Users, KeyRound, Workflow, Activity, Plug, X, CloudSun,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, BarChart2,
 } from 'lucide-vue-next';
 import { useUiStore } from '@/stores/ui.store';
 import { APP_NAME } from '@/utils/constants';
@@ -23,6 +23,7 @@ const primary: NavItem[] = [
   { label: 'Workflows', to: '/workflows', icon: Workflow },
   { label: 'Weather', to: '/weather', icon: CloudSun },
   { label: 'Instances', to: '/instances', icon: Activity },
+  { label: 'Analytics', to: '/analytics', icon: BarChart2 },
   { label: 'Library', to: '/library', icon: Plug },
 ];
 

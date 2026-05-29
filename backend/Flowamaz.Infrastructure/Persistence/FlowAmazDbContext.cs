@@ -63,6 +63,7 @@ public class FlowAmazDbContext : DbContext
 
     public DbSet<WorkflowMetric> WorkflowMetrics => Set<WorkflowMetric>();
     public DbSet<WorkflowInsight> WorkflowInsights => Set<WorkflowInsight>();
+    public DbSet<WorkflowRoiConfig> WorkflowRoiConfigs => Set<WorkflowRoiConfig>();
 
     public DbSet<ConnectorDefinition> ConnectorDefinitions => Set<ConnectorDefinition>();
     public DbSet<WorkspaceConnector> WorkspaceConnectors => Set<WorkspaceConnector>();

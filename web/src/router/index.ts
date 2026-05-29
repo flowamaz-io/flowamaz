@@ -53,6 +53,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'instances', name: 'instances', component: () => import('@/views/instance/InstanceListView.vue') },
       { path: 'instances/:id', name: 'instance-detail', component: () => import('@/views/instance/InstanceDetailView.vue') },
       { path: 'gates', name: 'gates', component: () => import('@/views/gates/GatesView.vue') },
+      { path: 'analytics', name: 'analytics', component: () => import('@/views/analytics/RoiAnalyticsView.vue') },
       { path: 'library', name: 'library', component: () => import('@/views/library/LibraryView.vue') },
       { path: 'library/connectors/:connectorId', name: 'connector-detail', component: () => import('@/views/library/ConnectorDetailView.vue') },
       { path: 'library/health', name: 'connector-health', component: () => import('@/views/library/ConnectorHealthView.vue') },

@@ -976,3 +976,28 @@ Extension `flowamaz-vscode`: hover docs, snippet completions (8 fmz-* snippets),
 - [x] npm install / build (tsc strict) 0 errors / test all green
 - [x] Vitest 22 tests (6 files) — hoverDocs, snippets, graphDiagnostics, codeLens, workflowMapper, isFlowamazDoc — NO Electron download
 - [x] Tests assert: hover `type` doc, `fmz-action` snippet present, orphaned-node diagnostic, 3 CodeLenses on workflow file
+
+---
+
+## 05-04 — ROI analytics + Process Intelligence trends  (2026-05-29)
+
+**Status:** Complete · backend + web · committed to `develop`
+
+**Backend**
+- `WorkflowRoiConfig` entity + EF config (HasPrecision 18,2) + migration `AddWorkflowRoiConfig`; `IWorkflowRoiConfigRepository` + impl; `GetForWorkspaceInRangeAsync` added to metric repo
+- `RoiAnalyticsService` (deterministic): time saved = manual min × successful; cost avoided = (manual−auto) × successful; ROI % = avoided ÷ automation × 100; AvgCostPerRun
+- `RoiAnalyticsController`: GET analytics/roi (Operator), GET/PUT workflows/{id}/roi-config (Operator/Admin), GET workflows/{id}/roi
+- `ProcessTrendAnalyzer` (pure): failure-rate↑ → PatternChange; duration ↑>20% → Bottleneck; node fail >30% → node Bottleneck; runs >3σ above 30-day mean → AnomalyDetected. Wired into ProcessIntelligenceService.DetectTrendsAsync
+
+**Web**
+- `/analytics` route + sidebar item; `RoiAnalyticsView.vue` (date range, summary strip, per-workflow table, cost-avoided bar chart [no chart-lib dep — CSS bars], CSV export), `RoiConfigModal.vue`
+- Dashboard "Cost avoided" card wired to real ROI data; analytics.service roi/getRoiConfig/saveRoiConfig
+- Help article `analytics/roi-dashboard.md`
+
+**DoD**
+- [x] dotnet build 0/0; web vue-tsc 0 errors
+- [x] Unit: RoiAnalyticsServiceTests (4) + ProcessTrendAnalyzerTests (8) pass; full unit suite 441/441
+- [x] ROI % formula unit-verified (900% for 360/40); volume spike >3σ → AnomalyDetected verified
+- [x] ROI calc deterministic, no AI; roi-config Admin-only; Serilog on new functions
+
+**DEVIATIONS:** No chart library exists in web deps (prompt referenced recharts, which is React) — used a dependency-free CSS bar chart. CSV export is client-side (Blob) rather than server-side; functional and simpler.
