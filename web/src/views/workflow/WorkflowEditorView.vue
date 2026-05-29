@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
+import { onClickOutside } from '@vueuse/core';
+import { XCircle, AlertTriangle, CheckCircle2 } from 'lucide-vue-next';
 import SfgCanvas from '../../components/canvas/SfgCanvas.vue';
 import FmYamlEditor from '../../components/editor/FmYamlEditor.vue';
 import CopilotPanel from '../../components/editor/CopilotPanel.vue';
@@ -26,6 +28,15 @@ const {
 const toast = useToast();
 
 const { openArticle } = useHelp();
+
+const validationErrorsList = computed(() => validationErrors.value.filter(e => e.severity === 'error'));
+const validationWarningsList = computed(() => validationErrors.value.filter(e => e.severity === 'warning'));
+const validationErrorCount = computed(() => validationErrorsList.value.length);
+const validationWarningCount = computed(() => validationWarningsList.value.length);
+
+const showValidationPanel = ref(false);
+const validationBadgeRef = ref<HTMLDivElement | null>(null);
+onClickOutside(validationBadgeRef, () => { showValidationPanel.value = false; });
 
 const copilotOpen = ref(false);
 const copilotPanelRef = ref<InstanceType<typeof CopilotPanel> | null>(null);
@@ -81,19 +92,22 @@ async function onCopilotCommand(cmd: string) {
   }
 }
 
-async function validateAndShowToast() {
-  const result = await validate();
-  if (!result) return;
-  const errorCount = result.errors.length;
-  const warnCount = result.warnings.length;
-  if (errorCount > 0) {
-    toast.error(`Validation failed — ${errorCount} error${errorCount !== 1 ? 's' : ''} found. Fix before publishing.`);
-  } else if (warnCount > 0) {
-    toast.warning(`Valid with ${warnCount} warning${warnCount !== 1 ? 's' : ''} — can publish but review recommended`);
-  } else {
-    toast.success('Workflow is valid — ready to publish');
+async function onValidationBadgeClick() {
+  const hasIssues = validationErrorCount.value > 0 || validationWarningCount.value > 0;
+  if (!hasIssues) {
+    // Re-validate and show toast result
+    const result = await validate();
+    if (!result) return;
+    if (result.errors.length === 0 && result.warnings.length === 0) {
+      toast.success('Workflow is valid — ready to publish');
+    } else {
+      showValidationPanel.value = true;
+    }
+    return;
   }
+  showValidationPanel.value = !showValidationPanel.value;
 }
+
 
 // Health score badge colour
 function healthColour(score: number | null) {
@@ -162,14 +176,65 @@ onUnmounted(() => {
         >Save</button>
 
         <button
-          class="text-xs bg-neutral-700 hover:bg-neutral-600 text-white rounded-lg px-3 py-1.5"
-          @click="validateAndShowToast"
-        >Validate</button>
-
-        <button
           class="text-xs bg-violet-900 hover:bg-violet-800 text-violet-300 rounded-lg px-3 py-1.5"
           @click="copilotOpen = !copilotOpen"
         >✦ Co-pilot <kbd class="ml-1 text-neutral-400">⌘K</kbd></button>
+
+        <!-- Validation badge -->
+        <div ref="validationBadgeRef" class="relative shrink-0">
+          <button
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            :class="validationErrorCount > 0
+              ? 'bg-red-100 text-red-700 hover:bg-red-200'
+              : validationWarningCount > 0
+                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+            @click="onValidationBadgeClick"
+          >
+            <XCircle v-if="validationErrorCount > 0" class="w-3.5 h-3.5" />
+            <AlertTriangle v-else-if="validationWarningCount > 0" class="w-3.5 h-3.5" />
+            <CheckCircle2 v-else class="w-3.5 h-3.5 text-teal-500" />
+            <span v-if="validationErrorCount > 0">{{ validationErrorCount }} error{{ validationErrorCount > 1 ? 's' : '' }}</span>
+            <span v-else-if="validationWarningCount > 0">{{ validationWarningCount }} warning{{ validationWarningCount > 1 ? 's' : '' }}</span>
+            <span v-else>Valid</span>
+          </button>
+
+          <div
+            v-if="showValidationPanel"
+            class="absolute top-full mt-1 right-0 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 p-3"
+          >
+            <div v-if="validationErrorsList.length > 0" class="mb-3">
+              <p class="text-xs font-semibold text-red-700 uppercase tracking-wider mb-1">
+                Errors — must fix before publishing
+              </p>
+              <ul class="space-y-1">
+                <li
+                  v-for="err in validationErrorsList"
+                  :key="err.message"
+                  class="text-xs text-red-700 flex gap-2"
+                >
+                  <XCircle class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  {{ err.message }}
+                </li>
+              </ul>
+            </div>
+            <div v-if="validationWarningsList.length > 0">
+              <p class="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">
+                Warnings
+              </p>
+              <ul class="space-y-1">
+                <li
+                  v-for="warn in validationWarningsList"
+                  :key="warn.message"
+                  class="text-xs text-amber-700 flex gap-2"
+                >
+                  <AlertTriangle class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  {{ warn.message }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
 
         <!-- Mode toggle -->
         <div class="flex rounded-lg overflow-hidden border border-gray-300 shrink-0">
@@ -215,6 +280,7 @@ onUnmounted(() => {
             :workspace-id="workspaceId"
             :workflow-id="workflowId"
             :visible="empathyMode"
+            :yaml-content="yaml"
           />
           <FmYamlEditor
             v-else
