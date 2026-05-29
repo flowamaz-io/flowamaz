@@ -13,6 +13,19 @@ export interface WorkspaceSettings {
   marketplacePolicy: MarketplacePolicy;
 }
 
+/** GET /api/v1/workspaces/{id}/usage — plan/edition usage (prompt 05-07). */
+export interface UsageResponse {
+  edition: string;
+  isCommunity: boolean;
+  workflowsUsed: number;
+  workflowsLimit: number;
+  runsUsed: number;
+  runsLimit: number;
+  membersUsed: number;
+  membersLimit: number;
+  isAtLimit: boolean;
+}
+
 /** GET /api/v1/workspaces list item. */
 export interface WorkspaceListItem {
   id: string;

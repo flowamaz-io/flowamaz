@@ -50,6 +50,15 @@
   --color-danger-800: #872625;
   --color-danger-900: #712525;
   --color-danger: #e24b4a;
+
+  /* Dark sidebar app-shell tokens (FUNCTIONAL.md §19 + prompt 05-06). */
+  --color-sidebar-bg: #0f1117;
+  --color-sidebar-border: #1c1f26;
+  --color-sidebar-active: #1d9e75;
+  --color-sidebar-hover: rgba(255, 255, 255, 0.05);
+  --color-sidebar-text-primary: #ffffff;
+  --color-sidebar-text-secondary: #94a3b8;
+  --color-sidebar-text-muted: #475569;
 }
 
 html,

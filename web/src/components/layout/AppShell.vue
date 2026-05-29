@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { Menu } from 'lucide-vue-next';
 import Sidebar from './Sidebar.vue';
-import TopBar from './TopBar.vue';
 import HelpPanel from '@/components/help/HelpPanel.vue';
 import { useUiStore } from '@/stores/ui.store';
 import { useHelp } from '@/composables/useHelp';
@@ -68,8 +68,18 @@ watch(
 <template>
   <div class="flex h-full">
     <Sidebar />
-    <div class="flex min-w-0 flex-1 flex-col">
-      <TopBar />
+    <!-- The Sidebar is md:static so on desktop it occupies 220px / 52px of flow width
+         (collapsed) — content fills the remainder with no margin needed and no layout jump.
+         On mobile the Sidebar is a fixed slide-in overlay, so content is full-width. -->
+    <div class="flex min-w-0 flex-1 flex-col transition-all duration-200 ease-in-out">
+      <!-- Mobile hamburger — opens the slide-in sidebar overlay. -->
+      <button
+        class="absolute left-3 top-3 z-20 rounded-lg bg-sidebar-bg p-2 text-white shadow-lg md:hidden"
+        aria-label="Open menu"
+        @click="ui.setSidebar(false)"
+      >
+        <Menu class="h-5 w-5" />
+      </button>
       <main :class="isFullScreen ? 'flex-1 overflow-hidden flex flex-col' : 'flex-1 overflow-y-auto bg-slate-50'">
         <RouterView />
       </main>
