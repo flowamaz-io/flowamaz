@@ -41,9 +41,9 @@ public sealed class CopilotService : ICopilotService
         "    - id: existing-node-id\n" +
         "      type: human-gate\n" +
         "      label: \"Existing Label\"\n" +
-        "      config:\n" +
-        "        timeout:\n" +
-        "          seconds: 7200\n\n" +
+        "      config: {}\n" +
+        "      timeout:\n" +
+        "        seconds: 7200\n\n" +
         "To ADD a new edge:\n" +
         "spec:\n" +
         "  edges:\n" +

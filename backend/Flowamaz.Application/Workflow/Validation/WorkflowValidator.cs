@@ -297,7 +297,7 @@ public sealed class WorkflowValidator : IWorkflowValidator
     {
         foreach (var gate in doc.Spec?.Nodes?.Where(n => n.Type?.Equals("human-gate", StringComparison.OrdinalIgnoreCase) == true) ?? [])
         {
-            if (gate.Timeout == null)
+            if (gate.Timeout == null && (gate.Config == null || !gate.Config.ContainsKey("timeout")))
                 warnings.Add(new ValidationIssue(6, "BPR-001",
                     $"Human gate '{gate.Id}' has no timeout. Without a timeout the gate waits forever and may block the workflow.",
                     gate.Id, null, null));
@@ -360,6 +360,7 @@ public sealed class WorkflowValidator : IWorkflowValidator
         [JsonPropertyName("content")] public string? Content { get; set; }
         [JsonPropertyName("retry")] public RetryDto? Retry { get; set; }
         [JsonPropertyName("timeout")] public TimeoutDto? Timeout { get; set; }
+        [JsonPropertyName("config")] public Dictionary<string, JsonElement>? Config { get; set; }
     }
 
     private sealed class RetryDto
