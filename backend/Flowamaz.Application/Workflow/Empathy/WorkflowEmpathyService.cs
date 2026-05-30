@@ -47,25 +47,34 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
             "WorkflowEmpathyService.AnalyseAsync entry id={Id} workspaceId={WorkspaceId}",
             workflowDefinitionId, workspaceId);
 
+        var def = await _definitions.GetByIdForWorkspaceAsync(workflowDefinitionId, workspaceId, ct);
+        if (def is null)
+        {
+            throw new InvalidOperationException(
+                $"Workflow {workflowDefinitionId} not found in workspace {workspaceId}. " +
+                "Verify the workflow ID and your workspace access.");
+        }
+
+        return await AnalyseYamlAsync(def.YamlContent, workflowDefinitionId, workspaceId, ct);
+    }
+
+    public async Task<EmpathyAnalysis> AnalyseYamlAsync(
+        string yaml, Guid workflowDefinitionId, Guid workspaceId, CancellationToken ct = default)
+    {
+        _log.LogInformation(
+            "WorkflowEmpathyService.AnalyseYamlAsync entry id={Id} workspaceId={WorkspaceId}",
+            workflowDefinitionId, workspaceId);
+
         try
         {
-            var def = await _definitions.GetByIdForWorkspaceAsync(workflowDefinitionId, workspaceId, ct);
-            if (def is null)
-            {
-                throw new InvalidOperationException(
-                    $"Workflow {workflowDefinitionId} not found in workspace {workspaceId}. " +
-                    "Verify the workflow ID and your workspace access.");
-            }
-
             WorkflowGraph graph;
             try
             {
-                graph = await _sfgParser.ParseAsync(def.YamlContent, ct);
+                graph = await _sfgParser.ParseAsync(yaml, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _log.LogWarning(ex, "WorkflowEmpathyService.AnalyseAsync parse failed id={Id}", workflowDefinitionId);
-                // Return a zero-score analysis rather than throwing — the YAML is malformed
+                _log.LogWarning(ex, "WorkflowEmpathyService.AnalyseYamlAsync parse failed id={Id}", workflowDefinitionId);
                 return new EmpathyAnalysis(
                     workflowDefinitionId, 0, 0, 0, 0, 0, 0,
                     new[] { new EmpathyIssue("unknown", "Unparseable workflow", EmpathyIssueType.NoOutcomeNotification,
@@ -220,14 +229,14 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
                 issues.AsReadOnly());
 
             _log.LogInformation(
-                "WorkflowEmpathyService.AnalyseAsync exit id={Id} score={Score} issues={IssueCount}",
+                "WorkflowEmpathyService.AnalyseYamlAsync exit id={Id} score={Score} issues={IssueCount}",
                 workflowDefinitionId, score, issues.Count);
 
             return analysis;
         }
-        catch (Exception ex) when (ex is not InvalidOperationException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _log.LogError(ex, "WorkflowEmpathyService.AnalyseAsync error id={Id}", workflowDefinitionId);
+            _log.LogError(ex, "WorkflowEmpathyService.AnalyseYamlAsync error id={Id}", workflowDefinitionId);
             throw;
         }
     }

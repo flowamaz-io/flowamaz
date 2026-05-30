@@ -30,11 +30,11 @@
         <div
           ref="containerRef"
           class="w-full h-full"
+          tabindex="0"
           @dragover.prevent
           @drop="onDrop"
           @contextmenu.prevent="onContextMenu"
           @keydown="onKeydown"
-          tabindex="0"
         />
 
         <!-- Minimap -->
@@ -42,8 +42,16 @@
           v-show="showMinimap"
           class="absolute bottom-4 right-4 w-36 h-28 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-lg pointer-events-none opacity-80"
         >
-          <img v-if="minimapDataUrl" :src="minimapDataUrl" class="w-full h-full object-contain" alt="" />
-          <div v-else class="w-full h-full flex items-center justify-center">
+          <img
+            v-if="minimapDataUrl"
+            :src="minimapDataUrl"
+            class="w-full h-full object-contain"
+            alt=""
+          >
+          <div
+            v-else
+            class="w-full h-full flex items-center justify-center"
+          >
             <span class="text-gray-300 text-xs">Canvas</span>
           </div>
         </div>
@@ -83,11 +91,18 @@
       :visible="ctxMenu.visible"
       :x="ctxMenu.x"
       :y="ctxMenu.y"
+      :node-type="ctxMenu.nodeType"
       @edit="onCtxEdit"
       @duplicate="onCtxDuplicate"
       @add-connected="onCtxAddConnected"
       @help="onCtxHelp"
       @delete="onCtxDelete"
+      @configure="onCtxConfigure"
+      @add-branch="onCtxAddBranch"
+      @test="onCtxTest"
+      @preview-gate="onCtxPreviewGate"
+      @edit-conditions="onCtxEditConditions"
+      @set-default-branch="onCtxSetDefaultBranch"
     />
   </div>
 </template>
@@ -131,7 +146,7 @@ const canvas = useCytoscapeCanvas(containerRef);
 const { syncYamlToCanvas } = useYamlCanvasSync(() => canvas.cy.value);
 const workflowStore = useWorkflowStore();
 
-const ctxMenu = ref({ visible: false, x: 0, y: 0, nodeId: '' });
+const ctxMenu = ref({ visible: false, x: 0, y: 0, nodeId: '', nodeType: '' });
 
 async function loadWorkflow() {
   const workspaceId = (route.query.workspaceId as string) || ws.currentWorkspaceId.value;
@@ -217,7 +232,8 @@ function onContextMenu(e: MouseEvent) {
   // Find the selected node or the one under cursor
   const selected = canvasStore.selectedNodeId;
   if (!selected) return;
-  ctxMenu.value = { visible: true, x: e.clientX, y: e.clientY, nodeId: selected };
+  const nodeType = canvas.cy.value?.getElementById(selected).data('nodeType') as string ?? '';
+  ctxMenu.value = { visible: true, x: e.clientX, y: e.clientY, nodeId: selected, nodeType };
 }
 
 onMounted(async () => {
@@ -292,6 +308,13 @@ function onCtxDelete() {
   snapshotYaml();
   ctxMenu.value.visible = false;
 }
+
+function onCtxConfigure(_action: string) { ctxMenu.value.visible = false; }
+function onCtxAddBranch() { ctxMenu.value.visible = false; }
+function onCtxTest(_nodeType: string) { ctxMenu.value.visible = false; }
+function onCtxPreviewGate() { ctxMenu.value.visible = false; }
+function onCtxEditConditions() { ctxMenu.value.visible = false; }
+function onCtxSetDefaultBranch() { ctxMenu.value.visible = false; }
 
 function handleAddGroup() {
   canvas.addGroup('New Group');

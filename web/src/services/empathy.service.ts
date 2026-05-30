@@ -22,9 +22,10 @@ export interface EmpathyAnalysis {
 }
 
 export const empathyService = {
-  async getEmpathyAnalysis(workspaceId: string, workflowId: string): Promise<EmpathyAnalysis> {
-    const res = await http.get<ApiEnvelope<EmpathyAnalysis>>(
+  async getEmpathyAnalysis(workspaceId: string, workflowId: string, yamlContent?: string): Promise<EmpathyAnalysis> {
+    const res = await http.post<ApiEnvelope<EmpathyAnalysis>>(
       `/api/v1/workspaces/${workspaceId}/workflows/${workflowId}/empathy`,
+      { yamlContent: yamlContent ?? null },
     );
     return unwrap(res);
   },

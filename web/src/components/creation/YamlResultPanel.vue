@@ -1,10 +1,13 @@
 <template>
   <Teleport to="body">
-    <div v-if="isOpen" class="fixed inset-0 z-50">
+    <div
+      v-if="isOpen"
+      class="fixed inset-0 z-50"
+    >
       <!-- Overlay -->
       <div
         class="absolute inset-0 bg-black/20 backdrop-blur-sm"
-        @click="emit('close')"
+        @click="requestDiscard"
       />
 
       <!-- Sliding panel -->
@@ -26,22 +29,46 @@
             <div class="flex items-center gap-2">
               <button
                 class="px-3 py-1.5 rounded bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium transition-colors"
-                @click="emit('openInCanvas', props.yamlContent)"
+                @click="emit('openInCanvas', props.workflowId)"
               >
                 Open in Canvas
               </button>
               <button
                 class="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors text-lg leading-none"
-                @click="emit('close')"
+                @click="requestDiscard"
               >
                 ×
               </button>
             </div>
           </div>
 
+          <!-- Discard confirmation -->
+          <div
+            v-if="showDiscardPrompt"
+            class="mx-4 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between gap-3 shrink-0"
+          >
+            <span class="text-sm text-red-700">Discard this workflow? This cannot be undone.</span>
+            <div class="flex gap-2 shrink-0">
+              <button
+                class="px-3 py-1 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition-colors"
+                @click="confirmDiscard"
+              >
+                Discard
+              </button>
+              <button
+                class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs transition-colors"
+                @click="showDiscardPrompt = false"
+              >
+                Keep
+              </button>
+            </div>
+          </div>
+
           <!-- Body -->
           <div class="flex-1 overflow-auto p-4">
-            <div class="text-xs text-gray-500 uppercase tracking-wider mb-2">Generated Workflow YAML</div>
+            <div class="text-xs text-gray-500 uppercase tracking-wider mb-2">
+              Generated Workflow YAML
+            </div>
             <div class="relative">
               <pre class="text-sm font-mono bg-gray-50 rounded-lg p-4 overflow-auto text-gray-800 border border-gray-200 whitespace-pre-wrap min-h-[200px]">{{ props.yamlContent }}</pre>
               <button
@@ -57,20 +84,13 @@
           <div class="h-16 border-t border-gray-200 flex items-center gap-3 px-4 shrink-0">
             <button
               class="px-4 py-2 rounded bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium transition-colors"
-              @click="emit('openInCanvas', props.yamlContent)"
+              @click="emit('openInCanvas', props.workflowId)"
             >
               Open in Canvas
             </button>
             <button
-              class="px-4 py-2 rounded border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              :disabled="saving"
-              @click="emit('saveAsDraft', props.workflowName, props.yamlContent)"
-            >
-              {{ saving ? 'Saving...' : 'Save as Draft' }}
-            </button>
-            <button
               class="px-3 py-2 rounded text-gray-500 hover:text-gray-700 text-sm transition-colors"
-              @click="emit('close')"
+              @click="emit('regenerate', props.workflowId)"
             >
               Regenerate
             </button>
@@ -87,17 +107,18 @@ import { ref } from 'vue';
 const props = defineProps<{
   yamlContent: string;
   workflowName: string;
+  workflowId: string;
   isOpen: boolean;
 }>();
 
 const emit = defineEmits<{
-  close: [];
-  openInCanvas: [yamlContent: string];
-  saveAsDraft: [workflowName: string, yamlContent: string];
+  openInCanvas: [workflowId: string];
+  regenerate: [workflowId: string];
+  discard: [workflowId: string];
 }>();
 
 const copied = ref(false);
-const saving = ref(false);
+const showDiscardPrompt = ref(false);
 
 async function copyYaml() {
   try {
@@ -109,9 +130,12 @@ async function copyYaml() {
   }
 }
 
-function setSaving(val: boolean) {
-  saving.value = val;
+function requestDiscard() {
+  showDiscardPrompt.value = true;
 }
 
-defineExpose({ setSaving });
+function confirmDiscard() {
+  showDiscardPrompt.value = false;
+  emit('discard', props.workflowId);
+}
 </script>

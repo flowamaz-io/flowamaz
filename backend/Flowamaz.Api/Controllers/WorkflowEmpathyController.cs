@@ -1,4 +1,5 @@
 using Flowamaz.Api.Authorization;
+using Flowamaz.Application.Workflow.Empathy;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Models;
@@ -19,17 +20,30 @@ public sealed class WorkflowEmpathyController : ControllerBase
         _log = log;
     }
 
-    /// <summary>Returns the empathy analysis for a workflow definition.</summary>
-    [HttpGet]
+    /// <summary>
+    /// Analyses a workflow for empathy issues. If yamlContent is provided in the body,
+    /// it is parsed directly so unsaved edits are reflected without a save first.
+    /// </summary>
+    [HttpPost]
     [RequireWorkspaceRole(WorkspaceRole.Designer)]
     public async Task<ActionResult<EmpathyAnalysis>> GetEmpathyAnalysis(
-        Guid workspaceId, Guid id, CancellationToken cancellationToken)
+        Guid workspaceId, Guid id,
+        [FromBody] EmpathyRequest? request,
+        CancellationToken cancellationToken)
     {
         _log.LogInformation(
-            "WorkflowEmpathyController.GetEmpathyAnalysis entry workspaceId={WorkspaceId} id={Id}",
-            workspaceId, id);
+            "WorkflowEmpathyController.GetEmpathyAnalysis entry workspaceId={WorkspaceId} id={Id} hasYaml={HasYaml}",
+            workspaceId, id, !string.IsNullOrWhiteSpace(request?.YamlContent));
 
-        var result = await _empathy.AnalyseAsync(id, workspaceId, cancellationToken);
+        EmpathyAnalysis result;
+        if (!string.IsNullOrWhiteSpace(request?.YamlContent))
+        {
+            result = await _empathy.AnalyseYamlAsync(request.YamlContent, id, workspaceId, cancellationToken);
+        }
+        else
+        {
+            result = await _empathy.AnalyseAsync(id, workspaceId, cancellationToken);
+        }
 
         _log.LogInformation(
             "WorkflowEmpathyController.GetEmpathyAnalysis exit score={Score}",
