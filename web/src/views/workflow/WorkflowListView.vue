@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { Workflow, Play } from 'lucide-vue-next';
+import { Workflow, Play, Eye, PlayCircle, Trash2 } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import FmBadge from '@/components/common/FmBadge.vue';
@@ -190,7 +190,7 @@ onMounted(reload);
               Updated
             </th>
             <th class="px-4 py-3 text-right">
-              Actions
+              <span class="sr-only">Actions</span>
             </th>
           </tr>
         </thead>
@@ -223,36 +223,40 @@ onMounted(reload);
               {{ fromNow(wf.updatedAt) }}
             </td>
             <td class="px-4 py-3 text-right">
-              <div class="flex justify-end gap-2">
+              <div class="flex items-center justify-end gap-1">
                 <RouterLink
                   :to="`/workflows/${wf.id}`"
-                  class="text-sm font-medium text-primary-600 hover:text-primary-700"
+                  class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                  title="View workflow"
                 >
-                  View
+                  <Eye class="h-4 w-4" />
                 </RouterLink>
                 <button
                   v-if="wf.status === 'Published'"
                   type="button"
-                  class="text-sm font-medium text-slate-600 hover:text-slate-900"
+                  class="flex h-8 w-8 items-center justify-center rounded-lg text-teal-500 transition-colors hover:bg-teal-50 hover:text-teal-700"
+                  title="Trigger run"
                   @click="openTrigger(wf.id)"
                 >
-                  Trigger run
+                  <Play class="h-4 w-4" />
                 </button>
                 <button
                   v-else-if="wf.status === 'Draft'"
                   type="button"
-                  class="text-sm font-medium text-amber-600 hover:text-amber-800"
+                  class="flex h-8 w-8 items-center justify-center rounded-lg text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
+                  title="Test run"
                   @click="openTrigger(wf.id)"
                 >
-                  Test run
+                  <PlayCircle class="h-4 w-4" />
                 </button>
                 <button
                   v-if="wf.status === 'Draft'"
                   type="button"
-                  class="rounded px-1.5 py-0.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                  class="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                  title="Delete workflow"
                   @click="openDelete(wf.id, wf.name)"
                 >
-                  Delete
+                  <Trash2 class="h-4 w-4" />
                 </button>
               </div>
             </td>

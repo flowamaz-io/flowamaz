@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { Pencil, Play, XCircle, AlertTriangle, Webhook, Copy, Check, Share2, Trash2 } from 'lucide-vue-next';
+import { Pencil, Play, PlayCircle, XCircle, AlertTriangle, Webhook, Copy, Check, Share2, Trash2 } from 'lucide-vue-next';
 import TriggerModal from '@/components/workflow/TriggerModal.vue';
 import DeleteWorkflowModal from '@/components/workflow/DeleteWorkflowModal.vue';
 import PublishTemplateModal from '@/components/library/PublishTemplateModal.vue';
@@ -302,17 +302,17 @@ watch(id, () => store.loadWorkflow(id.value));
           </button>
           <button
             v-if="currentWorkflow.status === 'Draft'"
-            class="flex items-center gap-2 px-4 py-2 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            class="flex h-9 w-9 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+            title="Delete workflow"
             @click="deleteOpen = true"
           >
             <Trash2 class="w-4 h-4" />
-            Delete
           </button>
           <button
             class="flex items-center gap-2 px-4 py-2 border border-amber-400 rounded-lg text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors"
             @click="openTestRun"
           >
-            <Play class="w-4 h-4" />
+            <PlayCircle class="w-4 h-4" />
             Test run
           </button>
           <FmButton
