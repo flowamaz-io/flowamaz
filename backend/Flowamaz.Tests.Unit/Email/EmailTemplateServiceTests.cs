@@ -38,6 +38,15 @@ public class EmailTemplateServiceTests
         html.Should().Contain("Acme Corp");
         text.Should().Contain("Carol");
         text.Should().Contain("Acme Corp");
+
+        // Onboarding links: product tour, template gallery, docs.
+        html.Should().Contain("Take a 2-minute tour");
+        html.Should().Contain("?tour=1");
+        html.Should().Contain("Start from a template");
+        html.Should().Contain("/library?tab=templates");
+        html.Should().Contain("Read the docs");
+        text.Should().Contain("?tour=1");
+        text.Should().Contain("/library?tab=templates");
     }
 
     [Fact]

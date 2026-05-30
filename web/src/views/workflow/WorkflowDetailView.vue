@@ -9,6 +9,7 @@ import FmBadge from '@/components/common/FmBadge.vue';
 import FmButton from '@/components/common/FmButton.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
+import FmTooltip from '@/components/common/FmTooltip.vue';
 import FmYamlEditor from '@/components/editor/FmYamlEditor.vue';
 import FmVersionDiffView from '@/components/workflow/FmVersionDiffView.vue';
 import type { WorkflowCommit } from '@/types';
@@ -263,11 +264,23 @@ watch(id, () => store.loadWorkflow(id.value));
             {{ currentWorkflow.name }}
           </h1>
           <div class="mt-2 flex items-center gap-3 text-sm">
-            <FmBadge :variant="workflowStatusVariant(currentWorkflow.status)">
-              {{ currentWorkflow.status }}
-            </FmBadge>
-            <span :class="['font-semibold', healthColorClass(currentWorkflow.healthScore)]">
-              Health {{ currentWorkflow.healthScore }}
+            <span class="inline-flex items-center gap-1">
+              <FmBadge :variant="workflowStatusVariant(currentWorkflow.status)">
+                {{ currentWorkflow.status }}
+              </FmBadge>
+              <FmTooltip
+                text="Draft workflows can be tested but not triggered in production."
+                label="About workflow status"
+              />
+            </span>
+            <span class="inline-flex items-center gap-1">
+              <span :class="['font-semibold', healthColorClass(currentWorkflow.healthScore)]">
+                Health {{ currentWorkflow.healthScore }}
+              </span>
+              <FmTooltip
+                text="Health score reflects workflow quality — validation, coverage, and best practices."
+                label="About health score"
+              />
             </span>
             <span class="text-slate-400">{{ currentWorkflow.currentVersion }}</span>
           </div>

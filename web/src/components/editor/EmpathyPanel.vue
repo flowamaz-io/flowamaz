@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { empathyService, type EmpathyAnalysis, type EmpathyIssue } from '../../services/empathy.service';
+import FmTooltip from '@/components/common/FmTooltip.vue';
 
 interface Props {
   workspaceId: string;
@@ -121,7 +122,13 @@ function issueTypeLabel(type: EmpathyIssue['type']): string {
     >
       <!-- Score -->
       <div :class="['flex items-center justify-between rounded-lg border px-4 py-3', scoreBg(analysis.score)]">
-        <span class="text-xs text-gray-500 uppercase tracking-wider font-medium">Empathy Score</span>
+        <span class="flex items-center gap-1 text-xs text-gray-500 uppercase tracking-wider font-medium">
+          Empathy Score
+          <FmTooltip
+            text="Empathy score measures how human-friendly this workflow is for the people in it."
+            label="About empathy score"
+          />
+        </span>
         <span :class="['text-3xl font-bold', scoreColor(analysis.score)]">{{ analysis.score }}</span>
       </div>
 

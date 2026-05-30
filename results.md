@@ -1360,3 +1360,23 @@ Per-node I/O snapshots, instance replay with payload override, Dev-only breakpoi
 - [x] Replay always test instance; sensitive vars stripped; no stack trace to client
 
 **Deviation:** breakpoint mechanism (registry + Dev endpoints + resume/step) is in place and Dev-gated, but the orchestrator does not yet auto-pause mid-execution on a registered breakpoint (kept StepAsync surgical to avoid Phase-2 regressions). Scaffolded, not end-to-end live.
+
+---
+
+## 07-05 — Onboarding Improvements (Product Tour, Contextual Help, Empty States)  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Interactive first-run product tour, contextual `?` tooltips, polished teaching empty states, welcome-email links.
+
+- **ProductTour** (`components/onboarding/ProductTour.vue` + `TourStep.vue`) — custom 5-step overlay (NO external library): dark backdrop + cutout spotlight (`data-tour` targets), tooltip auto above/below, progress dots ●●○○○, Escape=skip / ArrowRight=next. Gated by `tour_completed_{workspaceId}` user preference (reuses existing `preferencesService`); never reappears after complete/skip. Mounted on the dashboard, shown after the onboarding wizard routes to `/`.
+- **FmTooltip** (`components/common/FmTooltip.vue`, created) — `?` icon, hover + click/focus (keyboard-operable), flips by available space. Wired onto workflow status badge, health score, empathy score, gates badge, Co-pilot button, API keys page. `FmEmptyState` already existed (common/) — reused.
+- **Empty states** — InstanceListView got the `[Go to Workflows]` CTA + spec title/description; WorkflowList/Gates/Library/Audit already teach with CTAs (left surgical).
+- **Welcome email** (`EmailTemplateService`) — added "Take a 2-minute tour →", "Start from a template →", "Read the docs →" links (HTML + text); test extended.
+
+**DoD**
+- [x] Web typecheck 0; lint 0; vitest **58/58** (+5 ProductTour: shows first login, hidden after completion, Escape skips+stores pref, complete stores pref, WorkflowList empty CTAs)
+- [x] Backend build 0/0; unit **517/517** (EmailTemplate test asserts 3 links)
+- [x] Tour custom overlay, never-after-completion, keyboard-operable; all empty states teach
+
+**Deviations:** repo uses `components/common/` not `shared/` (followed actual layout); removed a pre-existing unused `computed` import in PricingView (07-01) to satisfy the 0-lint gate.

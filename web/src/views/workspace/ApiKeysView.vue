@@ -8,6 +8,7 @@ import FmModal from '@/components/common/FmModal.vue';
 import FmAlert from '@/components/common/FmAlert.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmEmptyState from '@/components/common/FmEmptyState.vue';
+import FmTooltip from '@/components/common/FmTooltip.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useToast } from '@/composables/useToast';
@@ -121,8 +122,12 @@ async function confirmRevoke(): Promise<void> {
   <div class="mx-auto max-w-4xl space-y-6 p-6">
     <header class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-semibold text-slate-900">
+        <h1 class="flex items-center gap-2 text-2xl font-semibold text-slate-900">
           API keys
+          <FmTooltip
+            text="Use API keys to trigger workflows from external systems."
+            label="About API keys"
+          />
         </h1>
         <p class="text-sm text-slate-500">
           Programmatic access for triggering workflows and reading instances.

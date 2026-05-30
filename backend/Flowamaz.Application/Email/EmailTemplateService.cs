@@ -89,7 +89,24 @@ public static class EmailTemplateService
                     </td>
                   </tr>
                 </table>
-                <p style="margin:0 0 32px">{TealButton(AppUrl, "Open Flowamaz")}</p>
+                <p style="margin:0 0 24px">{TealButton(AppUrl, "Open Flowamaz")}</p>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px">
+                  <tr>
+                    <td style="padding:6px 0;font-size:15px">
+                      <a href="{AppUrl}/?tour=1" style="color:#1D9E75;font-weight:600;text-decoration:none">Take a 2-minute tour &#x2192;</a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0;font-size:15px">
+                      <a href="{AppUrl}/library?tab=templates" style="color:#1D9E75;font-weight:600;text-decoration:none">Start from a template &#x2192;</a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0;font-size:15px">
+                      <a href="{DocsUrl}" style="color:#1D9E75;font-weight:600;text-decoration:none">Read the docs &#x2192;</a>
+                    </td>
+                  </tr>
+                </table>
                 <p style="margin:0;font-size:14px;color:#6B7280">
                   Need help getting started? Reply to this email or visit our docs at
                   <a href="{DocsUrl}" style="color:#1D9E75">{DocsUrl}</a>
@@ -110,6 +127,10 @@ public static class EmailTemplateService
             ✓ Human approvals built in
 
             Open Flowamaz: {AppUrl}
+
+            Take a 2-minute tour: {AppUrl}/?tour=1
+            Start from a template: {AppUrl}/library?tab=templates
+            Read the docs: {DocsUrl}
 
             Need help getting started? Reply to this email or visit {DocsUrl}
 

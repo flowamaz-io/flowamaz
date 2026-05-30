@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Check, Mail } from 'lucide-vue-next';
 import FmButton from '@/components/common/FmButton.vue';

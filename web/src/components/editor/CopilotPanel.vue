@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import FmTooltip from '@/components/common/FmTooltip.vue';
 
 const props = defineProps<{
   open: boolean;
@@ -62,6 +63,10 @@ defineExpose({ setResult });
         <div class="flex items-center gap-2">
           <span class="text-teal-600 font-bold text-sm">✦ Co-pilot</span>
           <kbd class="text-xs bg-gray-100 text-gray-600 rounded px-1 py-0.5">Ctrl+K</kbd>
+          <FmTooltip
+            text="Ask Co-pilot to modify your workflow in plain English. Ctrl+K"
+            label="About Co-pilot"
+          />
         </div>
         <button
           class="text-gray-400 hover:text-gray-700 text-sm"

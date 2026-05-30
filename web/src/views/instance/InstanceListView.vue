@@ -182,10 +182,12 @@ onUnmounted(disconnectAll);
     <FmEmptyState
       v-else-if="instances.length === 0"
       :icon="Activity"
-      :title="activeTab === 'test' ? 'No test runs yet' : 'No production runs yet'"
+      :title="activeTab === 'test' ? 'No test runs yet' : 'No runs yet'"
       :description="activeTab === 'test'
         ? 'Click Test run on any workflow to try it without creating a production instance.'
-        : 'Trigger a published workflow from the Workflows list to see runs appear here in real time.'"
+        : 'Trigger a published workflow to see runs appear here in real time.'"
+      cta-label="Go to Workflows"
+      @cta="$router.push('/workflows')"
     />
 
     <div

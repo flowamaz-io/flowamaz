@@ -8,6 +8,7 @@ import FmButton from '@/components/common/FmButton.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmEmptyState from '@/components/common/FmEmptyState.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
+import FmTooltip from '@/components/common/FmTooltip.vue';
 import TriggerModal from '@/components/workflow/TriggerModal.vue';
 import { useWorkflowStore } from '@/stores/workflow.store';
 import { useWorkspace } from '@/composables/useWorkspace';
@@ -155,10 +156,22 @@ onMounted(reload);
               Name
             </th>
             <th class="px-4 py-3">
-              Status
+              <span class="inline-flex items-center gap-1">
+                Status
+                <FmTooltip
+                  text="Draft workflows can be tested but not triggered in production."
+                  label="About workflow status"
+                />
+              </span>
             </th>
             <th class="px-4 py-3">
-              Health
+              <span class="inline-flex items-center gap-1">
+                Health
+                <FmTooltip
+                  text="Health score reflects workflow quality — validation, coverage, and best practices."
+                  label="About health score"
+                />
+              </span>
             </th>
             <th class="px-4 py-3">
               Updated

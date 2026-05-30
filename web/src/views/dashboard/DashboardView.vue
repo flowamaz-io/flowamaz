@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import GettingStartedChecklist from '@/components/onboarding/GettingStartedChecklist.vue';
+import ProductTour from '@/components/onboarding/ProductTour.vue';
 import FmWorkflowWeather from '@/components/dashboard/FmWorkflowWeather.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useWorkspace } from '@/composables/useWorkspace';
@@ -14,6 +15,10 @@ import type { WeatherResponse, WorkspaceRoiSummary } from '@/types';
 const { user } = useAuth();
 const ws = useWorkspace();
 const { current } = ws;
+
+// The product tour gates itself on the `tour_completed_{workspaceId}` preference, so it
+// shows at most once per workspace — first arrival on the dashboard after the wizard.
+const tourWorkspaceId = computed(() => ws.currentWorkspaceId.value ?? '');
 
 // Use name, falling back to slug, so the subtitle never reads "happening in ." with no name.
 const workspaceLabel = computed(() => current.value?.name || current.value?.slug || 'your workspace');
@@ -100,7 +105,10 @@ onMounted(async () => {
     <FmWorkflowWeather :workflows="weather?.workflows ?? []" />
 
     <!-- Creation hero -->
-    <section class="rounded-xl border border-slate-200 bg-white p-6">
+    <section
+      data-tour="creation-methods"
+      class="rounded-xl border border-slate-200 bg-white p-6"
+    >
       <h2 class="text-lg font-semibold text-slate-900">
         What would you like to automate?
       </h2>
@@ -123,5 +131,11 @@ onMounted(async () => {
         </button>
       </div>
     </section>
+
+    <ProductTour
+      v-if="tourWorkspaceId"
+      :workspace-id="tourWorkspaceId"
+      auto-start
+    />
   </div>
 </template>

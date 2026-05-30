@@ -138,6 +138,7 @@ function closeMobile(): void {
     @click="closeMobile"
   />
   <aside
+    data-tour="sidebar"
     :class="[
       'fixed inset-y-0 left-0 z-40 flex flex-col bg-sidebar-bg border-r border-sidebar-border',
       'transition-all duration-200 ease-in-out',
@@ -198,6 +199,7 @@ function closeMobile(): void {
           <li
             v-for="item in section.items"
             :key="item.label"
+            :data-tour="item.label === 'Library' ? 'library-nav' : undefined"
             class="group relative"
           >
             <!-- External link (Developer docs) -->
@@ -236,6 +238,7 @@ function closeMobile(): void {
               <span :class="['flex-1', { 'md:hidden': sidebarMinimized }]">{{ item.label }}</span>
               <span
                 v-if="badgeCount(item) > 0 && !sidebarMinimized"
+                :title="item.badgeKey === 'gates' ? 'Workflows waiting for your approval.' : undefined"
                 class="ml-auto rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-white"
               >{{ badgeCount(item) }}</span>
             </RouterLink>
