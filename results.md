@@ -1213,3 +1213,25 @@ Enterprise SSO with JIT provisioning. Org owners configure their IdP; users in S
 - [x] JIT provisioning (Viewer default); existing user updated, not duplicated; invalid SAML sig / OIDC state rejected
 - [x] IdP cert + client secret encrypted at rest; DTOs never expose them; password login still works for non-SSO orgs
 - [~] OIDC id_token JWKS signature validation + a third-party-hardened SAML library are documented follow-ups (functional scaffold validates signature via SignedXml + state/audience/timestamp)
+
+---
+
+## 06-05 — Connector Marketplace  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Real install counts + ratings/reviews + community connector submissions, replacing the mock library data.
+
+- **Entity changes** — `ConnectorDefinition` gained `InstallCount`, `AverageRating` (numeric(3,2)), `RatingCount`, `LastUpdatedAt`, `IsOfficial` (seed sets `IsOfficial=true` for the 13 official connectors). New `ConnectorRating` (unique `(connector, org)`) and `ConnectorSubmission` entities. Migration `AddConnectorMarketplace`.
+- **Atomic install count** — `ConnectorCatalogueService.InstallAsync` now loads the definition **tracked** and does `InstallCount += 1` in the same `SaveChanges` (one transaction); `UninstallAsync` decrements (floored at 0).
+- **`ConnectorMarketplaceService`** (Application, over new `IConnectorMarketplaceRepository`) — `RateConnectorAsync` (upsert one rating per org, then recompute `AverageRating`/`RatingCount` from all persisted ratings), `GetReviewsAsync`, `SubmitConnectorAsync` (strict YamlDotNet manifest validation → GitHub PR → tracked `pending` submission).
+- **`IConnectorSubmissionPrService` / `ConnectorSubmissionPrService`** (Infra) — opens a PR against flowamaz-io/connectors via the GitHub REST API (branch → commit manifest → PR), requires `GITHUB_CONNECTORS_TOKEN` (actionable error if absent).
+- **`ConnectorMarketplaceController`** — `GET connectors/{id}/reviews` (Viewer), `POST connectors/{id}/rate` (Designer, org from auth context), `POST library/connectors/submit` (Designer).
+- **Frontend** — `connector.service.ts` gained the metric fields + `getReviews`/`rateConnector`/`submitConnector` + `formatInstalls`; `ConnectorCard.vue` shows real installs/rating + Community badge; `ConnectorDetailView.vue` shows real metrics + a Reviews section + "Leave a review"; `RateConnectorModal.vue` (star + review); `ConnectorSubmissionView.vue` (manifest paste/upload → PR link); route `library/submit`.
+
+**DoD**
+- [x] Backend build 0/0; unit **484/484** (+5: rate stores+avg, duplicate upsert, valid manifest→PR, invalid manifest throws-before-PR, install increments)
+- [x] Web typecheck 0; lint 0 errors; web tests **51/51**
+- [x] Install increments atomically (single transaction); one rating per org (upsert); average recomputed each submission
+- [x] Submit validates manifest then opens a GitHub PR; submission row tracked as `pending`
+- [~] GitHub PR creation requires real GitHub App credentials (`GITHUB_CONNECTORS_TOKEN`) — verified structurally + mocked in tests, exercised against the live repo in staging

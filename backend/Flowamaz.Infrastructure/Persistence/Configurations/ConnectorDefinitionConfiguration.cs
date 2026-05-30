@@ -42,6 +42,8 @@ public sealed class ConnectorDefinitionConfiguration : IEntityTypeConfiguration<
             .HasColumnType("jsonb")
             .IsRequired();
 
+        builder.Property(c => c.AverageRating).HasColumnType("numeric(3,2)");
+
         builder.HasIndex(c => c.ConnectorId);
         builder.HasIndex(c => c.Category);
         builder.HasIndex(c => c.Tier);

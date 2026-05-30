@@ -82,8 +82,8 @@ public sealed class ConnectorCatalogueService : IConnectorCatalogueService
 
         try
         {
+            // Tracked load: the install count is incremented in the same SaveChanges (one transaction).
             var definition = await _db.ConnectorDefinitions
-                .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == connectorDefinitionId && !c.IsDeleted, ct)
                 ?? throw new InvalidOperationException(
                     $"Connector definition '{connectorDefinitionId}' not found. " +
@@ -116,6 +116,7 @@ public sealed class ConnectorCatalogueService : IConnectorCatalogueService
             };
 
             await _db.WorkspaceConnectors.AddAsync(connector, ct);
+            definition.InstallCount += 1;
             await _db.SaveChangesAsync(ct);
 
             _logger.LogInformation(
@@ -153,6 +154,13 @@ public sealed class ConnectorCatalogueService : IConnectorCatalogueService
             connector.IsDeleted = true;
             connector.DeletedAt = DateTime.UtcNow;
             _db.WorkspaceConnectors.Update(connector);
+
+            // Decrement the install count in the same transaction (never below zero).
+            var definition = await _db.ConnectorDefinitions
+                .FirstOrDefaultAsync(c => c.Id == connector.ConnectorDefinitionId, ct);
+            if (definition is { InstallCount: > 0 })
+                definition.InstallCount -= 1;
+
             await _db.SaveChangesAsync(ct);
 
             _logger.LogInformation(

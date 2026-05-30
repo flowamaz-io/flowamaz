@@ -42,4 +42,20 @@ public class ConnectorDefinition : AuditableEntity
     /// Null for official connectors. Set for workspace-private community connectors.
     /// </summary>
     public Guid? WorkspaceId { get; set; }
+
+    // ── Marketplace metrics (prompt 06-05) ──────────────────────────────────────
+
+    /// <summary>Number of workspaces that currently have this connector installed.</summary>
+    public int InstallCount { get; set; }
+
+    /// <summary>Mean of all org ratings (0 when none), recomputed on each rating submission.</summary>
+    public decimal AverageRating { get; set; }
+
+    public int RatingCount { get; set; }
+
+    /// <summary>When the connector definition (manifest/version) was last updated.</summary>
+    public DateTime? LastUpdatedAt { get; set; }
+
+    /// <summary>True for the seeded official connectors; false for community submissions.</summary>
+    public bool IsOfficial { get; set; }
 }

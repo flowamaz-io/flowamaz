@@ -6,6 +6,7 @@ using Flowamaz.Core.Entities.Auth;
 using Flowamaz.Core.Entities.Connector;
 using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Entities.Workflow;
+using Flowamaz.Core.Entities.Library;
 using Flowamaz.Core.Entities.Webhooks;
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Interfaces.Services;
@@ -73,6 +74,9 @@ public class FlowAmazDbContext : DbContext
     public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
 
     public DbSet<OrgSsoConfig> OrgSsoConfigs => Set<OrgSsoConfig>();
+
+    public DbSet<ConnectorRating> ConnectorRatings => Set<ConnectorRating>();
+    public DbSet<ConnectorSubmission> ConnectorSubmissions => Set<ConnectorSubmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -5,9 +5,11 @@ import { ChevronDown, ChevronUp, ArrowLeft } from 'lucide-vue-next';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import CredentialSetupWizard from '@/components/library/CredentialSetupWizard.vue';
-import { connectorService } from '@/services/connector.service';
+import RateConnectorModal from '@/components/library/RateConnectorModal.vue';
+import { connectorService, formatInstalls } from '@/services/connector.service';
 import { useWorkspace } from '@/composables/useWorkspace';
-import type { ConnectorDefinition } from '@/services/connector.service';
+import { fromNow } from '@/utils/date.util';
+import type { ConnectorDefinition, ConnectorReview } from '@/services/connector.service';
 
 interface OperationField {
   description?: string;
@@ -37,6 +39,8 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const wizardOpen = ref(false);
 const expandedOps = ref<Set<number>>(new Set());
+const reviews = ref<ConnectorReview[]>([]);
+const rateOpen = ref(false);
 
 const manifest = computed<ConnectorManifest>(() => {
   if (!connector.value) return {};
@@ -88,6 +92,7 @@ async function load(): Promise<void> {
       currentWorkspaceId.value,
       connectorId,
     );
+    reviews.value = await connectorService.getReviews(currentWorkspaceId.value, connectorId);
   } catch (err: unknown) {
     error.value =
       err instanceof Error
@@ -108,9 +113,18 @@ function toggleOp(idx: number): void {
 
 function onInstalled(_credentialId: string): void {
   if (connector.value) {
-    connector.value = { ...connector.value, isInstalled: true };
+    connector.value = { ...connector.value, isInstalled: true, installCount: connector.value.installCount + 1 };
   }
   wizardOpen.value = false;
+}
+
+async function onRated(result: { averageRating: number; ratingCount: number }): Promise<void> {
+  if (connector.value) {
+    connector.value = { ...connector.value, averageRating: result.averageRating, ratingCount: result.ratingCount };
+  }
+  if (currentWorkspaceId.value) {
+    reviews.value = await connectorService.getReviews(currentWorkspaceId.value, connectorId);
+  }
 }
 
 onMounted(load);
@@ -158,11 +172,23 @@ onMounted(load);
               <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', tierClasses]">
                 {{ connector.tier }}
               </span>
+              <span
+                v-if="!connector.isOfficial"
+                class="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700"
+              >
+                Community
+              </span>
               <span class="text-xs text-slate-400">v{{ connector.version }}</span>
             </div>
             <p class="text-sm text-slate-500">
               by {{ connector.publisherId }}
             </p>
+            <div class="mt-1 flex items-center gap-4 text-sm text-slate-500">
+              <span>{{ formatInstalls(connector.installCount) }} installs</span>
+              <span>
+                ⭐ {{ connector.ratingCount > 0 ? `${connector.averageRating.toFixed(1)} (${connector.ratingCount})` : 'No ratings' }}
+              </span>
+            </div>
             <p class="mt-2 text-sm text-slate-700 leading-relaxed">
               {{ manifest.description ?? connector.displayName }}
             </p>
@@ -278,7 +304,59 @@ onMounted(load);
           </div>
         </div>
       </div>
+      <!-- Reviews -->
+      <div class="rounded-xl border border-slate-200 bg-white">
+        <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <h2 class="text-sm font-semibold text-slate-900 uppercase tracking-wide">
+            Reviews ({{ connector.ratingCount }})
+          </h2>
+          <button
+            v-if="connector.isInstalled"
+            class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
+            @click="rateOpen = true"
+          >
+            Leave a review
+          </button>
+        </div>
+        <div
+          v-if="reviews.length === 0"
+          class="px-5 py-6 text-center text-sm text-slate-400"
+        >
+          No reviews yet.
+          <template v-if="connector.isInstalled">
+            Be the first to review this connector.
+          </template>
+          <template v-else>
+            Install this connector to leave a review.
+          </template>
+        </div>
+        <div
+          v-for="(r, idx) in reviews"
+          :key="idx"
+          class="border-b border-slate-100 px-5 py-3 last:border-0"
+        >
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-amber-500">{{ '★'.repeat(r.rating) }}<span class="text-slate-200">{{ '★'.repeat(5 - r.rating) }}</span></span>
+            <span class="text-xs text-slate-400">{{ fromNow(r.createdAt) }}</span>
+          </div>
+          <p
+            v-if="r.review"
+            class="mt-1 text-sm text-slate-700"
+          >
+            {{ r.review }}
+          </p>
+        </div>
+      </div>
     </template>
+
+    <!-- Rate modal -->
+    <RateConnectorModal
+      v-if="connector && currentWorkspaceId"
+      v-model="rateOpen"
+      :workspace-id="currentWorkspaceId"
+      :connector-id="connectorId"
+      @rated="onRated"
+    />
 
     <!-- Wizard -->
     <CredentialSetupWizard

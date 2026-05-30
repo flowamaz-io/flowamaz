@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import type { ConnectorDefinition } from '@/services/connector.service';
+import { formatInstalls, type ConnectorDefinition } from '@/services/connector.service';
 
 interface Props {
   connector: ConnectorDefinition;
@@ -47,14 +47,12 @@ const tierClasses = computed<string>(() => {
   return map[props.connector.tier] ?? 'bg-gray-100 text-gray-600';
 });
 
-// Static mock install counts seeded per connector (deterministic from connectorId).
-const installCount = computed<string>(() => {
-  const hash = props.connector.connectorId
-    .split('')
-    .reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  const count = 1000 + (hash % 1001);
-  return count >= 1000 ? (count / 1000).toFixed(1) + 'k' : String(count);
-});
+const installLabel = computed<string>(() => formatInstalls(props.connector.installCount));
+const ratingLabel = computed<string>(() =>
+  props.connector.ratingCount > 0
+    ? `${props.connector.averageRating.toFixed(1)} (${props.connector.ratingCount})`
+    : 'No ratings',
+);
 
 function onInstall(): void {
   emit('install', props.connector.connectorId);
@@ -73,9 +71,17 @@ function onCardClick(): void {
     <!-- Icon + tier -->
     <div class="flex items-start justify-between">
       <span class="text-2xl leading-none">{{ icon }}</span>
-      <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', tierClasses]">
-        {{ connector.tier }}
-      </span>
+      <div class="flex items-center gap-1">
+        <span
+          v-if="!connector.isOfficial"
+          class="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700"
+        >
+          Community
+        </span>
+        <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', tierClasses]">
+          {{ connector.tier }}
+        </span>
+      </div>
     </div>
 
     <!-- Name + description -->
@@ -96,8 +102,8 @@ function onCardClick(): void {
     <!-- Footer: rating + installs + action -->
     <div class="flex items-center justify-between mt-auto pt-1">
       <div class="flex items-center gap-3 text-xs text-slate-400">
-        <span>⭐ 4.5</span>
-        <span>{{ installCount }} installs</span>
+        <span>⭐ {{ ratingLabel }}</span>
+        <span>{{ installLabel }} installs</span>
       </div>
 
       <button

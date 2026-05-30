@@ -24,6 +24,28 @@ export interface ConnectorDefinition {
   tier: 'Official' | 'Community' | 'Verified' | 'Marketplace';
   isEnabled: boolean;
   isInstalled: boolean;
+  installCount: number;
+  averageRating: number;
+  ratingCount: number;
+  isOfficial: boolean;
+}
+
+export interface ConnectorReview {
+  orgId: string;
+  rating: number;
+  review: string | null;
+  createdAt: string;
+}
+
+export interface ConnectorRatingResult {
+  averageRating: number;
+  ratingCount: number;
+}
+
+export interface ConnectorSubmissionResult {
+  submissionId: string;
+  githubPrUrl: string;
+  status: string;
 }
 
 export interface ConnectorHealthStatus {
@@ -103,4 +125,39 @@ export const connectorService = {
     );
     return unwrap(res);
   },
+
+  async getReviews(workspaceId: string, connectorId: string): Promise<ConnectorReview[]> {
+    const res = await http.get<ApiEnvelope<ConnectorReview[]>>(`${base(workspaceId)}/${connectorId}/reviews`);
+    return unwrap(res);
+  },
+
+  async rateConnector(
+    workspaceId: string,
+    connectorId: string,
+    rating: number,
+    review: string | null,
+  ): Promise<ConnectorRatingResult> {
+    const res = await http.post<ApiEnvelope<ConnectorRatingResult>>(
+      `${base(workspaceId)}/${connectorId}/rate`,
+      { rating, review },
+    );
+    return unwrap(res);
+  },
+
+  async submitConnector(
+    workspaceId: string,
+    connectorName: string,
+    manifestYaml: string,
+  ): Promise<ConnectorSubmissionResult> {
+    const res = await http.post<ApiEnvelope<ConnectorSubmissionResult>>(
+      `/api/v1/workspaces/${workspaceId}/library/connectors/submit`,
+      { connectorName, manifestYaml },
+    );
+    return unwrap(res);
+  },
 };
+
+/** Formats an install count like "1.2k". */
+export function formatInstalls(count: number): string {
+  return count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
+}
