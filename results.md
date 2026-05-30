@@ -1083,3 +1083,25 @@ Extension `flowamaz-vscode`: hover docs, snippet completions (8 fmz-* snippets),
 - [x] phase-05-report.md at root; checkpoint PHASE_COMPLETE
 - [~] CI green / Trivy / Playwright S40-48 + S34-39 → run in CI/nightly (not in this environment); branch-protection checks are a repo-admin action
 - [!] 12 pre-existing integration failures carried forward → recommend fix-05
+
+---
+
+## fix-05-01 — Pre-existing integration test fixes  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Fixed the 12 pre-existing integration failures carried forward from Phase 5. All test-side fixes (one shared-fixture change) — **no production code touched**. Root causes were test/API contract drift:
+
+- **Validate tests** (`Phase3CreationTests` ×2): request key was snake_case `yaml_content`; API binds case-insensitively to `YamlContent` (frontend sends `yamlContent`). Non-nullable required prop → 400. Switched key to `yamlContent`.
+- **Generate test** (`Phase3CreationTests`): `/generate` returns a JSON body (`yamlContent` + `validationResult`), not an SSE stream. Updated to assert the JSON `data.yamlContent`.
+- **DNA test** (`Phase3DnaTests`): `/dna` reads YAML via `SfgParser` (top-level `workflow/nodes/edges`); test YAML was in the validator's `apiVersion/kind/spec` shape → 422. Rewrote `ApprovalYaml` in SFG format with a `HumanGate` node.
+- **Create-invalid-yaml tests** (`Phase2LifecycleTests`, `WorkflowApiTests`): `WorkflowService.CreateAsync` no longer parses/validates the SFG on the way in (validation is a separate `/validate` step). Renamed + assert 200 (draft persists unvalidated).
+- **AI node tests** (`Phase4AiNodeTests` ×2): Moq `.Returns<…>` arity drift — `IAiCompletionService.CompleteAsync` gained a 5th param (`int maxTokens`). Updated both setups to 5 generic args.
+- **Gate tests** (`Phase4GateTests` ×3): deciding a gate resumes the instance via the orchestrator; tests seeded only a `GateDecision` (no instance/node state) → 500. Rewrote to create a published+triggered gated instance + pending `HumanGate` node state (mirrors the passing `Workflow/GateApiTests`).
+- **OAuth callback test** (`Phase4ConnectorTests`): token exchange needs `SLACK_CLIENT_ID/SECRET` + an outbound HTTP call. Added test OAuth config + `CREDENTIAL_MASTER_KEY` and a `StubOAuthHandler` on the `oauth-exchange` named `HttpClient` in `IntegrationApiFixture` (provider-shaped token response, no network).
+
+**DoD**
+- [x] Integration suite **84/84** pass (was 72/84) — `dotnet test Flowamaz.Tests.Integration`
+- [x] Unit suite **447/447** still pass; `dotnet build Flowamaz.sln` 0 warnings / 0 errors
+- [x] OAuth test passes with stubbed HttpClient; validator tests pass with corrected request key
+- [x] No new failures; no production code changed

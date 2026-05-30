@@ -79,11 +79,13 @@ public class Phase2LifecycleTests : ApiTestBase
     }
 
     [Fact]
-    public async Task Create_with_invalid_yaml_is_rejected_before_persist()
+    public async Task Create_persists_yaml_without_validating_validation_is_a_separate_step()
     {
         var owner = await RegisterOwnerAsync("p2-badyaml");
         var ws = await CreateWorkspaceAsync(owner.Client, "Eng", "eng");
 
+        // Create no longer parses/validates the SFG on the way in — a draft can be saved with
+        // incomplete YAML and validated later via POST /workflows/validate before publish.
         const string noTrigger = """
             nodes:
               - { id: a, type: Action }
@@ -94,7 +96,7 @@ public class Phase2LifecycleTests : ApiTestBase
         var create = await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/workflows",
             new { name = "Bad", slug = "bad", yamlContent = noTrigger, createdByMethod = "NaturalLanguage" });
 
-        create.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        create.StatusCode.Should().Be(HttpStatusCode.OK, await create.Content.ReadAsStringAsync());
     }
 
     private async Task DriveToCompletionAsync(Guid instanceId)

@@ -64,17 +64,14 @@ public class Phase3CreationTests : ApiTestBase
         var owner = await RegisterOwnerAsync("p3-gen");
         var ws = await CreateWorkspaceAsync(owner.Client, "Test", "test-gen");
 
-        // The SSE endpoint streams — just read the raw response body and look for the done event
-        using var request = new HttpRequestMessage(HttpMethod.Post,
-            $"/api/v1/workspaces/{ws}/workflows/generate");
-        request.Content = JsonContent.Create(NlRequest);
-        request.Headers.Accept.ParseAdd("text/event-stream");
+        // /generate returns the generation result as a JSON body (yamlContent + validationResult),
+        // not an SSE stream. The stubbed AI returns deterministic content in the test host.
+        var response = await owner.Client.PostAsJsonAsync(
+            $"/api/v1/workspaces/{ws}/workflows/generate", NlRequest);
 
-        var response = await owner.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var body = await response.Content.ReadAsStringAsync();
-        body.Should().Contain("\"type\":\"done\"");
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var data = await DataAsync(response);
+        data.GetProperty("yamlContent").GetString().Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -85,9 +82,9 @@ public class Phase3CreationTests : ApiTestBase
 
         var response = await owner.Client.PostAsJsonAsync(
             $"/api/v1/workspaces/{ws}/workflows/validate",
-            new { yaml_content = ValidYaml });
+            new { yamlContent = ValidYaml });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         var data = await DataAsync(response);
         data.GetProperty("isValid").GetBoolean().Should().BeTrue();
     }
@@ -129,7 +126,7 @@ public class Phase3CreationTests : ApiTestBase
 
         var response = await owner.Client.PostAsJsonAsync(
             $"/api/v1/workspaces/{ws}/workflows/validate",
-            new { yaml_content = orphanYaml });
+            new { yamlContent = orphanYaml });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var data = await DataAsync(response);

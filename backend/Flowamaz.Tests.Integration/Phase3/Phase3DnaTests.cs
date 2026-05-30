@@ -13,37 +13,16 @@ public class Phase3DnaTests : ApiTestBase
 {
     public Phase3DnaTests(IntegrationApiFixture fixture) : base(fixture) { }
 
+    // SFG format (top-level workflow/nodes/edges) — this is what the DNA service's SfgParser reads.
     private const string ApprovalYaml = """
-        apiVersion: flowamaz/v1
-        kind: Workflow
-        metadata:
-          id: approval-1
-          name: "Approval Workflow"
-          version: "1.0.0"
-        spec:
-          trigger:
-            type: webhook
-          nodes:
-            - id: start
-              type: trigger
-              label: "Start"
-              config: {}
-            - id: gate
-              type: human-gate
-              label: "Approval"
-              config:
-                assignees: []
-            - id: end
-              type: end
-              label: "End"
-              config: {}
-          edges:
-            - id: e1
-              from: start
-              to: gate
-            - id: e2
-              from: gate
-              to: end
+        workflow: { id: approval-1, version: v1, name: "Approval Workflow" }
+        nodes:
+          - { id: start, type: Trigger }
+          - { id: gate, type: HumanGate, label: "Approval" }
+          - { id: done, type: End }
+        edges:
+          - { id: e1, from: start, to: gate }
+          - { id: e2, from: gate, to: done }
         """;
 
     [Fact]

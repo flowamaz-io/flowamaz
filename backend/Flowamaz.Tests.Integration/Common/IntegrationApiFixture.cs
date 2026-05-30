@@ -1,3 +1,6 @@
+using System.Net;
+using System.Text;
+using Flowamaz.Application.Connectors.Services;
 using Flowamaz.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -53,6 +56,12 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
         // Run integration tests as a cloud edition — Community hard caps (5 workflows / 1 user) would
         // otherwise block multi-workflow / member-add scenarios. Community enforcement is unit-tested.
         Environment.SetEnvironmentVariable("EDITION", "enterprise");
+        // Test-only OAuth client credentials so the token-exchange path resolves config instead of
+        // throwing "not configured". The actual provider HTTP call is stubbed (see StubOAuthHandler).
+        Environment.SetEnvironmentVariable("SLACK_CLIENT_ID", "test-slack-client-id");
+        Environment.SetEnvironmentVariable("SLACK_CLIENT_SECRET", "test-slack-client-secret");
+        // Master key the credential vault derives per-workspace keys from (OAuth callback stores a token).
+        Environment.SetEnvironmentVariable("CREDENTIAL_MASTER_KEY", "integration-test-credential-master-key-32!!");
 
         await _postgres.StartAsync();
         await _redis.StartAsync();
@@ -69,6 +78,11 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
 
                 services.RemoveAll<IConnectionMultiplexer>();
                 services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(_redis.GetConnectionString()));
+
+                // Stub the OAuth token-exchange HttpClient so callback tests never hit the live
+                // provider endpoints — returns a deterministic provider-shaped token response.
+                services.AddHttpClient(OAuthService.HttpClientName)
+                    .ConfigurePrimaryHttpMessageHandler(() => new StubOAuthHandler());
             });
         });
 
@@ -90,6 +104,29 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
     {
         var endpoint = _redisClient.GetEndPoints()[0];
         await _redisClient.GetServer(endpoint).FlushDatabaseAsync();
+    }
+}
+
+/// <summary>
+/// Primary handler for the "oauth-exchange" HttpClient under test. Returns a provider-shaped
+/// success token response (keyed on host) so OAuth callback tests exercise the full exchange →
+/// vault-store flow without any outbound network call.
+/// </summary>
+internal sealed class StubOAuthHandler : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var host = request.RequestUri?.Host ?? string.Empty;
+        var json = host.Contains("slack", StringComparison.OrdinalIgnoreCase)
+            ? """{"ok":true,"access_token":"xoxb-test-token","team":{"id":"T123"},"bot_user_id":"U123"}"""
+            : host.Contains("github", StringComparison.OrdinalIgnoreCase)
+                ? """{"access_token":"test-github-token","scope":"repo","token_type":"bearer"}"""
+                : """{"access_token":"test-ms-token","refresh_token":"test-refresh","expires_in":3600}""";
+
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        });
     }
 }
 

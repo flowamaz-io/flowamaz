@@ -21,39 +21,60 @@ public class Phase4GateTests : ApiTestBase
 {
     public Phase4GateTests(IntegrationApiFixture fixture) : base(fixture) { }
 
-    // Helpers ─────────────────────────────────────────────────────────────────
+    // Deciding a gate resumes the workflow instance via the orchestrator, so the gate must sit on a
+    // real published+triggered instance with a pending HumanGate node state (the worker is disabled
+    // in the test host, so we trigger and seed the node state directly). Node id is "approval".
+    private const string GatedYaml = """
+        workflow: { id: p4gated, version: v1, name: P4Gated }
+        nodes:
+          - { id: start, type: Trigger }
+          - { id: approval, type: HumanGate }
+          - { id: done, type: End }
+        edges:
+          - { id: e1, from: start, to: approval }
+          - { id: e2, from: approval, to: done }
+        """;
 
-    /// <summary>
-    /// Seeds a pending GateDecision directly into the DB and returns its id.
-    /// The instance/node IDs are arbitrary — GateService just needs the row to exist.
-    /// </summary>
-    private async Task<(Guid gateId, Guid instanceId, string nodeId, Guid workspaceId)> SeedPendingGateAsync()
+    private async Task<(Owner Owner, Guid Ws, Guid InstanceId)> SetupGatedInstanceAsync(string slug)
+    {
+        var owner = await RegisterOwnerAsync(slug);
+        var ws = await CreateWorkspaceAsync(owner.Client, "P4 Gate", slug);
+
+        var create = await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/workflows",
+            new { name = "Gated", slug = "gated", yamlContent = GatedYaml, createdByMethod = "NaturalLanguage" });
+        create.StatusCode.Should().Be(HttpStatusCode.OK, await create.Content.ReadAsStringAsync());
+        var workflowId = (await DataAsync(create)).GetProperty("id").GetGuid();
+
+        await owner.Client.PostAsync($"/api/v1/workspaces/{ws}/workflows/{workflowId}/publish", null);
+
+        var trigger = await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/instances",
+            new { workflowDefinitionId = workflowId });
+        var instanceId = (await DataAsync(trigger)).GetProperty("instanceId").GetGuid();
+        return (owner, ws, instanceId);
+    }
+
+    /// <summary>Seeds the pending HumanGate node state + GateDecision the decide/email paths act on.</summary>
+    private async Task<Guid> SeedGateAsync(
+        Guid ws, Guid instanceId, string nodeId, GateDeliveryChannel channel, DateTime expiresAt)
     {
         using var scope = Fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
-
-        var workspaceId = Guid.NewGuid();
-        var instanceId = Guid.NewGuid();
-        var nodeId = $"gate-node-{Guid.NewGuid():N}";
-        var expiresAt = DateTime.UtcNow.AddHours(24);
-
+        db.WorkflowNodeStates.Add(new WorkflowNodeState
+        {
+            WorkspaceId = ws, InstanceId = instanceId, NodeId = nodeId, NodeType = "HumanGate", Status = NodeStatus.Pending,
+        });
         var gate = new GateDecision
         {
             Id = Guid.NewGuid(),
-            WorkspaceId = workspaceId,
-            InstanceId = instanceId,
-            NodeId = nodeId,
+            WorkspaceId = ws, InstanceId = instanceId, NodeId = nodeId,
             Decision = GateDecisionStatus.Pending,
-            DeliveryChannel = GateDeliveryChannel.Portal,
-            DeliveryStatus = GateDeliveryStatus.Pending,
+            DeliveryChannel = channel,
+            DeliveryStatus = GateDeliveryStatus.Sent,
             ExpiresAt = expiresAt,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
         };
-
         db.GateDecisions.Add(gate);
         await db.SaveChangesAsync();
-        return (gate.Id, instanceId, nodeId, workspaceId);
+        return gate.Id;
     }
 
     // ── Decide Approve ────────────────────────────────────────────────────────
@@ -61,40 +82,14 @@ public class Phase4GateTests : ApiTestBase
     [Fact]
     public async Task DecideGate_Approve_GateStatusApproved()
     {
-        var owner = await RegisterOwnerAsync("p4-gate-approve");
-        var (_, instanceId, nodeId, workspaceId) = await SeedPendingGateAsync();
-
-        // Register a workspace for this owner so RBAC passes, and create a matching
-        // WorkspaceMember with Operator role so the endpoint is accessible.
-        // Alternatively, seed using the owner's real workspaceId from registration.
-        var ws = await CreateWorkspaceAsync(owner.Client, "P4 Gate", "p4-gate-approve");
-
-        // Use owner's real workspace — seed a gate in that workspace
-        using (var scope = Fixture.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
-            var gateInWs = new GateDecision
-            {
-                Id = Guid.NewGuid(),
-                WorkspaceId = ws,
-                InstanceId = instanceId,
-                NodeId = nodeId,
-                Decision = GateDecisionStatus.Pending,
-                DeliveryChannel = GateDeliveryChannel.Portal,
-                DeliveryStatus = GateDeliveryStatus.Pending,
-                ExpiresAt = DateTime.UtcNow.AddHours(24),
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            };
-            db.GateDecisions.Add(gateInWs);
-            await db.SaveChangesAsync();
-        }
+        var (owner, ws, instanceId) = await SetupGatedInstanceAsync("p4-gate-approve");
+        await SeedGateAsync(ws, instanceId, "approval", GateDeliveryChannel.Portal, DateTime.UtcNow.AddHours(24));
 
         var response = await owner.Client.PostAsJsonAsync(
-            $"/api/v1/workspaces/{ws}/gates/{instanceId}/{nodeId}/decide",
+            $"/api/v1/workspaces/{ws}/gates/{instanceId}/approval/decide",
             new { decision = "approved", note = "LGTM" });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         var data = await DataAsync(response);
         data.GetProperty("decision").GetString().Should().BeOneOf("Approved", "approved");
     }
@@ -104,35 +99,14 @@ public class Phase4GateTests : ApiTestBase
     [Fact]
     public async Task DecideGate_Reject_GateStatusRejected()
     {
-        var owner = await RegisterOwnerAsync("p4-gate-reject");
-        var ws = await CreateWorkspaceAsync(owner.Client, "P4 Gate Reject", "p4-gate-reject");
-        var instanceId = Guid.NewGuid();
-        var nodeId = $"gate-{Guid.NewGuid():N}";
-
-        using (var scope = Fixture.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
-            db.GateDecisions.Add(new GateDecision
-            {
-                Id = Guid.NewGuid(),
-                WorkspaceId = ws,
-                InstanceId = instanceId,
-                NodeId = nodeId,
-                Decision = GateDecisionStatus.Pending,
-                DeliveryChannel = GateDeliveryChannel.Portal,
-                DeliveryStatus = GateDeliveryStatus.Pending,
-                ExpiresAt = DateTime.UtcNow.AddHours(24),
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            });
-            await db.SaveChangesAsync();
-        }
+        var (owner, ws, instanceId) = await SetupGatedInstanceAsync("p4-gate-reject");
+        await SeedGateAsync(ws, instanceId, "approval", GateDeliveryChannel.Portal, DateTime.UtcNow.AddHours(24));
 
         var response = await owner.Client.PostAsJsonAsync(
-            $"/api/v1/workspaces/{ws}/gates/{instanceId}/{nodeId}/decide",
+            $"/api/v1/workspaces/{ws}/gates/{instanceId}/approval/decide",
             new { decision = "rejected", note = "Not approved." });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         var data = await DataAsync(response);
         data.GetProperty("decision").GetString().Should().BeOneOf("Rejected", "rejected");
     }
@@ -158,31 +132,10 @@ public class Phase4GateTests : ApiTestBase
     [Fact]
     public async Task EmailLink_ValidHmac_GateApproved()
     {
-        // Seed gate directly in DB
-        var gateId = Guid.NewGuid();
-        var workspaceId = Guid.NewGuid();
-        var instanceId = Guid.NewGuid();
-        var nodeId = $"gate-email-{Guid.NewGuid():N}";
+        // Approving resumes the instance, so seed the gate on a real published+triggered instance.
+        var (_, ws, instanceId) = await SetupGatedInstanceAsync("p4-gate-email");
         var expiresAt = DateTime.UtcNow.AddHours(24);
-
-        using (var scope = Fixture.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
-            db.GateDecisions.Add(new GateDecision
-            {
-                Id = gateId,
-                WorkspaceId = workspaceId,
-                InstanceId = instanceId,
-                NodeId = nodeId,
-                Decision = GateDecisionStatus.Pending,
-                DeliveryChannel = GateDeliveryChannel.Email,
-                DeliveryStatus = GateDeliveryStatus.Sent,
-                ExpiresAt = expiresAt,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            });
-            await db.SaveChangesAsync();
-        }
+        var gateId = await SeedGateAsync(ws, instanceId, "approval", GateDeliveryChannel.Email, expiresAt);
 
         // Build the same HMAC the controller builds (key set in IntegrationApiFixture)
         var signingKey = IntegrationApiFixture.GateSigningKey;

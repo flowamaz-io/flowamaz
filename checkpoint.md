@@ -1,17 +1,16 @@
 ## Checkpoint
-Phase: 05
-Phase Title: Git Versioning + CLI + Developer Tools + Analytics + Community Edition
-Total Prompts This Phase: 8
-Completed: 8
-Current Prompt: PHASE_COMPLETE
-Next Prompt: PHASE_COMPLETE
-Phase End Status: PHASE_COMPLETE
-Session Tokens: High
-Last Updated: 2026-05-29
+Phase: fix-phase-05
+Phase Title: Phase 5 Fix — Integration Tests + CI Verification
+Total Prompts This Phase: 2
+Completed: 1
+Current Prompt: fix-05-02-ci-verification
+Next Prompt: (phase end)
+Phase End Status: not started
+Session Tokens: Low
+Last Updated: 2026-05-30
 Notes: |
-  Phase 05 COMPLETE — all 8 prompts executed and pushed to develop.
-  Backend unit 447/447. CLI 17, VS Code ext 22, web vitest 41 (3 pre-existing auth.store fails).
-  Integration 72/84: 5 new Phase-5 tests pass; 12 failures are PRE-EXISTING (confirmed at baseline,
-  characterised in phase-05-report.md — OAuth/Slack test-config gap + validator/NL expectation drift).
-  Carry-forward: recommend fix-05 (integration-failure triage + CI confirmation) before Phase 06.
-  phase-05-report.md at project root.
+  Phase 05 fix in progress.
+  fix-05-01 DONE: integration suite now 84/84 (was 72/84), unit 447/447, build 0/0.
+    All test-side fixes + one shared-fixture change (OAuth stub HttpClient + env vars). No prod code touched.
+  fix-05-02 NEXT: CI pipeline verification + Trivy + coverage ≥ 80% + UserMenu live edition.
+  Fix report: fix-phase-05-report.md

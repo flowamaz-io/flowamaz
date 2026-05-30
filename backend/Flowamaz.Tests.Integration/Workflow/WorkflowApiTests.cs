@@ -58,11 +58,13 @@ public class WorkflowApiTests : ApiTestBase
     }
 
     [Fact]
-    public async Task Create_with_invalid_yaml_returns_422()
+    public async Task Create_persists_unvalidated_draft_yaml()
     {
         var owner = await RegisterOwnerAsync("wf-bad");
         var ws = await CreateWorkspaceAsync(owner.Client, "Eng", "eng");
 
+        // Create no longer parses/validates the SFG on the way in — a draft saves with incomplete
+        // YAML (here: no Trigger) and is validated later via POST /workflows/validate before publish.
         const string invalid = """
             nodes:
               - { id: a, type: Action }
@@ -74,8 +76,7 @@ public class WorkflowApiTests : ApiTestBase
         var response = await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/workflows",
             new { name = "Bad", slug = "bad", yamlContent = invalid, createdByMethod = "NaturalLanguage" });
 
-        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
-        (await MessageAsync(response)).Should().Contain("Trigger");
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
     }
 
     [Fact]

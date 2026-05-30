@@ -100,8 +100,8 @@ public class Phase4AiNodeTests : ApiTestBase
 
         string? capturedPrompt = null;
         _completion.Setup(c => c.CompleteAsync(
-                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<ModelConfig, string, string, CancellationToken>((_, _, prompt, _) =>
+                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<int>()))
+            .Returns<ModelConfig, string, string, CancellationToken, int>((_, _, prompt, _, _) =>
             {
                 capturedPrompt = prompt;
                 return Task.FromResult(new AiCompletionResult("ok", 10, 5));
@@ -134,8 +134,8 @@ public class Phase4AiNodeTests : ApiTestBase
 
         var callCount = 0;
         _completion.Setup(c => c.CompleteAsync(
-                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns<ModelConfig, string, string, CancellationToken>((_, _, _, _) =>
+                It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<int>()))
+            .Returns<ModelConfig, string, string, CancellationToken, int>((_, _, _, _, _) =>
             {
                 callCount++;
                 // First call: invalid JSON; second: valid JSON matching the schema
