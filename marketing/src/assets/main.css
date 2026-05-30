@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* Flowamaz marketing brand tokens (Tailwind v4 @theme). Shares the app's teal but leans
+   on more whitespace and a lighter surface palette — the marketing site feels airier. */
+@theme {
+  --color-primary-50: #ecfaf4;
+  --color-primary-100: #d2f2e4;
+  --color-primary-200: #a7e5cb;
+  --color-primary-300: #6fd2ac;
+  --color-primary-400: #38b889;
+  --color-primary-500: #1d9e75;
+  --color-primary-600: #137e5e;
+  --color-primary-700: #11654d;
+  --color-primary-800: #11503f;
+  --color-primary-900: #104235;
+  --color-primary: #1d9e75;
+
+  /* Dark ink for headings / the deep brand surface (#0F1117). */
+  --color-ink: #0f1117;
+  --color-ink-soft: #2b2f3a;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}

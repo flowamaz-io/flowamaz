@@ -16,6 +16,9 @@ coverage/
 node_modules/
 web/dist/
 web/.vite/
+marketing/dist/
+marketing/.vite/
+marketing/*.tsbuildinfo
 
 # Logs
 logs/

@@ -1446,3 +1446,24 @@ The five fix-07 items deferred for tool-delivery reasons, all verified against t
 - [x] Every new error actionable; empty-state CTA added
 
 **Deviations:** Prompt FIX 5 referenced an `isVisible`/`content`/`cta-href` API; adapted to the real `FmTooltip` (`open`/`text`) and `FmEmptyState` (`ctaLabel` + `@cta` emit). ProductTour step 4 reuses the "Create your first workflow" title per the prompt copy. Fixed an unrelated pre-existing `FmBadge` type error to satisfy the web-build DoD.
+
+---
+
+## 08-02 — Marketing Site: flowamaz.com Landing Page  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+New standalone Vue 3 SPA in `marketing/` (separate from `web/`, served on flowamaz.com). Mirrors the app's tooling — Vite + @tailwindcss/vite v4, TS strict, Composition API, zero `<style>` blocks, Vitest.
+
+- **Views:** `HomeView` (hero + animated SVG workflow diagram, social-proof strip, 3 feature columns, How-it-works 3-step, Workflow Weather teaser, testimonials, pricing teaser), `PricingView` (monthly/annual toggle, 3 plan cards), `AboutView` (mission/values/hiring), `BlogView` (3 static posts), `ChangelogView` (v0.7/v0.6/v0.5).
+- **Components:** `NavBar` (wordmark ✦, Product|Pricing|Blog|Docs, Start-free-trial CTA → app.flowamaz.io/register, mobile menu), `Footer` (Product/Company/Legal/social columns), `HeroSection`, `FeatureSection`, `TestimonialSection`, `PricingCard` (per-plan register link `?plan={slug}`).
+- **Shared:** `src/constants.ts` — APP/REGISTER/DOCS/GITHUB URLs + `PLANS` (community/starter/pro) + `registerUrlForPlan`. Router lazy-loads all views with smooth-scroll anchor support.
+- **Design:** brand tokens via `@theme` in `assets/main.css` (teal #1d9e75, ink #0F1117, Inter), `max-w-[1200px]`, airier spacing than the app.
+
+**DoD**
+- [x] `npm run build --prefix marketing` — 0 errors (vue-tsc + vite); 1765 modules, all 5 routes code-split
+- [x] Vitest **5/5** — NavBar CTA → correct app URL; PricingCard monthly/annual price + plan link; HomeView renders
+- [x] Zero style blocks; Composition API only; TS strict
+- [x] `marketing/dist` + `.vite` gitignored
+
+**Deviations:** Changelog entries are static (not parsed from git tags at build time) — the prompt's "extracted from git tags" rendered as a curated static list updated per release. Blog/legal pages are placeholders per the prompt.
