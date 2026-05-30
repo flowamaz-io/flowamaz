@@ -2,15 +2,18 @@
 Phase: fix-phase-05
 Phase Title: Phase 5 Fix — Integration Tests + CI Verification
 Total Prompts This Phase: 2
-Completed: 1
-Current Prompt: fix-05-02-ci-verification
-Next Prompt: (phase end)
-Phase End Status: not started
+Completed: 2
+Current Prompt: (phase end — agents + report)
+Next Prompt: PHASE_COMPLETE
+Phase End Status: running phase-end agents (Verifier, Testing, Security) + fix-phase-05-report.md
 Session Tokens: Low
 Last Updated: 2026-05-30
 Notes: |
-  Phase 05 fix in progress.
-  fix-05-01 DONE: integration suite now 84/84 (was 72/84), unit 447/447, build 0/0.
-    All test-side fixes + one shared-fixture change (OAuth stub HttpClient + env vars). No prod code touched.
-  fix-05-02 NEXT: CI pipeline verification + Trivy + coverage ≥ 80% + UserMenu live edition.
+  fix-phase-05 both prompts DONE.
+  fix-05-01: integration suite 72/84 -> 84/84 (test-side fixes + OAuth stub fixture). No prod code.
+  fix-05-02: web tests 44/44 (vitest MSW baseURL), web lint 0 errors (^_ rule + 2 fixes),
+    Trivy 0 Crit/High, coverage all 4 services >=80% (WorkspaceGitService 69.9%->88.6% via +8 Git tests),
+    live UserMenu edition (WorkspaceResponse.Edition), DEVELOPMENT.md CI badge + branch-protection docs.
+  Final: backend build 0/0, unit 455/455, integration 84/84; web typecheck 0, tests 44/44, lint 0 errors.
+  Branch protection toggle + live CI run are repo-admin/GitHub actions (documented, not applied here).
   Fix report: fix-phase-05-report.md

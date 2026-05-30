@@ -4,7 +4,9 @@ import { analyticsService } from '../../services/analytics.service';
 import type { InsightResponse } from '../../types/workflow';
 
 const props = defineProps<{ workspaceId: string; open: boolean }>();
-const emit = defineEmits<{ close: [] }>();
+// Declared so `$emit('close')` in the template and parent `@close` bindings stay typed; the
+// template emits directly, so no `emit` binding is needed here.
+defineEmits<{ close: [] }>();
 
 const insights = ref<InsightResponse[]>([]);
 const loading = ref(false);

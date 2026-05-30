@@ -132,6 +132,156 @@ public sealed class WorkspaceGitServiceTests : IDisposable
         history[0].ShortSha.Should().HaveLength(7);
     }
 
+    // Branch/merge coverage (prompt 05-01 Git API on bare repos) ─────────────────
+
+    // Same workflow as YamlV1 but the metadata 'name' differs — used to force a same-line
+    // merge conflict between two branches that both edit only that line.
+    private const string YamlNameFeature = """
+        workflow: { id: w, version: v1, name: FeatureName }
+        nodes:
+          - { id: start, type: Trigger }
+          - { id: a, type: Action, label: First }
+          - { id: done, type: End }
+        edges:
+          - { id: e1, from: start, to: a }
+          - { id: e2, from: a, to: done }
+        """;
+
+    private const string YamlNameMain = """
+        workflow: { id: w, version: v1, name: MainlineName }
+        nodes:
+          - { id: start, type: Trigger }
+          - { id: a, type: Action, label: First }
+          - { id: done, type: End }
+        edges:
+          - { id: e1, from: start, to: a }
+          - { id: e2, from: a, to: done }
+        """;
+
+    [Fact]
+    public async Task CreateBranch_from_current_tip_adds_ref_at_head()
+    {
+        var workspaceId = Guid.NewGuid();
+        var workflowId = Guid.NewGuid();
+        var tip = await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlV1, "v1", "Dev", "dev@flowamaz.io");
+
+        await _git.CreateBranchAsync(workspaceId, "dev");
+
+        var path = Path.Combine(_tempRoot, workspaceId.ToString("D"), "workflows.git");
+        using var repo = new Repository(path);
+        repo.Refs["refs/heads/dev"]!.TargetIdentifier.Should().Be(tip.CommitSha);
+    }
+
+    [Fact]
+    public async Task CreateBranch_from_explicit_sha_points_at_that_commit()
+    {
+        var workspaceId = Guid.NewGuid();
+        var workflowId = Guid.NewGuid();
+        var v1 = await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlV1, "v1", "Dev", "dev@flowamaz.io");
+        await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlV2, "v2", "Dev", "dev@flowamaz.io");
+
+        await _git.CreateBranchAsync(workspaceId, "from-v1", v1.CommitSha);
+
+        var path = Path.Combine(_tempRoot, workspaceId.ToString("D"), "workflows.git");
+        using var repo = new Repository(path);
+        repo.Refs["refs/heads/from-v1"]!.TargetIdentifier.Should().Be(v1.CommitSha);
+    }
+
+    [Fact]
+    public async Task CreateBranch_from_unknown_sha_throws()
+    {
+        var workspaceId = Guid.NewGuid();
+        var workflowId = Guid.NewGuid();
+        await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlV1, "v1", "Dev", "dev@flowamaz.io");
+
+        // Valid-format but nonexistent sha → Lookup returns null → no source commit.
+        var act = async () => await _git.CreateBranchAsync(workspaceId, "dev", "0000000000000000000000000000000000000000");
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task CheckoutBranch_redirects_subsequent_commits_to_that_branch()
+    {
+        var workspaceId = Guid.NewGuid();
+        var workflowId = Guid.NewGuid();
+        await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlV1, "v1", "Dev", "dev@flowamaz.io");
+        await _git.CreateBranchAsync(workspaceId, "dev");
+
+        await _git.CheckoutBranchAsync(workspaceId, "dev");
+        var onDev = await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlV2, "on dev", "Dev", "dev@flowamaz.io");
+
+        onDev.BranchName.Should().Be("dev");
+    }
+
+    [Fact]
+    public async Task CheckoutBranch_missing_branch_throws()
+    {
+        var workspaceId = Guid.NewGuid();
+        var workflowId = Guid.NewGuid();
+        await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlV1, "v1", "Dev", "dev@flowamaz.io");
+
+        var act = async () => await _git.CheckoutBranchAsync(workspaceId, "ghost");
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task MergeBranch_non_conflicting_edits_creates_merge_commit()
+    {
+        var workspaceId = Guid.NewGuid();
+        var wfA = Guid.NewGuid();
+        var wfB = Guid.NewGuid();
+        var baseCommit = await _git.CommitWorkflowAsync(workspaceId, wfA, YamlV1, "base", "Dev", "dev@flowamaz.io");
+
+        // feature edits a different workflow file; main edits wfA — disjoint files → clean merge.
+        await _git.CreateBranchAsync(workspaceId, "feature", baseCommit.CommitSha);
+        await _git.CheckoutBranchAsync(workspaceId, "feature");
+        await _git.CommitWorkflowAsync(workspaceId, wfB, YamlV1, "add wfB on feature", "Dev", "dev@flowamaz.io");
+
+        await _git.CheckoutBranchAsync(workspaceId, "main");
+        await _git.CommitWorkflowAsync(workspaceId, wfA, YamlV2, "edit wfA on main", "Dev", "dev@flowamaz.io");
+
+        var result = await _git.MergeBranchAsync(workspaceId, "feature", "main");
+
+        result.Success.Should().BeTrue();
+        result.HasConflicts.Should().BeFalse();
+        result.CommitSha.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task MergeBranch_missing_source_returns_unmerged()
+    {
+        var workspaceId = Guid.NewGuid();
+        var workflowId = Guid.NewGuid();
+        await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlV1, "v1", "Dev", "dev@flowamaz.io");
+
+        var result = await _git.MergeBranchAsync(workspaceId, "ghost", "main");
+
+        result.Success.Should().BeFalse();
+        result.HasConflicts.Should().BeFalse();
+        result.ConflictPaths.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MergeBranch_same_line_edits_on_both_branches_report_conflict()
+    {
+        var workspaceId = Guid.NewGuid();
+        var workflowId = Guid.NewGuid();
+        var baseCommit = await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlV1, "base", "Dev", "dev@flowamaz.io");
+
+        await _git.CreateBranchAsync(workspaceId, "feature", baseCommit.CommitSha);
+        await _git.CheckoutBranchAsync(workspaceId, "feature");
+        await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlNameFeature, "rename on feature", "Dev", "dev@flowamaz.io");
+
+        await _git.CheckoutBranchAsync(workspaceId, "main");
+        await _git.CommitWorkflowAsync(workspaceId, workflowId, YamlNameMain, "rename on main", "Dev", "dev@flowamaz.io");
+
+        var result = await _git.MergeBranchAsync(workspaceId, "feature", "main");
+
+        result.Success.Should().BeFalse();
+        result.HasConflicts.Should().BeTrue();
+        result.ConflictPaths.Should().NotBeEmpty();
+    }
+
     [Fact]
     public async Task PublishWorkflow_creates_tag_with_expected_name()
     {

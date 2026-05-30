@@ -12,7 +12,8 @@ declare module 'cytoscape-edgehandles' {
     disable(): void;
     destroy(): void;
   }
-  function edgehandles(cy: Core): void;
+  // Registers the plugin; once registered, cy.edgehandles(options) returns the instance handle.
+  function edgehandles(cy: Core, options?: EdgeHandlesOptions): EdgeHandlesInstance;
   namespace edgehandles {}
   export = edgehandles;
 }

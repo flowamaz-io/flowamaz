@@ -23,17 +23,20 @@ public sealed class WorkspacesController : ControllerBase
     private readonly IWorkspaceAiConfigService _aiConfigService;
     private readonly ICurrentUserService _currentUser;
     private readonly IValidator<CreateWorkspaceRequest> _createValidator;
+    private readonly IEditionService _edition;
 
     public WorkspacesController(
         IWorkspaceService workspaceService,
         IWorkspaceAiConfigService aiConfigService,
         ICurrentUserService currentUser,
-        IValidator<CreateWorkspaceRequest> createValidator)
+        IValidator<CreateWorkspaceRequest> createValidator,
+        IEditionService edition)
     {
         _workspaceService = workspaceService;
         _aiConfigService = aiConfigService;
         _currentUser = currentUser;
         _createValidator = createValidator;
+        _edition = edition;
     }
 
     [HttpGet]
@@ -136,6 +139,8 @@ public sealed class WorkspacesController : ControllerBase
         return Ok(await _aiConfigService.GetAsync(id, cancellationToken));
     }
 
-    private static WorkspaceResponse ToResponse(Core.Entities.Workspaces.Workspace w) =>
-        new(w.Id, w.OrgId, w.Name, w.Slug, w.Settings, w.CreatedAt);
+    // Edition is platform-wide (driven by the EDITION env var via IEditionService), surfaced here so
+    // the web app can label the active plan without a second /usage call.
+    private WorkspaceResponse ToResponse(Core.Entities.Workspaces.Workspace w) =>
+        new(w.Id, w.OrgId, w.Name, w.Slug, w.Settings, w.CreatedAt, _edition.Edition);
 }

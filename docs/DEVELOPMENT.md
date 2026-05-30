@@ -59,6 +59,8 @@ The integration suite runs sequentially (container-backed) and boots the real AP
 
 ## Continuous Integration (GitHub Actions)
 
+[![CI](https://github.com/flowamaz-io/flowamaz/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/flowamaz-io/flowamaz/actions/workflows/ci.yml)
+
 CI is defined in `.github/workflows/`:
 
 - **ci.yml** — runs on every push to `develop`, `feat/**`, `fix/**` and on PRs into `main`/`develop`.
@@ -76,6 +78,24 @@ the workflows above provide the checks:
 
 - `develop` ruleset → required checks: `backend`, `web`, `cli`, `vscode-extension`, `security`
 - `main` ruleset → the same **plus** `build-and-push`
+
+A repo admin can also manage this from the CLI instead of the UI:
+
+```bash
+# Inspect existing rulesets
+gh api repos/flowamaz-io/flowamaz/rulesets
+
+# Add required status checks to the develop ruleset (replace <RULESET_ID> from the list above)
+gh api repos/flowamaz-io/flowamaz/rulesets/<RULESET_ID> --method PUT \
+  --input - <<'JSON'
+{ "rules": [ { "type": "required_status_checks", "parameters": {
+  "required_status_checks": [
+    { "context": "backend" }, { "context": "web" }, { "context": "cli" },
+    { "context": "vscode-extension" }, { "context": "security" }
+  ],
+  "strict_required_status_checks_policy": true } } ] }
+JSON
+```
 
 ### Running CI locally
 

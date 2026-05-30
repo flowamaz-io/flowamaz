@@ -1105,3 +1105,27 @@ Fixed the 12 pre-existing integration failures carried forward from Phase 5. All
 - [x] Unit suite **447/447** still pass; `dotnet build Flowamaz.sln` 0 warnings / 0 errors
 - [x] OAuth test passes with stubbed HttpClient; validator tests pass with corrected request key
 - [x] No new failures; no production code changed
+
+---
+
+## fix-05-02 — CI verification + coverage + Trivy + live edition  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Closed the open Phase-5 CI/coverage items. CI jobs were failing on two real issues (web tests + web lint) plus a coverage gap; all fixed.
+
+- **Web test job (MSW)**: `auth.store` success-path tests failed because axios `VITE_API_BASE_URL` is empty in tests, so requests resolved relative to the jsdom origin and never matched the MSW handlers (registered against `http://localhost:5000`) → unhandled → network error. Pinned `test.env.VITE_API_BASE_URL` in `vitest.config.ts`. Web tests now **44/44**.
+- **Web lint job**: 7 pre-existing `no-unused-vars` errors blocked the job. Added the conventional `^_` ignore patterns (`argsIgnorePattern`/`varsIgnorePattern`/`caughtErrorsIgnorePattern`) to `eslint.config.ts` for deliberately-unused bindings; wired the two unused `cytoscape-edgehandles` interfaces into the plugin signature; dropped the unused `emit` binding in `WeatherInsightsSidebar.vue` (kept `defineEmits` for the typed `close` event). Lint now **0 errors** (formatting warnings only, non-failing; the lint script `--fix`es them in CI).
+- **Trivy (security job)**: `trivy fs ./backend --severity CRITICAL,HIGH --ignore-unfixed` → **0 findings**. LibGit2Sharp 0.31.0 has no known CRITICAL/HIGH CVEs.
+- **Coverage ≥ 80%** (Coverlet, unit suite): RoiAnalyticsService 95.7%, ProcessTrendAnalyzer 100%, EditionService 85.2%; **WorkspaceGitService 69.9% → 88.6%** after adding 8 targeted unit tests for the previously-untested branch/merge API (create/checkout/merge incl. clean-merge, missing-branch, and same-line conflict paths).
+- **Live plan/edition (Fix 5)**: added `Edition` to `WorkspaceResponse` (sourced from `IEditionService.Edition` / the `EDITION` env var) and the web `WorkspaceResponse` type; `UserMenu.vue` now derives the plan badge from `workspaceStore.currentWorkspace?.edition` instead of the hard-coded "Starter Plan".
+- **Branch protection (Fix 4)**: `develop` already enforces PR-only (confirmed by the push bypass notice). Enabling required status checks is a repo-admin governance action, so it's **documented** in `docs/DEVELOPMENT.md` (UI steps + `gh api rulesets` CLI) rather than mutated from here. Added the CI status badge.
+
+**DoD**
+- [x] Backend: build 0/0; unit **455/455** (+8 Git), integration **84/84**
+- [x] Web: typecheck 0; tests 44/44; lint 0 errors
+- [x] Trivy: 0 Critical / 0 High on backend deps
+- [x] Phase-5 service areas all ≥ 80% coverage
+- [x] UserMenu shows the live edition label; WorkspaceResponse carries `edition`
+- [x] docs/DEVELOPMENT.md: CI badge + branch-protection (UI + gh CLI) instructions
+- [~] Live CI run / branch-protection toggle are repo-admin actions verified/applied on GitHub, not from this environment

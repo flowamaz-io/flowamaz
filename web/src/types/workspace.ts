@@ -42,6 +42,8 @@ export interface WorkspaceResponse {
   slug: string;
   settings: WorkspaceSettings;
   createdAt: string;
+  /** Platform edition (community | starter | pro | enterprise), driven by the EDITION env var. */
+  edition: string;
 }
 
 export interface CreateWorkspaceRequest {

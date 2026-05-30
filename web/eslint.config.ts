@@ -29,6 +29,13 @@ export default tseslint.config(
       'vue/multi-word-component-names': 'off',
       // Optional props use `?` + withDefaults idiomatically; explicit defaults add noise.
       'vue/require-default-prop': 'off',
+      // A leading underscore marks a deliberately-unused binding (placeholder args, reserved
+      // destructure targets) — the conventional escape hatch, so don't flag those.
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
     },
   },
   {

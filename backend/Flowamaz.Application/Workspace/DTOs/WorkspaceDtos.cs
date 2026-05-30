@@ -27,7 +27,7 @@ public sealed record FunctionOverrideRequest(string FunctionId, string Provider,
 
 // ── Responses ───────────────────────────────────────────────────────────────
 
-public sealed record WorkspaceResponse(Guid Id, Guid OrgId, string Name, string Slug, WorkspaceSettings Settings, DateTime CreatedAt);
+public sealed record WorkspaceResponse(Guid Id, Guid OrgId, string Name, string Slug, WorkspaceSettings Settings, DateTime CreatedAt, string Edition);
 
 public sealed record WorkspaceEnvironmentResponse(Guid Id, string Name, Guid WorkspaceId, DateTime CreatedAt);
 

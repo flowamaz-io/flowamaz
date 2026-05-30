@@ -14,5 +14,11 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/tests/setup.ts'],
     include: ['src/**/*.{test,spec}.ts'],
+    // Pin the API base so axios builds absolute URLs that match the MSW handlers
+    // (handlers are registered against http://localhost:5000). Without this the base is
+    // empty, requests resolve relative to the jsdom origin, and MSW never intercepts them.
+    env: {
+      VITE_API_BASE_URL: 'http://localhost:5000',
+    },
   },
 });

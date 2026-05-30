@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { onClickOutside } from '@vueuse/core';
 import { ChevronUp, CreditCard, LogOut, User } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
+import { useWorkspaceStore } from '@/stores/workspace.store';
 import { initial } from '@/utils/string.util';
 
 // Collapsed (icon-only) renders just the avatar; the dropdown still opens.
@@ -12,6 +13,18 @@ defineProps<{ collapsed?: boolean }>();
 const router = useRouter();
 const auth = useAuth();
 const { user } = auth;
+
+// Plan badge reflects the live workspace edition (EDITION env var via the API), not a static label.
+const workspaceStore = useWorkspaceStore();
+const PLAN_LABELS: Record<string, string> = {
+  community: 'Community',
+  starter: 'Starter Plan',
+  pro: 'Pro Plan',
+  enterprise: 'Enterprise',
+};
+const planLabel = computed(
+  () => PLAN_LABELS[workspaceStore.currentWorkspace?.edition ?? 'community'] ?? 'Community',
+);
 
 const open = ref(false);
 const root = ref<HTMLElement | null>(null);
@@ -70,7 +83,7 @@ async function logout(): Promise<void> {
           {{ user?.name ?? 'Account' }}
         </span>
         <span class="inline-flex items-center rounded-full bg-sidebar-hover px-1.5 py-0.5 text-[10px] font-medium text-sidebar-text-secondary">
-          Starter Plan
+          {{ planLabel }}
         </span>
       </span>
       <ChevronUp
