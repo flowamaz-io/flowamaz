@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 import GettingStartedChecklist from '@/components/onboarding/GettingStartedChecklist.vue';
 import ProductTour from '@/components/onboarding/ProductTour.vue';
 import FmWorkflowWeather from '@/components/dashboard/FmWorkflowWeather.vue';
+import FmSkeleton from '@/components/common/FmSkeleton.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useWorkflowStore } from '@/stores/workflow.store';
@@ -28,6 +29,7 @@ const router = useRouter();
 
 const weather = ref<WeatherResponse | null>(null);
 const roi = ref<WorkspaceRoiSummary | null>(null);
+const metricsLoading = ref(true);
 
 const costAvoided = computed(() => {
   if (!roi.value) return '--';
@@ -51,24 +53,28 @@ function openCreationMethod(method: string): void {
 }
 
 onMounted(async () => {
-  await Promise.allSettled([
-    ws.loadMembers(),
-    workflowStore.loadWorkflows(),
-  ]);
-  const wsId = ws.currentWorkspaceId.value;
-  if (wsId) {
-    try {
-      weather.value = await analyticsService.weather(wsId);
-    } catch {
-      weather.value = null;
+  try {
+    await Promise.allSettled([
+      ws.loadMembers(),
+      workflowStore.loadWorkflows(),
+    ]);
+    const wsId = ws.currentWorkspaceId.value;
+    if (wsId) {
+      try {
+        weather.value = await analyticsService.weather(wsId);
+      } catch {
+        weather.value = null;
+      }
+      try {
+        const now = new Date();
+        const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        roi.value = await analyticsService.roi(wsId, from, now.toISOString());
+      } catch {
+        roi.value = null;
+      }
     }
-    try {
-      const now = new Date();
-      const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      roi.value = await analyticsService.roi(wsId, from, now.toISOString());
-    } catch {
-      roi.value = null;
-    }
+  } finally {
+    metricsLoading.value = false;
   }
 });
 </script>
@@ -96,7 +102,16 @@ onMounted(async () => {
         <p class="text-sm text-slate-500">
           {{ m.label }}
         </p>
-        <p class="mt-2 text-3xl font-semibold text-slate-900">
+        <FmSkeleton
+          v-if="metricsLoading"
+          height="h-9"
+          rounded="md"
+          class="mt-2"
+        />
+        <p
+          v-else
+          class="mt-2 text-3xl font-semibold text-slate-900"
+        >
           {{ m.value }}
         </p>
       </div>

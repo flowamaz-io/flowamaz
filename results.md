@@ -1380,3 +1380,25 @@ Interactive first-run product tour, contextual `?` tooltips, polished teaching e
 - [x] Tour custom overlay, never-after-completion, keyboard-operable; all empty states teach
 
 **Deviations:** repo uses `components/common/` not `shared/` (followed actual layout); removed a pre-existing unused `computed` import in PricingView (07-01) to satisfy the 0-lint gate.
+
+---
+
+## 07-06 — Performance + Production Hardening  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+DB index audit, rich health checks, response caching, skeletons, startup env validation, deployment checklist.
+
+- **AddProductionIndexes** migration — empty EF migration hand-edited to raw `CREATE INDEX IF NOT EXISTS` / `DROP INDEX IF EXISTS` SQL (so the model snapshot stays clean — `has-pending-model-changes` = none). All 7 spec indexes added (partial/DESC/different-tail vs existing EF indexes, so non-redundant): workflow_instances(ws,status) & (ws,created desc) partial; audit_events(ws,created desc)+(org,created desc); workflow_events(instance_id,created); notifications(user,is_read,created desc); ai_token_usage(ws,created desc). Applies on Postgres (MigrationTests 4/4).
+- **Health** — `Application/Health/HealthCheckService.cs` + `ExternalDependencyHealthChecks.cs` (Stripe status.json / Anthropic / Resend). `database`+`redis` critical (down→Unhealthy→503); stripe/anthropic/resend NON-critical (`failureStatus: Degraded`, 3s timeout, Degraded→200 via `ResultStatusCodes`) and stubbed Healthy in Test/Dev (no egress in CI → S72 passes). `WriteHealthResponse` now emits `{status, version, environment, totalDurationMs, dependencies{name:{status,responseMs}}}`.
+- **Response caching** — `[ResponseCache(86400)]` on GET billing/plans; `[ResponseCache(3600, VaryByHeader=Authorization)]` on GET connectors. (No help/articles endpoint exists — attribute n/a, not invented.)
+- **Env validation** — non-Development startup now validates all 6: DB_CONNECTION_STRING, JWT_SECRET, CREDENTIAL_MASTER_KEY, GATE_SIGNING_KEY, Email__ResendApiKey, Ai__AnthropicPlatformKey (one actionable throw listing missing + how to generate).
+- **Frontend** — `FmSkeleton.vue` in WorkflowListView, InstanceListView, DashboardView metric cards. Router already fully lazy (verified). `docs/DEPLOYMENT.md` production var checklist added.
+- **N+1** — reviewed the named repositories; all single paged/ordered queries, no lazy per-row loads. No changes needed.
+
+**DoD**
+- [x] Backend build 0/0; unit **523/523** (+6 Health: all healthy→healthy, db down→503, redis down→503, degraded external→200, cache attribute present)
+- [x] Web typecheck 0; lint 0; migration applies on Postgres (4/4) + snapshot clean
+- [x] /health 5 deps with response times; external 3rd-parties never 503 the endpoint
+
+**Deviations:** `GET /help/articles` endpoint doesn't exist → its cache attribute couldn't be applied; `common/` not `shared/` for FmSkeleton; `HealthCheckService` name aliased to avoid collision with the framework type.

@@ -18,6 +18,28 @@ Copy `.env.example` to `.env` and set real values. Key variables:
 
 Never commit `.env` or any populated secret.
 
+### 1a. Production required-variable checklist (startup-enforced)
+
+In any non-`Development` environment the API validates the following variables at startup and
+**refuses to boot** with an actionable log message if any is missing. Set every one before deploying.
+
+| Variable | Required | Description | How to generate / source |
+|----------|----------|-------------|---------------------------|
+| `DB_CONNECTION_STRING` | Yes | PostgreSQL connection string. In Docker Compose this is overridden to `Host=db;...`. | `Host=<host>;Port=5432;Database=<db>;Username=<user>;Password=<pwd>` (use your managed Postgres credentials). |
+| `JWT_SECRET` | Yes | HMAC secret that signs access/refresh tokens (≥ 32 bytes). Rotating it invalidates all sessions. | `openssl rand -base64 48` |
+| `CREDENTIAL_MASTER_KEY` | Yes | Master key for the per-workspace credential vault (AES-GCM, HMAC-derived per workspace). **Rotating it makes existing stored credentials undecryptable** — rotate only with a re-encryption plan. | `openssl rand -base64 32` |
+| `GATE_SIGNING_KEY` | Yes | Signs human-gate approval/decline links so they can't be forged. | `openssl rand -hex 32` |
+| `Email__ResendApiKey` | Yes | Resend API key for transactional email from `noreply@flowamaz.io`. Use the double-underscore form so it binds to the nested `Email:ResendApiKey` config section. | Resend dashboard → API Keys (value starts `re_`). |
+| `Ai__AnthropicPlatformKey` | Yes | Platform-managed Anthropic API key (the only platform-managed AI provider). Powers F1–F7 platform AI functions. Use the double-underscore form to bind `Ai:AnthropicPlatformKey`. | Anthropic console → API Keys (value starts `sk-ant-`). |
+| `REDIS_CONNECTION_STRING` | Yes (resolved) | Redis endpoint for task queue, session/semantic cache, and rate limiting. In Compose overridden to `redis:6379`. | `<host>:6379` (add `,password=<pwd>` if your Redis requires auth). |
+| `CORS_ALLOWED_ORIGINS` | Recommended | Comma-separated SPA origins. If unset in Production all cross-origin requests are blocked (a warning is logged). | e.g. `https://app.flowamaz.io` |
+| `GIT_REPOS_BASE_PATH` | Recommended | Writable directory for workflow Git versioning. Startup probes it for write access and fails if not writable. Defaults to `bin/git-repos`. | Any persistent, writable volume path. |
+
+> The six variables marked Required in the first six rows are the exact set enforced by the startup
+> gate (`DB_CONNECTION_STRING`, `JWT_SECRET`, `CREDENTIAL_MASTER_KEY`, `GATE_SIGNING_KEY`,
+> `Email__ResendApiKey`, `Ai__AnthropicPlatformKey`). A missing value yields a log line naming the
+> variable and how to generate it, then the process exits.
+
 ## 2. TLS certificate
 Replace the self-signed dev cert with a real one.
 

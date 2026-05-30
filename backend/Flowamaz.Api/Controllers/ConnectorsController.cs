@@ -39,6 +39,8 @@ public sealed class ConnectorsController : ControllerBase
     /// <summary>List all connectors in the catalogue.</summary>
     [HttpGet]
     [RequireWorkspaceRole(WorkspaceRole.Viewer)]
+    // Catalogue changes only when an admin seeds new connectors — cache for an hour, keyed per caller.
+    [ResponseCache(Duration = 3600, VaryByHeader = "Authorization")]
     public async Task<IActionResult> List(Guid workspaceId, CancellationToken cancellationToken)
     {
         var connectors = await _catalogue.GetAllAsync(cancellationToken);

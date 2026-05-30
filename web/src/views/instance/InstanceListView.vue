@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Activity } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import FmBadge from '@/components/common/FmBadge.vue';
-import FmSpinner from '@/components/common/FmSpinner.vue';
+import FmSkeleton from '@/components/common/FmSkeleton.vue';
 import FmEmptyState from '@/components/common/FmEmptyState.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import { useWorkflowStore } from '@/stores/workflow.store';
@@ -166,9 +166,13 @@ onUnmounted(disconnectAll);
 
     <div
       v-if="loading"
-      class="flex justify-center py-12"
+      class="space-y-3"
     >
-      <FmSpinner size="lg" />
+      <FmSkeleton
+        :count="6"
+        height="h-14"
+        rounded="lg"
+      />
     </div>
 
     <FmErrorState

@@ -46,6 +46,8 @@ public sealed class BillingController : ControllerBase
     /// <summary>Public list of purchasable plans for the pricing page.</summary>
     [HttpGet("plans")]
     [AllowAnonymous]
+    // Plan definitions change only on a Stripe sync — cache the response for a day.
+    [ResponseCache(Duration = 86400)]
     public async Task<ActionResult<IReadOnlyList<PlanResponse>>> GetPlans(CancellationToken cancellationToken)
     {
         _logger.LogInformation("BillingController.GetPlans enter");

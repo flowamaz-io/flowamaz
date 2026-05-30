@@ -5,7 +5,7 @@ import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import FmBadge from '@/components/common/FmBadge.vue';
 import FmButton from '@/components/common/FmButton.vue';
-import FmSpinner from '@/components/common/FmSpinner.vue';
+import FmSkeleton from '@/components/common/FmSkeleton.vue';
 import FmEmptyState from '@/components/common/FmEmptyState.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import FmTooltip from '@/components/common/FmTooltip.vue';
@@ -107,9 +107,13 @@ onMounted(reload);
 
     <div
       v-if="loading"
-      class="flex justify-center py-12"
+      class="space-y-3"
     >
-      <FmSpinner size="lg" />
+      <FmSkeleton
+        :count="5"
+        height="h-16"
+        rounded="lg"
+      />
     </div>
 
     <FmErrorState

@@ -4,6 +4,7 @@ using System.Text.Json;
 using Flowamaz.Api.Middleware;
 using Flowamaz.Api.WebSockets;
 using Flowamaz.Application;
+using Flowamaz.Application.Health;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Infrastructure;
 using Flowamaz.Infrastructure.Jobs;
@@ -168,9 +169,21 @@ builder.Services.AddAuthorization();
 // ──────────────────────────────────────────────────────────────────────────────
 var dbConnection = ConnectionStringResolver.ResolveDatabase(builder.Configuration);
 var redisConnection = ConnectionStringResolver.ResolveRedis(builder.Configuration);
+
+// Named HttpClients for the third-party probes — kept tiny so a hung dependency can't stall /health.
+builder.Services.AddHttpClient(StripeHealthCheck.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(3));
+builder.Services.AddHttpClient(AnthropicHealthCheck.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(3));
+builder.Services.AddHttpClient(ResendHealthCheck.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(3));
+
 builder.Services.AddHealthChecks()
-    .AddNpgSql(dbConnection, name: "db", tags: ["db"])
-    .AddRedis(redisConnection, name: "redis", tags: ["redis"]);
+    // Critical dependencies — Unhealthy when down → overall Unhealthy → HTTP 503.
+    .AddNpgSql(dbConnection, name: "database", tags: ["db", "critical"])
+    .AddRedis(redisConnection, name: "redis", tags: ["redis", "critical"])
+    // Third-party probes — NON-CRITICAL. failureStatus Degraded ensures an unreachable third party
+    // reports degraded (HTTP 200), never flipping /health to 503. Only db/redis can do that.
+    .AddCheck<StripeHealthCheck>("stripe", failureStatus: HealthStatus.Degraded, tags: ["external"])
+    .AddCheck<AnthropicHealthCheck>("anthropic", failureStatus: HealthStatus.Degraded, tags: ["external"])
+    .AddCheck<ResendHealthCheck>("resend", failureStatus: HealthStatus.Degraded, tags: ["external"]);
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 12b. Quartz — delayed-queue promoter (5s), lease-expiry recovery (15s), gate
@@ -295,6 +308,14 @@ app.MapScalarApiReference("/api-docs", options =>
 app.MapHealthChecks("/health", new HealthCheckOptions
 {
     ResponseWriter = WriteHealthResponse,
+    // Degraded (a non-critical third party is down/slow) stays HTTP 200; only Unhealthy
+    // (database or Redis down) returns 503. Healthy and Degraded both map to 200.
+    ResultStatusCodes =
+    {
+        [HealthStatus.Healthy] = StatusCodes.Status200OK,
+        [HealthStatus.Degraded] = StatusCodes.Status200OK,
+        [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable,
+    },
 }).AllowAnonymous();
 
 app.MapControllers();
@@ -321,11 +342,34 @@ using (var scope = app.Services.CreateScope())
 // ──────────────────────────────────────────────────────────────────────────────
 if (!app.Environment.IsDevelopment())
 {
-    var gateSigningKey = app.Configuration["GATE_SIGNING_KEY"];
-    if (string.IsNullOrEmpty(gateSigningKey))
+    // Required production secrets. Each is read either as a single-name env var (mapped to config
+    // earlier, e.g. JWT_SECRET) or via Section__Key binding (e.g. Email__ResendApiKey). A missing
+    // value stops startup with an actionable message rather than failing silently at first use.
+    // (config key, friendly env var, how to generate). DB is resolved from either
+    // DB_CONNECTION_STRING or ConnectionStrings:DefaultConnection.
+    var requiredSecrets = new (Func<string?> Read, string EnvVar, string HowToGenerate)[]
+    {
+        (() => app.Configuration["DB_CONNECTION_STRING"] ?? app.Configuration.GetConnectionString("DefaultConnection"),
+            "DB_CONNECTION_STRING",
+            "Set to your PostgreSQL connection string (Host=...;Database=...;Username=...;Password=...)."),
+        (() => app.Configuration["Jwt:Secret"], "JWT_SECRET", "Generate with: openssl rand -base64 48"),
+        (() => app.Configuration["CREDENTIAL_MASTER_KEY"], "CREDENTIAL_MASTER_KEY", "Generate with: openssl rand -base64 32"),
+        (() => app.Configuration["GATE_SIGNING_KEY"], "GATE_SIGNING_KEY", "Generate with: openssl rand -hex 32"),
+        (() => app.Configuration["Email:ResendApiKey"], "Email__ResendApiKey", "Copy from the Resend dashboard → API Keys (re_...)."),
+        (() => app.Configuration["Ai:AnthropicPlatformKey"], "Ai__AnthropicPlatformKey", "Copy from the Anthropic console → API Keys (sk-ant-...)."),
+    };
+
+    var missing = new List<string>();
+    foreach (var (read, envVar, how) in requiredSecrets)
+    {
+        if (string.IsNullOrWhiteSpace(read()))
+            missing.Add($"  - {envVar}: {how}");
+    }
+
+    if (missing.Count > 0)
         throw new InvalidOperationException(
-            "GATE_SIGNING_KEY must be set in non-Development environments. " +
-            "Generate with: openssl rand -hex 32");
+            "The following required environment variables are not set in a non-Development environment. " +
+            "Set each before starting the service:" + Environment.NewLine + string.Join(Environment.NewLine, missing));
 }
 
 // Git repos base path must exist and be writable — workflow versioning depends on it (prompt 05-01).
@@ -369,18 +413,12 @@ finally
 static async Task WriteHealthResponse(HttpContext context, HealthReport report)
 {
     context.Response.ContentType = "application/json; charset=utf-8";
-    var entries = new Dictionary<string, string>();
-    foreach (var entry in report.Entries)
-    {
-        entries[entry.Key] = entry.Value.Status.ToString().ToLowerInvariant();
-    }
-    var payload = new
-    {
-        status = report.Status.ToString().ToLowerInvariant(),
-        totalDurationMs = report.TotalDuration.TotalMilliseconds,
-        dependencies = entries,
-    };
-    await JsonSerializer.SerializeAsync(context.Response.Body, payload,
+
+    var environment = context.RequestServices.GetRequiredService<IHostEnvironment>().EnvironmentName;
+    var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
+
+    var summary = Flowamaz.Application.Health.HealthCheckService.Compose(report, version, environment);
+    await JsonSerializer.SerializeAsync(context.Response.Body, summary,
         new JsonSerializerOptions(JsonSerializerDefaults.Web));
 }
 
