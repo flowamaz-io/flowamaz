@@ -140,4 +140,44 @@ public class SfgParserTests
         var act = () => _parser.Parse("   ");
         act.Should().Throw<SfgParseException>();
     }
+
+    // ── flowamaz/v1 envelope (templates/exports): metadata: + spec.nodes/spec.edges with
+    //    hyphenated node types. Runtime must parse this identically to the legacy root-level form.
+    private const string SpecFormatYaml = """
+        apiVersion: flowamaz/v1
+        kind: Workflow
+        metadata:
+          id: spec-flow
+          name: Spec Flow
+          version: "1.0.0"
+        spec:
+          nodes:
+            - id: start
+              type: trigger
+              label: Start
+            - id: gate
+              type: human-gate
+              label: Approve
+            - id: done
+              type: end
+              label: Done
+          edges:
+            - id: e1
+              from: start
+              to: gate
+            - id: e2
+              from: gate
+              to: done
+        """;
+
+    [Fact]
+    public void Parse_spec_envelope_reads_nodes_edges_and_hyphenated_types()
+    {
+        var graph = _parser.Parse(SpecFormatYaml);
+
+        graph.Nodes.Should().HaveCount(3);
+        graph.Edges.Should().HaveCount(2);
+        graph.TriggerNode.Id.Should().Be("start");
+        graph.FindNode("gate")!.Type.Should().Be(NodeType.HumanGate);
+    }
 }

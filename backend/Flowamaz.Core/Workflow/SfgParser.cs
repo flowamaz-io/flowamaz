@@ -51,26 +51,32 @@ public sealed class SfgParser
                 ex);
         }
 
-        if (root.Nodes is null || root.Nodes.Count == 0)
+        // Templates/exports use the documented flowamaz/v1 envelope (metadata: + spec.nodes/spec.edges);
+        // hand-authored workflows declare workflow:/nodes:/edges: at the root. Read whichever is present
+        // so both formats parse identically (prompt fix-07-01 — runtime aligned with the v1 schema).
+        var nodeDtos = root.Spec?.Nodes ?? root.Nodes;
+        var edgeDtos = root.Spec?.Edges ?? root.Edges;
+
+        if (nodeDtos is null || nodeDtos.Count == 0)
         {
             throw new SfgParseException("Workflow has no nodes. Add at least a Trigger node and one End node.");
         }
 
-        var nodes = MapNodes(root.Nodes);
+        var nodes = MapNodes(nodeDtos);
         var nodeIds = nodes.Select(n => n.Id).ToHashSet();
-        var edges = MapEdges(root.Edges, nodeIds);
+        var edges = MapEdges(edgeDtos, nodeIds);
 
         ValidateExactlyOneTrigger(nodes);
         ValidateHasEnd(nodes);
         ValidateNoOrphans(nodes, edges);
 
         var meta = new WorkflowMetadata(
-            root.Workflow?.Name ?? "Untitled workflow",
-            root.Workflow?.Description);
+            root.Workflow?.Name ?? root.Metadata?.Name ?? "Untitled workflow",
+            root.Workflow?.Description ?? root.Metadata?.Description);
 
         return new WorkflowGraph(
-            root.Workflow?.Id ?? "unknown",
-            root.Workflow?.Version ?? "draft",
+            root.Workflow?.Id ?? root.Metadata?.Id ?? "unknown",
+            root.Workflow?.Version ?? root.Metadata?.Version ?? "draft",
             nodes,
             edges,
             meta);
@@ -93,7 +99,10 @@ public sealed class SfgParser
                 throw new SfgParseException($"Duplicate node id '{dto.Id}'. Node ids must be unique within a workflow.");
             }
 
-            if (!Enum.TryParse<NodeType>(dto.Type, ignoreCase: true, out var type))
+            // The v1 schema uses hyphenated type names (e.g. "human-gate", "if-else"); strip separators
+            // so they map to the NodeType enum members (HumanGate, IfElse) the same as PascalCase input.
+            var normalizedType = dto.Type?.Replace("-", string.Empty).Replace("_", string.Empty);
+            if (!Enum.TryParse<NodeType>(normalizedType, ignoreCase: true, out var type))
             {
                 throw new SfgParseException(
                     $"Node '{dto.Id}' has unknown type '{dto.Type}'. Valid types: {string.Join(", ", Enum.GetNames<NodeType>())}.");
@@ -206,6 +215,23 @@ public sealed class SfgParser
     private sealed class RootDto
     {
         public WorkflowDto? Workflow { get; set; }
+        public MetadataDto? Metadata { get; set; }
+        public SpecDto? Spec { get; set; }
+        public List<NodeDto>? Nodes { get; set; }
+        public List<EdgeDto>? Edges { get; set; }
+    }
+
+    // flowamaz/v1 envelope: metadata: header + spec: body.
+    private sealed class MetadataDto
+    {
+        public string? Id { get; set; }
+        public string? Version { get; set; }
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+    }
+
+    private sealed class SpecDto
+    {
         public List<NodeDto>? Nodes { get; set; }
         public List<EdgeDto>? Edges { get; set; }
     }
