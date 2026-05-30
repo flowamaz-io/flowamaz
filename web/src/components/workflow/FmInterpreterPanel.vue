@@ -104,12 +104,13 @@ onMounted(() => {
       >
         {{ error }}
       </p>
-      <!-- eslint-disable-next-line vue/no-v-html -- trusted: content is our own interpreter output -->
+      <!-- eslint-disable vue/no-v-html -- trusted: interpreter output is our own, sanitized server-side -->
       <div
         v-else
         class="prose prose-sm max-w-none text-slate-700"
         v-html="renderedHtml"
       />
+      <!-- eslint-enable vue/no-v-html -->
     </div>
   </div>
 </template>

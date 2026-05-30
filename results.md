@@ -1255,3 +1255,23 @@ Notification centre, help-panel improvements, Phase 6 navigation, and three UX f
 - [x] Web typecheck 0; lint 0 errors; web tests **53/53** (+2: help search filter, feedback POST)
 - [x] Bell badge shows unread count; mark-all-read clears it; 60s poll; help search filters; canvas shows real workflow name; dashboard subtitle fixed
 - [x] Notifications best-effort (never break the originating workflow/gate/member operation)
+
+---
+
+## 06-07 — Phase 6 Integration + PHASE_COMPLETE  (2026-05-30)
+
+**Status:** Complete · pushed to `develop` · **PHASE 06 COMPLETE**
+
+- **Integration tests** (`Phase6/`, real Postgres + Redis via Testcontainers) — `Phase6WebhookTests` (signed→202, tampered→401, idempotency dedup), `Phase6PublicApiTests` (snake_case + rate-limit headers, trigger→202, missing-key→401 SDK hint, **workspace isolation**), `Phase6SsoTests` (JIT new/existing, OIDC state mismatch→401), `Phase6NotificationTests` (instance/gate notify, mark-all-read). **96/96** integration (84 prior + 12 new).
+- **E2E** — authored `webhook`/`public-api`/`notifications`/`connector-detail`/`node-config`/`misc` specs (S49–S60); total S1–S60.
+- **`vue/no-v-html`** — resolved with a justified block `eslint-disable` in `FmInterpreterPanel.vue` (interpreter output is our own, server-sanitized). Web lint now **0 warnings**.
+- **Coverage** (Coverlet) — WebhookService 88.9%, AesGcmSecretProtector 100%, SsoService 93.8%, NotificationService 100% (added gate-decided/member-invited/mark-read tests), ConnectorMarketplaceService 95.2%, public controllers 100% — all ≥ 80%.
+- **Security** — HMAC constant-time, SAML signature+audience+timestamp, OIDC single-use state, public-API workspace isolation, manifest YAML (no type resolution → no RCE), node-config text interpolation (no XSS); Trivy `fs ./backend` 0 Critical/High.
+- **Phase report** `phase-06-report.md` compiled; checkpoint → PHASE_COMPLETE; notification hook fired.
+
+**DoD**
+- [x] Backend build 0/0; unit **491/491**; integration **96/96**
+- [x] Web typecheck 0; lint **0 warnings/0 errors**; web **53/53**; E2E S49–S60 authored
+- [x] Security focus areas verified; Trivy 0 Critical/High
+- [x] All Phase 6 service areas ≥ 80% coverage
+- [x] `phase-06-report.md` compiled; PHASE_COMPLETE
