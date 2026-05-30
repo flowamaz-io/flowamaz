@@ -17,6 +17,9 @@ public sealed class WorkflowEventConfiguration : IEntityTypeConfiguration<Workfl
         builder.Property(e => e.NodeId).HasMaxLength(128);
         builder.Property(e => e.NodeType).HasMaxLength(64);
         builder.Property(e => e.Payload).HasColumnType("jsonb").IsRequired();
+        builder.Property(e => e.InputSnapshot).HasColumnType("jsonb");
+        builder.Property(e => e.OutputSnapshot).HasColumnType("jsonb");
+        builder.Property(e => e.ErrorSnapshot).HasColumnType("jsonb");
 
         builder.HasIndex(e => new { e.InstanceId, e.SequenceNumber }).IsUnique();
         builder.HasIndex(e => new { e.InstanceId, e.OccurredAt });

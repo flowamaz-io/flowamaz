@@ -60,7 +60,8 @@ public sealed record NodeStateResponse(
 public sealed record VariableResponse(string Name, string Value, bool IsSensitive);
 
 public sealed record EventResponse(
-    long SequenceNumber, string EventType, string? NodeId, string? NodeType, string Payload, DateTime OccurredAt);
+    long SequenceNumber, string EventType, string? NodeId, string? NodeType, string Payload, DateTime OccurredAt,
+    string? InputSnapshot = null, string? OutputSnapshot = null, string? ErrorSnapshot = null, int? DurationMs = null);
 
 public sealed record InstanceDetailResponse(
     Guid Id,

@@ -31,6 +31,12 @@ public class WorkflowInstance : WorkspaceEntity
     public bool IsTest { get; set; }
     public DateTime? TestExpiresAt { get; set; }
 
+    /// <summary>
+    /// Lineage for replayed runs (prompt 07-04): when this instance was created by replaying a
+    /// terminal instance, this points at the original. Null for normally-triggered instances.
+    /// </summary>
+    public Guid? ParentInstanceId { get; set; }
+
     /// <summary>Whether <see cref="Status"/> may legally move to <paramref name="target"/>.</summary>
     public bool CanTransitionTo(InstanceStatus target) =>
         AllowedTransitions.TryGetValue(Status, out var allowed) && allowed.Contains(target);

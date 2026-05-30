@@ -8,6 +8,7 @@ import type {
   InterpreterNarrative,
   NarrativeAudience,
   PagedResult,
+  ReplayResponse,
   TimelineResponse,
   TriggerInstanceRequest,
   TriggerInstanceResponse,
@@ -52,6 +53,14 @@ export const instanceService = {
 
   async retry(workspaceId: string, id: string): Promise<TriggerInstanceResponse> {
     const res = await http.post<ApiEnvelope<TriggerInstanceResponse>>(`${instances(workspaceId)}/${id}/retry`, {});
+    return unwrap(res);
+  },
+
+  async replay(workspaceId: string, id: string, payloadOverride: string | null): Promise<ReplayResponse> {
+    const res = await http.post<ApiEnvelope<ReplayResponse>>(
+      `${instances(workspaceId)}/${id}/replay`,
+      { payloadOverride },
+    );
     return unwrap(res);
   },
 

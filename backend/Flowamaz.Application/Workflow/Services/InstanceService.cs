@@ -205,5 +205,6 @@ public sealed class InstanceService
         v.Name, v.IsSensitive ? Masked : v.Value, v.IsSensitive);
 
     private static EventResponse ToEvent(WorkflowEvent e) => new(
-        e.SequenceNumber, e.EventType, e.NodeId, e.NodeType, e.Payload, e.OccurredAt);
+        e.SequenceNumber, e.EventType, e.NodeId, e.NodeType, e.Payload, e.OccurredAt,
+        e.InputSnapshot, e.OutputSnapshot, e.ErrorSnapshot, e.DurationMs);
 }

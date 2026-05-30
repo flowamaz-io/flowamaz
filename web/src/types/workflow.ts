@@ -155,6 +155,15 @@ export interface EventResponse {
   nodeType: string | null;
   payload: string;
   occurredAt: string;
+  inputSnapshot: string | null;
+  outputSnapshot: string | null;
+  errorSnapshot: string | null;
+  durationMs: number | null;
+}
+
+export interface ReplayResponse {
+  instanceId: string;
+  isTest: boolean;
 }
 
 export interface InstanceDetailResponse {

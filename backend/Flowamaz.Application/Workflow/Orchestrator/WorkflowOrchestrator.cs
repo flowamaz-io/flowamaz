@@ -290,8 +290,11 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
 
                     default:
                         // Action/AI/Wait/ForEach/TryCatch/While/SubWorkflow — needs an external executor (02-03).
+                        // Snapshot the (sensitive-stripped) variable context the node will execute against.
+                        var inputSnapshot = await BuildInputSnapshotAsync(instance.Id, cancellationToken);
                         await _nodeStates.AddAsync(NewState(instance, node, NodeStatus.Pending), cancellationToken);
-                        seq = await AppendEventAsync(seq, instance, "NodeStarted", node.Id, node.Type.ToString(), "{}", cancellationToken);
+                        seq = await AppendEventAsync(seq, instance, "NodeStarted", node.Id, node.Type.ToString(), "{}", cancellationToken,
+                            inputSnapshot: inputSnapshot);
                         nextNodes.Add(node.Id);
                         break;
                 }
@@ -352,8 +355,15 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
 
         await UpsertVariableAsync(instance, $"{nodeId}.output", string.IsNullOrWhiteSpace(output) ? "null" : output, cancellationToken);
 
+        // Snapshot what this node produced + how long it ran (07-04 step debugger). The output is
+        // already non-secret (node outputs are not credential values); record it as-is.
+        var durationMs = state.StartedAt is not null
+            ? (int)Math.Clamp((DateTime.UtcNow - state.StartedAt.Value).TotalMilliseconds, 0, int.MaxValue)
+            : 0;
+
         var seq = await _events.GetNextSequenceNumberAsync(instanceId, cancellationToken);
-        await AppendEventAsync(seq, instance, "NodeCompleted", nodeId, state.NodeType, state.OutputPayload ?? "{}", cancellationToken);
+        await AppendEventAsync(seq, instance, "NodeCompleted", nodeId, state.NodeType, state.OutputPayload ?? "{}", cancellationToken,
+            outputSnapshot: state.OutputPayload ?? "{}", durationMs: durationMs);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // More steps remain — put the instance back on its queue for the next frontier.
@@ -382,7 +392,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             state.Status = NodeStatus.Pending;
             state.ErrorMessage = error;
             _nodeStates.Update(state);
-            seq = await AppendEventAsync(seq, instance, "NodeFailed", nodeId, state.NodeType, RetryPayload(error, state.RetryCount), cancellationToken);
+            seq = await AppendEventAsync(seq, instance, "NodeFailed", nodeId, state.NodeType, RetryPayload(error, state.RetryCount), cancellationToken,
+                errorSnapshot: ErrorSnapshot(error));
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             var delay = (int)Math.Round(retry.BackoffSeconds * Math.Pow(retry.BackoffMultiplier, state.RetryCount - 1));
@@ -396,7 +407,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         state.Status = NodeStatus.Failed;
         state.ErrorMessage = error;
         _nodeStates.Update(state);
-        seq = await AppendEventAsync(seq, instance, "NodeFailed", nodeId, state.NodeType, ErrorPayload(error), cancellationToken);
+        seq = await AppendEventAsync(seq, instance, "NodeFailed", nodeId, state.NodeType, ErrorPayload(error), cancellationToken,
+            errorSnapshot: ErrorSnapshot(error));
 
         var compensation = node?.Compensation;
         if (compensation is not null && _sagaEngine is not null)
@@ -426,7 +438,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             instance.FailedAt = DateTime.UtcNow;
             instance.ErrorMessage = error;
             _instances.Update(instance);
-            await AppendEventAsync(seq, instance, "InstanceFailed", nodeId, state.NodeType, ErrorPayload(error), cancellationToken);
+            await AppendEventAsync(seq, instance, "InstanceFailed", nodeId, state.NodeType, ErrorPayload(error), cancellationToken,
+                errorSnapshot: ErrorSnapshot(error));
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -491,7 +504,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
     }
 
     private async Task<long> AppendEventAsync(
-        long sequenceNumber, WorkflowInstance instance, string eventType, string? nodeId, string? nodeType, string payload, CancellationToken ct)
+        long sequenceNumber, WorkflowInstance instance, string eventType, string? nodeId, string? nodeType, string payload, CancellationToken ct,
+        string? inputSnapshot = null, string? outputSnapshot = null, string? errorSnapshot = null, int? durationMs = null)
     {
         await _events.AppendAsync(new WorkflowEvent
         {
@@ -502,9 +516,37 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             NodeId = nodeId,
             NodeType = nodeType,
             Payload = payload,
+            InputSnapshot = inputSnapshot,
+            OutputSnapshot = outputSnapshot,
+            ErrorSnapshot = errorSnapshot,
+            DurationMs = durationMs,
             OccurredAt = DateTime.UtcNow,
         }, ct);
         return sequenceNumber + 1;
+    }
+
+    /// <summary>
+    /// Builds the per-node input snapshot from the instance's current variable context, with
+    /// sensitive variables (<see cref="WorkflowVariable.IsSensitive"/>) stripped entirely so they
+    /// never reach the step-debugger snapshot. Returns a jsonb object string.
+    /// </summary>
+    private async Task<string> BuildInputSnapshotAsync(Guid instanceId, CancellationToken ct)
+    {
+        var variables = await _variables.GetForInstanceAsync(instanceId, ct);
+        var safe = new Dictionary<string, System.Text.Json.Nodes.JsonNode?>(StringComparer.Ordinal);
+        foreach (var v in variables ?? [])
+        {
+            if (v.IsSensitive) continue; // never snapshot sensitive values
+            safe[v.Name] = TryParseJsonValue(v.Value);
+        }
+        return System.Text.Json.JsonSerializer.Serialize(safe);
+    }
+
+    private static System.Text.Json.Nodes.JsonNode? TryParseJsonValue(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        try { return System.Text.Json.Nodes.JsonNode.Parse(raw); }
+        catch (System.Text.Json.JsonException) { return System.Text.Json.Nodes.JsonValue.Create(raw); }
     }
 
     private static WorkflowNodeState NewState(WorkflowInstance instance, SfgNode node, NodeStatus status) => new()
@@ -520,6 +562,13 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
 
     private static string ErrorPayload(string error) =>
         System.Text.Json.JsonSerializer.Serialize(new { error });
+
+    /// <summary>
+    /// Error snapshot for the step debugger: message + type ONLY. Never includes a stack trace — the
+    /// node executor passes only the message string, so this is safe to surface to the client.
+    /// </summary>
+    private static string ErrorSnapshot(string error) =>
+        System.Text.Json.JsonSerializer.Serialize(new { message = error, type = "NodeExecutionError" });
 
     private static string RetryPayload(string error, int attempt) =>
         System.Text.Json.JsonSerializer.Serialize(new { error, attempt });

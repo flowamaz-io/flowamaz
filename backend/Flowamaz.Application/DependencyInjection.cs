@@ -73,6 +73,10 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowInterpreterService, WorkflowInterpreterService>();
         services.AddScoped<IStepDebuggerService, StepDebuggerService>();
 
+        // Advanced monitoring: replay + in-memory dev breakpoints (prompt 07-04).
+        services.AddScoped<Core.Interfaces.Workflow.IReplayService, Workflow.Services.ReplayService>();
+        services.AddSingleton<Core.Interfaces.Workflow.IBreakpointRegistry, Workflow.Debugger.BreakpointRegistry>();
+
         // Process Intelligence + Workflow Weather (prompt 02-07). Batch processor polls F5 results.
         services.AddScoped<ProcessIntelligenceService>();
         services.AddScoped<BatchInsightProcessorService>();

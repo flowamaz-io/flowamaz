@@ -27,6 +27,25 @@ public class WorkflowEvent
     /// <summary>Inputs, outputs, or error details as a jsonb document.</summary>
     public string Payload { get; set; } = "{}";
 
+    /// <summary>
+    /// Step-debugger snapshot (prompt 07-04): the variable context fed into this node at execution
+    /// time, as a jsonb object. Sensitive variables are stripped before this is written. Null on
+    /// non-node events.
+    /// </summary>
+    public string? InputSnapshot { get; set; }
+
+    /// <summary>Step-debugger snapshot: the output this node produced, as jsonb. Null until completion.</summary>
+    public string? OutputSnapshot { get; set; }
+
+    /// <summary>
+    /// Step-debugger snapshot: error details for a failed node — message + type ONLY, never a stack
+    /// trace (stack traces stay server-side). jsonb. Null on success.
+    /// </summary>
+    public string? ErrorSnapshot { get; set; }
+
+    /// <summary>Step-debugger snapshot: wall-clock duration of this node's execution in milliseconds.</summary>
+    public int? DurationMs { get; set; }
+
     /// <summary>When the event actually happened (UTC, precise).</summary>
     public DateTime OccurredAt { get; set; }
 

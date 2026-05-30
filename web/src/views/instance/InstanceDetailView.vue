@@ -8,6 +8,9 @@ import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import FmRunTimeline from '@/components/workflow/FmRunTimeline.vue';
 import FmInterpreterPanel from '@/components/workflow/FmInterpreterPanel.vue';
+import StepDebugger from '@/components/instance/StepDebugger.vue';
+import ReplayModal from '@/components/instance/ReplayModal.vue';
+import VariableInspector from '@/components/instance/VariableInspector.vue';
 import { useWorkflowStore } from '@/stores/workflow.store';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useAuthStore } from '@/stores/auth.store';
@@ -31,12 +34,24 @@ const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
 const id = computed(() => String(route.params.id));
 const activeTab = ref<Tab>('timeline');
 const acting = ref(false);
+const replayOpen = ref(false);
 
 const canCancel = computed(() => {
   const s = currentInstance.value?.status;
   return s === 'Pending' || s === 'Running' || s === 'Waiting' || s === 'Compensating';
 });
 const canRetry = computed(() => currentInstance.value?.status === 'Failed');
+const isTerminal = computed(() => {
+  const s = currentInstance.value?.status;
+  return s === 'Completed' || s === 'Failed' || s === 'Cancelled';
+});
+
+// The trigger payload is recorded on the first InstanceStarted event — used to pre-fill the
+// replay editor. The server re-reads the authoritative payload when replaying.
+const originalPayload = computed<string | null>(() => {
+  const started = currentInstance.value?.events.find((e) => e.eventType === 'InstanceStarted');
+  return started?.payload ?? null;
+});
 
 async function refresh(): Promise<void> {
   await Promise.all([store.loadInstanceDetail(id.value), store.loadTimeline(id.value)]);
@@ -144,6 +159,13 @@ onMounted(async () => {
           >
             Retry
           </FmButton>
+          <FmButton
+            v-if="isTerminal"
+            variant="secondary"
+            @click="replayOpen = true"
+          >
+            Replay
+          </FmButton>
         </div>
       </div>
 
@@ -162,7 +184,10 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div v-if="activeTab === 'timeline'">
+      <div
+        v-if="activeTab === 'timeline'"
+        class="space-y-4"
+      >
         <div class="rounded-xl border border-slate-200 bg-white p-5">
           <FmRunTimeline
             v-if="timeline && timeline.nodes.length > 0"
@@ -172,9 +197,13 @@ onMounted(async () => {
             v-else
             class="text-sm text-slate-400"
           >
-            No node activity yet.
+            No node activity yet. Trigger or replay this workflow to populate the timeline.
           </p>
         </div>
+        <StepDebugger
+          :node-states="currentInstance.nodeStates"
+          :events="currentInstance.events"
+        />
       </div>
 
       <div
@@ -221,30 +250,12 @@ onMounted(async () => {
         </table>
       </div>
 
-      <div
-        v-else-if="activeTab === 'variables'"
-        class="overflow-hidden rounded-xl border border-slate-200 bg-white"
-      >
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-          <tbody class="divide-y divide-slate-100">
-            <tr
-              v-for="v in currentInstance.variables"
-              :key="v.name"
-            >
-              <td class="px-4 py-3 font-medium text-slate-700">
-                {{ v.name }}
-              </td>
-              <td class="px-4 py-3 font-mono text-xs text-slate-600">
-                {{ v.value }}
-              </td>
-            </tr>
-            <tr v-if="currentInstance.variables.length === 0">
-              <td class="px-4 py-6 text-center text-slate-400">
-                No variables recorded.
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else-if="activeTab === 'variables'">
+        <VariableInspector
+          :workspace-id="currentWorkspaceId ?? ''"
+          :instance-id="currentInstance.id"
+          :status="currentInstance.status"
+        />
       </div>
 
       <div
@@ -273,6 +284,13 @@ onMounted(async () => {
           :instance-status="currentInstance.status"
         />
       </div>
+
+      <ReplayModal
+        v-model="replayOpen"
+        :workspace-id="currentWorkspaceId ?? ''"
+        :instance-id="currentInstance.id"
+        :original-payload="originalPayload"
+      />
     </template>
   </div>
 </template>

@@ -1340,3 +1340,23 @@ Template gallery — browse/preview/install/publish; 10 official templates seede
 - [x] YAML only via YamlDotNet/validator path; workspace isolation on install/publish
 
 **Deviations:** seeded template YAML omits optional integer fields (`sla_threshold_ms`/node `timeout`) — the validator's YAML→object step stringifies scalars and rejects unquoted integers; templates remain valid (human-gate-without-timeout is a warning, not an error).
+
+---
+
+## 07-04 — Advanced Instance Monitoring (Step Debugger, Replay, Breakpoints)  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Per-node I/O snapshots, instance replay with payload override, Dev-only breakpoints, variable inspector.
+
+- **Snapshots** — `WorkflowEvent` +jsonb `InputSnapshot`/`OutputSnapshot`/`ErrorSnapshot` + int `DurationMs`. Orchestrator captures: input (sensitive-stripped) on NodeStarted, output + DurationMs on complete, error (message+type only, never stack trace) on fail. Execution semantics unchanged (Phase-2 tests stay green). Migration `AddWorkflowEventSnapshots` (also adds `WorkflowInstance.ParentInstanceId` + index; pending-changes clean; applies on Postgres).
+- **ReplayService** (`IReplayService`) — terminal instances only (else 409 `InstanceNotReplayableException`); new instance with same version, original payload merged with override (override wins), `IsTest=true`, `ParentInstanceId=original`, 24h expiry, never touches prod budget; reuses orchestrator create+enqueue path.
+- **InstanceDebugController** — `POST /workspaces/{ws}/instances/{id}/replay` [Designer]; Dev-only (`IHostEnvironment.IsDevelopment()`, 404 otherwise) `POST/GET /dev/breakpoints`, `DELETE /dev/breakpoints/{id}`, `POST /dev/instances/{id}/resume|step` (delegate to existing `IStepDebuggerService`). In-memory `BreakpointRegistry` (singleton; not persisted, per spec) — distinct from the Redis `IDebugStateStore`. Did NOT duplicate the prompt-02-05 debugger.
+- **Frontend** — `InstanceDetailView` enhanced (expandable per-node I/O timeline, Replay button on terminal, Variables tab), `StepDebugger.vue`, `ReplayModal.vue` (JSON editor pre-filled), `VariableInspector.vue` (5s poll on running, static on completed), color coding green/amber/red/gray. `instance.service.replay()`. Zero `<style>` blocks.
+
+**DoD**
+- [x] Backend build 0/0; unit **517/517** (+6 Workflow: merged-payload+lineage replay, running→409, output snapshot captured, sensitive stripped, Dev-only breakpoint gate, no-override reuses payload)
+- [x] Web typecheck 0; migration pending-changes clean; applies on Postgres (MigrationTests 4/4)
+- [x] Replay always test instance; sensitive vars stripped; no stack trace to client
+
+**Deviation:** breakpoint mechanism (registry + Dev endpoints + resume/step) is in place and Dev-gated, but the orchestrator does not yet auto-pause mid-execution on a registered breakpoint (kept StepAsync surgical to avoid Phase-2 regressions). Scaffolded, not end-to-end live.
