@@ -10,8 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flowamaz.Api.Controllers;
 
 /// <summary>
-/// Workflow definition CRUD + publish. Reads need Viewer, authoring needs Designer, delete needs
-/// Admin. YAML is validated before any save (invalid YAML → 422). Wrong-org workspaces 404 via the
+/// Workflow definition CRUD + publish. Reads need Viewer, authoring and Draft delete need Designer.
+/// YAML is validated before any save (invalid YAML → 422). Wrong-org workspaces 404 via the
 /// authorization filter.
 /// </summary>
 [ApiController]
@@ -73,11 +73,12 @@ public sealed class WorkflowDefinitionsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [RequireWorkspaceRole(WorkspaceRole.Admin)]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
     public async Task<IActionResult> Delete(Guid workspaceId, Guid id, CancellationToken cancellationToken)
     {
-        var deleted = await _workflows.SoftDeleteAsync(workspaceId, id, cancellationToken);
-        return deleted ? NoContent() : NotFound();
+        // Draft-only delete: published workflows 422, missing 404 — both raised by the service.
+        await _workflows.DeleteAsync(id, workspaceId, _currentUser.UserId!.Value, cancellationToken);
+        return NoContent();
     }
 
     [HttpGet("{id:guid}/versions")]

@@ -10,6 +10,7 @@ import FmEmptyState from '@/components/common/FmEmptyState.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import FmTooltip from '@/components/common/FmTooltip.vue';
 import TriggerModal from '@/components/workflow/TriggerModal.vue';
+import DeleteWorkflowModal from '@/components/workflow/DeleteWorkflowModal.vue';
 import { useWorkflowStore } from '@/stores/workflow.store';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { fromNow } from '@/utils/date.util';
@@ -26,6 +27,14 @@ const search = ref('');
 const statusFilter = ref<WorkflowStatus | ''>('');
 const triggerOpen = ref(false);
 const preselectedId = ref<string | undefined>(undefined);
+
+const deleteOpen = ref(false);
+const deleteTarget = ref<{ id: string; name: string } | null>(null);
+
+function openDelete(id: string, name: string): void {
+  deleteTarget.value = { id, name };
+  deleteOpen.value = true;
+}
 
 const filtered = computed(() =>
   workflows.value.filter((w) => {
@@ -237,6 +246,14 @@ onMounted(reload);
                 >
                   Test run
                 </button>
+                <button
+                  v-if="wf.status === 'Draft'"
+                  type="button"
+                  class="rounded px-1.5 py-0.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                  @click="openDelete(wf.id, wf.name)"
+                >
+                  Delete
+                </button>
               </div>
             </td>
           </tr>
@@ -248,6 +265,15 @@ onMounted(reload);
       v-model="triggerOpen"
       :workflows="workflows"
       :preselected-id="preselectedId"
+    />
+
+    <DeleteWorkflowModal
+      v-if="deleteTarget && currentWorkspaceId"
+      v-model="deleteOpen"
+      :workspace-id="currentWorkspaceId"
+      :workflow-id="deleteTarget.id"
+      :workflow-name="deleteTarget.name"
+      @deleted="store.loadWorkflows()"
     />
   </div>
 </template>

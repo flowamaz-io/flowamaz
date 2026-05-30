@@ -175,6 +175,46 @@ public class WorkflowServiceTests
     }
 
     [Fact]
+    public async Task DeleteAsync_Draft_SoftDeletes()
+    {
+        var def = Definition(); // Draft
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_id, _ws, It.IsAny<CancellationToken>())).ReturnsAsync(def);
+        var actor = Guid.NewGuid();
+
+        await NewService().DeleteAsync(_id, _ws, actor);
+
+        def.IsDeleted.Should().BeTrue();
+        def.DeletedAt.Should().NotBeNull();
+        def.UpdatedBy.Should().Be(actor);
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_Published_ThrowsNotDraft()
+    {
+        var def = Definition();
+        def.Status = WorkflowStatus.Published;
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_id, _ws, It.IsAny<CancellationToken>())).ReturnsAsync(def);
+
+        var act = async () => await NewService().DeleteAsync(_id, _ws, Guid.NewGuid());
+
+        await act.Should().ThrowAsync<WorkflowNotDraftException>();
+        def.IsDeleted.Should().BeFalse();
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_WrongWorkspace_ThrowsNotFound()
+    {
+        // Repository scopes by workspace — a wrong-workspace id resolves to null.
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(It.IsAny<Guid>(), _ws, It.IsAny<CancellationToken>())).ReturnsAsync((WorkflowDefinition?)null);
+
+        var act = async () => await NewService().DeleteAsync(Guid.NewGuid(), _ws, Guid.NewGuid());
+
+        await act.Should().ThrowAsync<WorkflowNotFoundException>();
+    }
+
+    [Fact]
     public async Task ListAsync_MapsDefinitions()
     {
         _definitions.Setup(r => r.GetForWorkspaceAsync(_ws, It.IsAny<CancellationToken>())).ReturnsAsync([Definition()]);

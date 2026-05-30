@@ -2,8 +2,9 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { Pencil, Play, XCircle, AlertTriangle, Webhook, Copy, Check, Share2 } from 'lucide-vue-next';
+import { Pencil, Play, XCircle, AlertTriangle, Webhook, Copy, Check, Share2, Trash2 } from 'lucide-vue-next';
 import TriggerModal from '@/components/workflow/TriggerModal.vue';
+import DeleteWorkflowModal from '@/components/workflow/DeleteWorkflowModal.vue';
 import PublishTemplateModal from '@/components/library/PublishTemplateModal.vue';
 import FmBadge from '@/components/common/FmBadge.vue';
 import FmButton from '@/components/common/FmButton.vue';
@@ -34,6 +35,7 @@ const { currentWorkflow, instances, loading, error } = storeToRefs(store);
 const id = computed(() => String(route.params.id));
 const workspaceId = computed(() => workspaceStore.currentWorkspaceId ?? '');
 const activeTab = ref<Tab>('overview');
+const includeTestRuns = ref(false);
 const publishing = ref(false);
 
 const yamlContent = ref('');
@@ -47,6 +49,7 @@ const validationWarnings = ref<Array<{ message: string; line?: number }>>([]);
 const triggerOpen = ref(false);
 const forceTestRun = ref(false);
 const publishTemplateOpen = ref(false);
+const deleteOpen = ref(false);
 
 // Git version history (prompt 05-01).
 const history = ref<WorkflowCommit[]>([]);
@@ -111,10 +114,14 @@ watch(currentWorkflow, (wf) => {
   if (wf && !yamlDirty.value) yamlContent.value = wf.yamlContent ?? '';
 });
 
+async function loadInstancesTab(): Promise<void> {
+  await store.loadInstances({ workflowDefinitionId: id.value, includeTest: includeTestRuns.value });
+}
+
 async function loadTab(tab: Tab): Promise<void> {
   activeTab.value = tab;
   if (tab === 'versions') await loadHistory();
-  if (tab === 'instances') await store.loadInstances({ workflowDefinitionId: id.value });
+  if (tab === 'instances') await loadInstancesTab();
   if (tab === 'yaml') yamlContent.value = currentWorkflow.value?.yamlContent ?? '';
 }
 
@@ -292,6 +299,14 @@ watch(id, () => store.loadWorkflow(id.value));
           >
             <Pencil class="w-4 h-4" />
             Edit in Canvas
+          </button>
+          <button
+            v-if="currentWorkflow.status === 'Draft'"
+            class="flex items-center gap-2 px-4 py-2 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            @click="deleteOpen = true"
+          >
+            <Trash2 class="w-4 h-4" />
+            Delete
           </button>
           <button
             class="flex items-center gap-2 px-4 py-2 border border-amber-400 rounded-lg text-sm font-medium text-amber-700 hover:bg-amber-50 transition-colors"
@@ -474,11 +489,19 @@ watch(id, () => store.loadWorkflow(id.value));
         </div>
       </div>
 
-      <div
-        v-else-if="activeTab === 'instances'"
-        class="overflow-hidden rounded-xl border border-slate-200 bg-white"
-      >
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
+      <div v-else-if="activeTab === 'instances'">
+        <label class="mb-3 inline-flex items-center gap-2 text-sm text-slate-600">
+          <input
+            v-model="includeTestRuns"
+            type="checkbox"
+            class="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+            @change="loadInstancesTab"
+          >
+          Include test runs
+        </label>
+
+        <div class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
           <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
               <th class="px-4 py-3">
@@ -505,6 +528,12 @@ watch(id, () => store.loadWorkflow(id.value));
                 >
                   {{ inst.id.slice(0, 8) }}
                 </RouterLink>
+                <span
+                  v-if="inst.isTest"
+                  class="ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700"
+                >
+                  TEST
+                </span>
               </td>
               <td class="px-4 py-3">
                 <FmBadge :variant="instanceStatusVariant(inst.status)">
@@ -524,7 +553,8 @@ watch(id, () => store.loadWorkflow(id.value));
               </td>
             </tr>
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       <div
@@ -714,6 +744,14 @@ watch(id, () => store.loadWorkflow(id.value));
       :workflow-id="id"
       :workflow-name="currentWorkflow.name"
       @published="toast.success('Template submitted for review.')"
+    />
+
+    <DeleteWorkflowModal
+      v-if="currentWorkflow && currentWorkflow.status === 'Draft'"
+      v-model="deleteOpen"
+      :workspace-id="workspaceId"
+      :workflow-id="id"
+      :workflow-name="currentWorkflow.name"
     />
 
     <Teleport to="body">

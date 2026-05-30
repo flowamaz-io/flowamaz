@@ -159,6 +159,49 @@ public sealed class WorkflowService
         return true;
     }
 
+    /// <summary>
+    /// Deletes a Draft workflow (soft delete). Published workflows cannot be deleted — they are
+    /// archived instead — so this throws <see cref="WorkflowNotDraftException"/> (422) for any
+    /// non-Draft status. Missing/wrong-workspace ids throw <see cref="WorkflowNotFoundException"/> (404).
+    /// </summary>
+    public async Task DeleteAsync(Guid workflowId, Guid workspaceId, Guid deletedByUserId, CancellationToken ct = default)
+    {
+        _logger.LogInformation("WorkflowService.DeleteAsync enter workspace={WorkspaceId} workflow={WorkflowId}", workspaceId, workflowId);
+
+        var definition = await _definitions.GetByIdForWorkspaceAsync(workflowId, workspaceId, ct);
+        if (definition is null)
+        {
+            _logger.LogWarning("WorkflowService.DeleteAsync not-found workspace={WorkspaceId} workflow={WorkflowId}", workspaceId, workflowId);
+            throw new WorkflowNotFoundException(workflowId);
+        }
+
+        if (definition.Status != WorkflowStatus.Draft)
+        {
+            _logger.LogWarning("WorkflowService.DeleteAsync rejected workflow={WorkflowId} status={Status}", workflowId, definition.Status);
+            throw new WorkflowNotDraftException();
+        }
+
+        definition.IsDeleted = true;
+        definition.DeletedAt = DateTime.UtcNow;
+        definition.UpdatedBy = deletedByUserId;
+        _definitions.Update(definition);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        _audit?.RecordAsync(new AuditEventRequest
+        {
+            WorkspaceId = workspaceId,
+            ActorUserId = deletedByUserId,
+            ActorType = "user",
+            EventType = "workflow.deleted",
+            ResourceType = "workflow",
+            ResourceId = definition.Id,
+            ResourceLabel = definition.Name,
+            Action = "deleted",
+        }, ct);
+
+        _logger.LogInformation("WorkflowService.DeleteAsync exit workflow={WorkflowId}", workflowId);
+    }
+
     public async Task<List<WorkflowVersionResponse>?> GetVersionsAsync(Guid workspaceId, Guid id, CancellationToken ct = default)
     {
         var definition = await _definitions.GetByIdForWorkspaceAsync(id, workspaceId, ct);
