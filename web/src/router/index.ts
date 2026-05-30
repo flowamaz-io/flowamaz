@@ -35,6 +35,11 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/pricing',
+    name: 'pricing',
+    component: () => import('@/views/billing/PricingView.vue'),
+  },
+  {
     path: '/gates/:decision',
     name: 'gate-approval-success',
     component: () => import('@/views/gates/GateApprovalSuccessView.vue'),
@@ -63,6 +68,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'settings/api-keys', name: 'api-keys', component: () => import('@/views/workspace/ApiKeysView.vue') },
       { path: 'settings/webhooks', name: 'webhooks', component: () => import('@/views/settings/WebhookSettingsView.vue') },
       { path: 'settings/sso', name: 'sso', component: () => import('@/views/settings/SsoSettingsView.vue') },
+      { path: 'settings/billing', name: 'billing', component: () => import('@/views/settings/BillingSettingsView.vue') },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

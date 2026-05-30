@@ -16,6 +16,8 @@ public sealed class PlanConfiguration : IEntityTypeConfiguration<Plan>
         builder.HasIndex(p => p.Slug).IsUnique();
         builder.Property(p => p.PriceMonthlyUsd).HasPrecision(18, 2);
         builder.Property(p => p.PriceAnnualUsd).HasPrecision(18, 2);
+        builder.Property(p => p.StripePriceIdMonthly).HasMaxLength(128);
+        builder.Property(p => p.StripePriceIdAnnual).HasMaxLength(128);
 
         builder.Property(p => p.Limits)
             .HasConversion(JsonColumn.Converter<PlanLimits>(), JsonColumn.Comparer<PlanLimits>())

@@ -16,6 +16,12 @@ public sealed class OrganisationRepository(FlowAmazDbContext db) : IOrganisation
     public Task<Organisation?> GetBySlugAsync(string slug, CancellationToken cancellationToken = default) =>
         db.Organisations.AsNoTracking().FirstOrDefaultAsync(o => o.Slug == slug, cancellationToken);
 
+    public Task<Organisation?> GetForUpdateAsync(Guid id, CancellationToken cancellationToken = default) =>
+        db.Organisations.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
+
+    public Task<Organisation?> GetByStripeCustomerIdAsync(string stripeCustomerId, CancellationToken cancellationToken = default) =>
+        db.Organisations.FirstOrDefaultAsync(o => o.StripeCustomerId == stripeCustomerId, cancellationToken);
+
     public Task<bool> SlugExistsAsync(string slug, CancellationToken cancellationToken = default) =>
         db.Organisations.AnyAsync(o => o.Slug == slug, cancellationToken);
 

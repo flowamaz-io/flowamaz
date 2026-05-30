@@ -37,8 +37,18 @@ public static class DependencyInjection
         AddEmail(services);
         AddConnectors(services);
         AddGit(services);
+        AddBilling(services);
         return services;
     }
+
+    private static void AddBilling(IServiceCollection services)
+    {
+        services.AddSingleton<IStripeEventVerifier, StripeEventVerifier>();
+        services.AddScoped<IStripeService, StripeService>();
+    }
+
+    private static string FirstNonEmpty(string current, string? fallback) =>
+        !string.IsNullOrWhiteSpace(current) ? current : fallback ?? string.Empty;
 
     private static void AddOptions(IServiceCollection services, IConfiguration configuration)
     {
@@ -57,6 +67,18 @@ public static class DependencyInjection
         {
             if (string.IsNullOrEmpty(options.ReposBasePath))
                 options.ReposBasePath = configuration["GIT_REPOS_BASE_PATH"] ?? string.Empty;
+        });
+
+        services.Configure<StripeOptions>(configuration.GetSection(StripeOptions.SectionName));
+        services.PostConfigure<StripeOptions>(options =>
+        {
+            // Documented single-name STRIPE_* env vars win over appsettings (mirrors AI/Git mapping).
+            options.SecretKey = FirstNonEmpty(options.SecretKey, configuration["STRIPE_SECRET_KEY"]);
+            options.WebhookSecret = FirstNonEmpty(options.WebhookSecret, configuration["STRIPE_WEBHOOK_SECRET"]);
+            options.StarterPriceIdMonthly = FirstNonEmpty(options.StarterPriceIdMonthly, configuration["STRIPE_STARTER_PRICE_ID_MONTHLY"]);
+            options.StarterPriceIdAnnual = FirstNonEmpty(options.StarterPriceIdAnnual, configuration["STRIPE_STARTER_PRICE_ID_ANNUAL"]);
+            options.ProPriceIdMonthly = FirstNonEmpty(options.ProPriceIdMonthly, configuration["STRIPE_PRO_PRICE_ID_MONTHLY"]);
+            options.ProPriceIdAnnual = FirstNonEmpty(options.ProPriceIdAnnual, configuration["STRIPE_PRO_PRICE_ID_ANNUAL"]);
         });
 
         services.Configure<CommunityOptions>(configuration.GetSection(CommunityOptions.SectionName));
@@ -85,6 +107,8 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IPlanRepository, PlanRepository>();
         services.AddScoped<IOrganisationRepository, OrganisationRepository>();
+        services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddScoped<IUsageAggregateRepository, UsageAggregateRepository>();
         services.AddScoped<IOrgUserRepository, OrgUserRepository>();
         services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
         services.AddScoped<IWorkspaceMemberRepository, WorkspaceMemberRepository>();

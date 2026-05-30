@@ -1275,3 +1275,23 @@ Notification centre, help-panel improvements, Phase 6 navigation, and three UX f
 - [x] Security focus areas verified; Trivy 0 Critical/High
 - [x] All Phase 6 service areas ≥ 80% coverage
 - [x] `phase-06-report.md` compiled; PHASE_COMPLETE
+
+---
+
+## 07-01 — Billing + Stripe  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Stripe-based subscription management reusing the existing `Plan`/`Subscription`/`Organisation`/`UsageAggregate` model (no duplicate `org_billing`/`plan_definitions`/`usage_records` tables).
+
+- **StripeService** (`IStripeService` + `Infrastructure/Services/StripeService.cs`, `Stripe.net` 51.2.0) — `CreateCheckoutSessionAsync` (pre-fills owner email, metadata `{orgId,planId}`, resolves price id from `Plan` column → env fallback by slug), `CreateCustomerPortalSessionAsync`, `HandleWebhookAsync` (signature via `EventUtility.ConstructEvent`, idempotent Redis `stripe:event:{id}` 7-day set; handles checkout.session.completed / customer.subscription.updated|deleted / invoice.payment_failed|succeeded). Graceful degrade when `StripeOptions.IsConfigured` is false (Dev/tests never touch the network). Signature verification seamed behind `IStripeEventVerifier` for testability.
+- **Entities** — `Plan` +`StripePriceIdMonthly/Annual` (nullable); `Subscription` +`StripeSubscriptionId/TrialEndsAt/CanceledAt/PaymentFailed`; `SubscriptionStatus` +`Trialing/Paused`. `ISubscriptionRepository`/`IUsageAggregateRepository` + EF impls + DI. Migration `AddStripeBillingFields` (purely additive; applies cleanly on Postgres — validated by MigrationTests 4/4).
+- **BillingController** — `GET /billing/plans` [Anon], `GET /billing/current` [Authorize], `POST /billing/checkout` [OrgOwner], `POST /billing/portal` [OrgOwner], `POST /billing/webhook` [Anon, raw body + Stripe-Signature], `GET /billing/usage` [OrgOwner]. Stripe customer/secret ids never returned (only `hasBillingAccount` bool).
+- **Frontend** — `PricingView.vue` (/pricing public+lazy, monthly/annual toggle 20% off, 4 plan cards), `BillingSettingsView.vue` (/settings/billing, plan+status, trial countdown, usage bars, manage/upgrade, invoice history placeholder), `billing.service.ts`, routes registered. Zero `<style>` blocks.
+- **Config** — `StripeOptions` (single-name `STRIPE_*` env mapping) + `.env` example updated.
+
+**DoD**
+- [x] Backend build 0/0; unit **497/497** (+6 Billing: checkout→plan updated, subscription.deleted→Community, invalid sig→throws/no-save, payment_failed→flag+suspend+email, owner-allowed/non-owner-403)
+- [x] Web typecheck 0
+- [x] Migration applies on Postgres (MigrationTests 4/4)
+- [x] Stripe secrets/customer ids never exposed or logged; webhook signature verified + idempotent

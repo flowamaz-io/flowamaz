@@ -15,6 +15,12 @@ public class Plan
     public decimal PriceMonthlyUsd { get; set; }
     public decimal PriceAnnualUsd { get; set; }
 
+    /// <summary>Stripe Price id for the monthly billing cycle (prompt 07-01). Null until set from env at runtime.</summary>
+    public string? StripePriceIdMonthly { get; set; }
+
+    /// <summary>Stripe Price id for the annual billing cycle (prompt 07-01). Null until set from env at runtime.</summary>
+    public string? StripePriceIdAnnual { get; set; }
+
     /// <summary>Quantitative caps — stored as jsonb.</summary>
     public PlanLimits Limits { get; set; } = new();
 
