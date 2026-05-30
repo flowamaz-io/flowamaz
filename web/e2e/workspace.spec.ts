@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { setupReadyOrg, uniqueSuffix } from './fixtures/test-factories';
+import { expect, request, test } from '@playwright/test';
+import { API_URL, setupReadyOrg, uniqueSuffix } from './fixtures/test-factories';
 
 test.describe('Workspace (S7–S11)', () => {
   // S7: Dashboard loads → getting-started checklist visible with all 4 items.
@@ -209,5 +209,48 @@ test.describe('Workspace (S7–S11)', () => {
     // The key is listed by its prefix in the table…
     await expect(page.getByRole('cell', { name: 'test-key' })).toBeVisible();
     await expect(page.getByText(new RegExp(`${prefix}…`))).toBeVisible();
+  });
+});
+
+test.describe('Multi-workspace (S73–S74)', () => {
+  // S73: The workspace switcher search filters the list by name.
+  test('S73: switcher search filters workspaces by name', async ({ page }) => {
+    const { org } = await setupReadyOrg(page);
+    // Create a couple more workspaces so the search has something to filter.
+    const suffix = uniqueSuffix();
+    const api = await request.newContext();
+    for (const name of [`Alpha-${suffix}`, `Beta-${suffix}`]) {
+      await api.post(`${API_URL}/api/v1/workspaces`, {
+        headers: { Authorization: `Bearer ${org.accessToken}` },
+        data: { name, slug: name.toLowerCase() },
+      });
+    }
+    await api.dispose();
+    await page.reload();
+    await page.waitForURL((url) => new URL(url).pathname === '/');
+
+    // Open the switcher and filter to "Alpha".
+    await page.getByRole('button', { name: /Workspace:|Select workspace/ }).click();
+    await page.getByPlaceholder('Search workspaces…').fill(`Alpha-${suffix}`);
+
+    await expect(page.getByText(`Alpha-${suffix}`)).toBeVisible();
+    await expect(page.getByText(`Beta-${suffix}`)).toHaveCount(0);
+  });
+
+  // S74: Creating a workspace from the switcher makes it the active workspace.
+  test('S74: create workspace from the switcher switches to it', async ({ page }) => {
+    await setupReadyOrg(page);
+    await page.waitForURL((url) => new URL(url).pathname === '/');
+    const name = `Switcher-${uniqueSuffix()}`;
+
+    await page.getByRole('button', { name: /Workspace:|Select workspace/ }).click();
+    await page.getByRole('button', { name: 'Create workspace' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await dialog.getByPlaceholder('e.g. Finance Ops').fill(name);
+    await dialog.getByRole('button', { name: 'Create workspace' }).click();
+
+    // The new workspace becomes the active one shown on the switcher trigger.
+    await expect(page.getByRole('button', { name: new RegExp(`Workspace: ${name}`) })).toBeVisible();
   });
 });

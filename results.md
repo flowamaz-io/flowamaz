@@ -1558,3 +1558,29 @@ Audit found the app already largely consistent — changes are surgical. (Spec's
 - [x] Skip link + main landmark; modal focus trap + aria-labelledby; dark-mode tokens
 
 **Deviations:** Headers keep the codebase's `font-semibold` (not the spec's `font-bold`) to match existing style. No `NotificationsView` exists (notifications live in `NotificationBell`/dropdown) — skipped. Contrast/padding items were already compliant, so no-ops.
+
+---
+
+## 08-07 — Phase 8 Integration: E2E S73–S80, Security, Coverage, PHASE_COMPLETE  (2026-05-30)
+
+**Status:** Complete · pushed to `develop` · **PHASE 08 COMPLETE**
+
+**Integration tests** (`Phase8/`, real Postgres+Redis): `Phase8WorkspaceTests` — archive sets status=Archived + trigger→409 + restore→Active; leave-as-last-admin→409; second workspace appears in `/overview` with role/status. `Phase8DeferredFixTests` — **install official template → publish → trigger → instance created (the fix-07 SfgParser Critical fix, verified E2E through PublishAsync→SfgParser.ParseAsync)**; checkout with external redirect URL → 400 (allowlist); Development breakpoint → StepAsync pauses instance at the node (status BreakpointHit). **Phase8: 6/6 pass.**
+
+**E2E S73–S80 authored** (run against a live stack; all 8 list/parse via `playwright test --list`): `workspace.spec.ts` S73 switcher search filters by name, S74 create-from-switcher switches active; `marketing.spec.ts` S75 flowamaz.com home renders unauthenticated, S76 /pricing shows 3 plan cards; `documentation.spec.ts` S77 help search "connector" returns results, S78 /scalar API reference renders + exposes public endpoints; `launch.spec.ts` S79 /health reports all 5 deps, S80 install→publish official template succeeds (Critical fix). **Total E2E: S1–S80.**
+
+**Security** — Trivy `fs ./backend --severity CRITICAL,HIGH --ignore-unfixed`: **0 findings** across all .NET deps (Phases 1–8). Phase 8 focus verified: checkout URL allowlist (unit + integration), template install→publish via YamlDotNet/SfgParser (no injection), co-pilot 20/hour-per-workspace cap (unit), marketing static bundle carries no secrets (only public URLs in `constants.ts`).
+
+**Production readiness checklist**
+1. `dotnet build Flowamaz.sln` → 0 errors / 0 warnings ✓
+2. `dotnet test` → unit **553/553**, integration **116/116** (+1 skipped) ✓
+3. `npm run build --prefix web` → 0 errors ✓
+4. `npm run build --prefix marketing` → 0 errors ✓
+5. Trivy → 0 Critical/High ✓
+6. `grep TODO/FIXME backend/Flowamaz.Api` → 0 ✓; `localhost` appears only in the Development CORS fallback + the dev-only redirect-URL allowlist (both intentional, environment-gated) ✓
+7. `grep console.log/Debug.WriteLine backend` → 0 ✓
+8. All env vars documented in `.env.example` (08-05) ✓
+
+**Acceptance criteria** — install→publish→trigger ✓; S73–S80 authored ✓; Trivy 0 ✓; checklist 8/8 ✓; totals unit 553 (≥545) / integration 116 (≥115) / web unit 61 (≥60) ✓.
+
+**Deviations:** Marketing/launch E2E require their respective dev servers (flowamaz.com on :5174, backend /scalar+/health) and are authored to run against a live stack, consistent with the S61–S72 precedent. The `localhost` readiness grep is non-zero by design (dev fallback + the security allowlist feature itself).
