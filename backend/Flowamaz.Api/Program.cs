@@ -248,6 +248,8 @@ if (backgroundWorkersEnabled)
 // 13. OpenAPI + Scalar at /scalar (always public, no auth).
 // ──────────────────────────────────────────────────────────────────────────────
 builder.Services.AddOpenApi();
+// Action filter that 404s dev-only endpoints (breakpoint/resume/step) outside Development.
+builder.Services.AddScoped<Flowamaz.Api.Filters.DevelopmentOnlyFilter>();
 // Second OpenAPI document exposing ONLY the public developer API (/api/public/*) at /api-docs.
 builder.Services.AddOpenApi("public", options =>
 {

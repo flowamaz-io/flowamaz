@@ -1,4 +1,5 @@
 using Flowamaz.Api.Authorization;
+using Flowamaz.Api.Filters;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Workflow;
 using Microsoft.AspNetCore.Authorization;
@@ -47,7 +48,11 @@ public sealed class InstanceDebugController : ControllerBase
         var newInstanceId = await _replay.ReplayInstanceAsync(
             instanceId, request?.PayloadOverride, workspaceId, cancellationToken);
         return newInstanceId is null
-            ? NotFound()
+            ? NotFound(new
+            {
+                error = "instance_not_found",
+                message = "Instance not found in this workspace, or it is still running. Only terminal instances can be replayed."
+            })
             : Ok(new { instanceId = newInstanceId.Value, isTest = true });
     }
 
@@ -55,6 +60,7 @@ public sealed class InstanceDebugController : ControllerBase
 
     [HttpPost("api/v1/dev/breakpoints")]
     [Authorize]
+    [ServiceFilter(typeof(DevelopmentOnlyFilter))]
     public IActionResult SetBreakpoint([FromBody] SetBreakpointRequest request)
     {
         if (!_environment.IsDevelopment()) return NotFound();
@@ -64,6 +70,7 @@ public sealed class InstanceDebugController : ControllerBase
 
     [HttpGet("api/v1/dev/breakpoints")]
     [Authorize]
+    [ServiceFilter(typeof(DevelopmentOnlyFilter))]
     public IActionResult ListBreakpoints([FromQuery] Guid workspaceId)
     {
         if (!_environment.IsDevelopment()) return NotFound();
@@ -72,6 +79,7 @@ public sealed class InstanceDebugController : ControllerBase
 
     [HttpDelete("api/v1/dev/breakpoints/{id:guid}")]
     [Authorize]
+    [ServiceFilter(typeof(DevelopmentOnlyFilter))]
     public IActionResult RemoveBreakpoint(Guid id)
     {
         if (!_environment.IsDevelopment()) return NotFound();
@@ -80,6 +88,7 @@ public sealed class InstanceDebugController : ControllerBase
 
     [HttpPost("api/v1/dev/instances/{id:guid}/resume")]
     [Authorize]
+    [ServiceFilter(typeof(DevelopmentOnlyFilter))]
     public async Task<IActionResult> Resume(Guid id, [FromQuery] Guid workspaceId, CancellationToken cancellationToken)
     {
         if (!_environment.IsDevelopment()) return NotFound();
@@ -89,6 +98,7 @@ public sealed class InstanceDebugController : ControllerBase
 
     [HttpPost("api/v1/dev/instances/{id:guid}/step")]
     [Authorize]
+    [ServiceFilter(typeof(DevelopmentOnlyFilter))]
     public async Task<IActionResult> Step(Guid id, [FromQuery] Guid workspaceId, CancellationToken cancellationToken)
     {
         if (!_environment.IsDevelopment()) return NotFound();
