@@ -33,6 +33,7 @@ public sealed class WebhookService : IWebhookService
     private readonly ISecretProtector _protector;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<WebhookService> _logger;
+    private readonly IAuditService? _audit;
 
     public WebhookService(
         IWebhookEndpointRepository endpoints,
@@ -41,7 +42,8 @@ public sealed class WebhookService : IWebhookService
         IWorkflowOrchestrator orchestrator,
         ISecretProtector protector,
         IUnitOfWork unitOfWork,
-        ILogger<WebhookService> logger)
+        ILogger<WebhookService> logger,
+        IAuditService? audit = null)
     {
         _endpoints = endpoints;
         _definitions = definitions;
@@ -50,6 +52,7 @@ public sealed class WebhookService : IWebhookService
         _protector = protector;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _audit = audit;
     }
 
     public async Task<CreatedWebhookResult> CreateEndpointAsync(
@@ -77,6 +80,19 @@ public sealed class WebhookService : IWebhookService
 
             await _endpoints.AddAsync(endpoint, ct);
             await _unitOfWork.SaveChangesAsync(ct);
+
+            // Audit: never include the webhook secret in metadata.
+            _audit?.RecordAsync(new Core.Models.AuditEventRequest
+            {
+                WorkspaceId = workspaceId,
+                ActorType = "user",
+                EventType = "webhook.created",
+                ResourceType = "webhook",
+                ResourceId = endpoint.Id,
+                ResourceLabel = description,
+                Action = "created",
+                Metadata = new { workflowId = workflowDefinitionId },
+            }, ct);
 
             _logger.LogInformation(
                 "WebhookService.CreateEndpointAsync exit workspace={WorkspaceId} endpoint={EndpointId}",

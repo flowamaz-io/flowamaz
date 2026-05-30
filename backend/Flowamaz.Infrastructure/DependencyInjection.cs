@@ -204,6 +204,10 @@ public static class DependencyInjection
         services.AddScoped<IOrgSsoConfigRepository, OrgSsoConfigRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IUserPreferenceRepository, UserPreferenceRepository>();
+        services.AddScoped<IAuditEventRepository, AuditEventRepository>();
+
+        // Audit recording is fire-and-forget via a fresh scope per write (same pattern as metering).
+        services.AddSingleton<IAuditService, AuditService>();
         services.AddSingleton<ISamlProcessor, Services.Sso.SamlProcessor>();
         services.AddSingleton<IOidcStateStore, Services.Sso.RedisOidcStateStore>();
         services.AddHttpClient(Services.Sso.OidcClient.HttpClientName);

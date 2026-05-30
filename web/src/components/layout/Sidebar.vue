@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia';
 import {
   Activity, BarChart2, BookOpen, ChevronLeft, ChevronRight, CircleCheck, CloudSun,
   HelpCircle, HeartPulse, LayoutDashboard, Microscope, Plug, Settings, Sparkles,
-  Terminal, Workflow, X, Upload, KeyRound, Users, Webhook, ShieldCheck,
+  Terminal, Workflow, X, Upload, KeyRound, Users, Webhook, ShieldCheck, ScrollText,
 } from 'lucide-vue-next';
 import { useUiStore } from '@/stores/ui.store';
 import { useWorkspace } from '@/composables/useWorkspace';
@@ -66,6 +66,7 @@ const sections: NavSection[] = [
       { label: 'API Keys', to: '/settings/api-keys', icon: KeyRound },
       { label: 'Webhooks', to: '/settings/webhooks', icon: Webhook },
       { label: 'SSO', to: '/settings/sso', icon: ShieldCheck },
+      { label: 'Audit Log', to: '/settings/audit', icon: ScrollText },
     ],
   },
   {

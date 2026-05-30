@@ -25,17 +25,20 @@ public sealed class WorkspaceApiKeyService : IWorkspaceApiKeyService
     private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<WorkspaceApiKeyService> _logger;
+    private readonly IAuditService? _audit;
 
     public WorkspaceApiKeyService(
         IWorkspaceApiKeyRepository apiKeyRepository,
         IWorkspaceRepository workspaceRepository,
         IUnitOfWork unitOfWork,
-        ILogger<WorkspaceApiKeyService> logger)
+        ILogger<WorkspaceApiKeyService> logger,
+        IAuditService? audit = null)
     {
         _apiKeyRepository = apiKeyRepository;
         _workspaceRepository = workspaceRepository;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _audit = audit;
     }
 
     public async Task<CreateApiKeyResponse> CreateApiKeyAsync(
@@ -79,6 +82,20 @@ public sealed class WorkspaceApiKeyService : IWorkspaceApiKeyService
 
             await _apiKeyRepository.AddAsync(apiKey, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Audit: record metadata only — NEVER the plain key or its hash.
+            _audit?.RecordAsync(new AuditEventRequest
+            {
+                WorkspaceId = workspaceId,
+                ActorUserId = createdBy,
+                ActorType = "user",
+                EventType = "api_key.created",
+                ResourceType = "api_key",
+                ResourceId = apiKey.Id,
+                ResourceLabel = name,
+                Action = "created",
+                Metadata = new { prefix = apiKey.KeyPrefix, scopes },
+            }, cancellationToken);
 
             _logger.LogInformation(
                 "WorkspaceApiKeyService.CreateApiKeyAsync exit workspaceId={WorkspaceId} keyId={KeyId} prefix={Prefix}",
@@ -141,6 +158,18 @@ public sealed class WorkspaceApiKeyService : IWorkspaceApiKeyService
             key.IsActive = false;
             _apiKeyRepository.Update(key);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            _audit?.RecordAsync(new AuditEventRequest
+            {
+                WorkspaceId = workspaceId,
+                ActorType = "user",
+                EventType = "api_key.revoked",
+                ResourceType = "api_key",
+                ResourceId = key.Id,
+                ResourceLabel = key.Name,
+                Action = "revoked",
+            }, cancellationToken);
+
             _logger.LogInformation("WorkspaceApiKeyService.RevokeApiKeyAsync exit keyId={KeyId} workspaceId={WorkspaceId}", keyId, workspaceId);
         }
         catch (Exception ex)

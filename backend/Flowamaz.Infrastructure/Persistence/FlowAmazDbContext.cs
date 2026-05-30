@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Flowamaz.Core.Entities;
 using Flowamaz.Core.Entities.Ai;
 using Flowamaz.Core.Entities.Analytics;
+using Flowamaz.Core.Entities.Audit;
 using Flowamaz.Core.Entities.Auth;
 using Flowamaz.Core.Entities.Connector;
 using Flowamaz.Core.Entities.Platform;
@@ -81,6 +82,8 @@ public class FlowAmazDbContext : DbContext
 
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
+
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

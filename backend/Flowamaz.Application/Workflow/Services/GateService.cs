@@ -4,6 +4,7 @@ using Flowamaz.Core.Enums;
 using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
+using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Microsoft.Extensions.Logging;
 
@@ -21,19 +22,22 @@ public sealed class GateService
     private readonly IWorkflowOrchestrator _orchestrator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<GateService> _logger;
+    private readonly IAuditService? _audit;
 
     public GateService(
         IGateDecisionRepository gates,
         IWorkflowEventRepository events,
         IWorkflowOrchestrator orchestrator,
         IUnitOfWork unitOfWork,
-        ILogger<GateService> logger)
+        ILogger<GateService> logger,
+        IAuditService? audit = null)
     {
         _gates = gates;
         _events = events;
         _orchestrator = orchestrator;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _audit = audit;
     }
 
     public async Task<List<GateResponse>> ListPendingAsync(Guid workspaceId, CancellationToken ct = default)
@@ -101,6 +105,19 @@ public sealed class GateService
         {
             await _orchestrator.FailNodeAsync(instanceId, nodeId, $"Gate rejected{(string.IsNullOrWhiteSpace(note) ? "" : $": {note}")}", "gate", ct);
         }
+
+        _audit?.RecordAsync(new Core.Models.AuditEventRequest
+        {
+            WorkspaceId = workspaceId,
+            ActorUserId = decidedBy,
+            ActorType = "user",
+            EventType = approved ? "gate.approved" : "gate.rejected",
+            ResourceType = "gate",
+            ResourceId = gate.Id,
+            ResourceLabel = nodeId,
+            Action = approved ? "approved" : "rejected",
+            Metadata = new { instanceId, nodeId },
+        }, ct);
 
         _logger.LogInformation("GateService.DecideAsync exit instance={InstanceId} node={NodeId} approved={Approved}", instanceId, nodeId, approved);
         return ToResponse(gate);

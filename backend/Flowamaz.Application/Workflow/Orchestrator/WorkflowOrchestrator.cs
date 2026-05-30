@@ -37,6 +37,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
     private readonly IEditionService? _edition;
     // Best-effort in-app notifications on terminal state (prompt 06-06); optional for unit tests.
     private readonly INotificationService? _notifications;
+    private readonly IAuditService? _audit;
 
     public WorkflowOrchestrator(
         IWorkflowDefinitionRepository definitions,
@@ -52,7 +53,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         ILogger<WorkflowOrchestrator> logger,
         ISagaEngine? sagaEngine = null,
         IEditionService? edition = null,
-        INotificationService? notifications = null)
+        INotificationService? notifications = null,
+        IAuditService? audit = null)
     {
         _definitions = definitions;
         _versions = versions;
@@ -68,6 +70,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _sagaEngine = sagaEngine;
         _edition = edition;
         _notifications = notifications;
+        _audit = audit;
     }
 
     public async Task<WorkflowInstance> TriggerAsync(
@@ -143,6 +146,18 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             await _queue.EnqueueAsync(workspaceId, instance.Id, cancellationToken);
+
+            _audit?.RecordAsync(new Core.Models.AuditEventRequest
+            {
+                WorkspaceId = workspaceId,
+                ActorType = triggerType == InstanceTriggerType.Manual ? "user" : "system",
+                EventType = "instance.started",
+                ResourceType = "instance",
+                ResourceId = instance.Id,
+                ResourceLabel = definition.Name,
+                Action = "triggered",
+                Metadata = new { trigger = triggerType.ToString(), isTest, workflowId = definition.Id },
+            }, cancellationToken);
 
             _logger.LogInformation(
                 "WorkflowOrchestrator.TriggerAsync exit instance={InstanceId} version={VersionId} isTest={IsTest}",

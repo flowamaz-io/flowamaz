@@ -1295,3 +1295,26 @@ Stripe-based subscription management reusing the existing `Plan`/`Subscription`/
 - [x] Web typecheck 0
 - [x] Migration applies on Postgres (MigrationTests 4/4)
 - [x] Stripe secrets/customer ids never exposed or logged; webhook signature verified + idempotent
+
+---
+
+## 07-02 — Audit Log  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Immutable, append-only audit trail (who/what/when/where + before/after) for compliance.
+
+- **AuditEvent** (`Core/Entities/Audit/AuditEvent.cs`) — append-only (Id + CreatedAt only; no soft-delete/UpdatedAt). jsonb metadata; indexes `(workspace_id, created_at)` + `(org_id, created_at)`. Migration `AddAuditEvents` (applies on Postgres — MigrationTests 4/4).
+- **AuditService** (`Infrastructure/Services/AuditService.cs`, singleton) — fire-and-forget via `IServiceScopeFactory` + `Task.Run`, mirrors `AiTokenMeteringService`; never blocks/throws into the request. IP/UA via new `IRequestContextAccessor` (Api `HttpRequestContextAccessor`, X-Forwarded-For first → socket fallback) — avoids Infrastructure referencing ASP.NET (NU1510).
+- **Instrumented services** (optional injected `IAuditService? audit = null`, null-guarded so all existing tests stay green): WorkflowService (workflow.created/published), WorkflowOrchestrator (instance.started), GateService (gate.approved/rejected), WorkspaceMemberService (member.invited), WorkspaceApiKeyService (api_key.created/revoked — no key/hash), WebhookService (webhook.created — no secret), SsoService (sso.login_succeeded), StripeService (billing.plan_upgraded/payment_failed — no Stripe ids/secrets).
+- **AuditController** — `GET workspaces/{id}/audit` [Admin] (filters from/to/event_type/actor_id/resource_type, page≤100, range≤90d→400), `GET organisations/{id}/audit` [OrgOwner, org-id guard], `GET workspaces/{id}/audit/export` [OrgOwner, streamed CSV, range≤365d]. Human-readable summaries.
+- **AuditRetentionJob** (Quartz daily `0 30 3 * * ?`) — 30d Community/Starter, 90d Pro, 365d Enterprise (the only DELETE on the table, server-enforced).
+- **Frontend** — `AuditLogView.vue` (/settings/audit; 7d default, filters, expandable metadata, CSV download, pagination, "No activity yet" teaching empty state), `audit.service.ts`, route + sidebar nav item.
+
+**DoD**
+- [x] Backend build 0/0; unit **503/503** (+5 Audit: stores fields, error non-propagating, IP from X-Forwarded-For, org-mismatch→403, range>90d→400)
+- [x] Web typecheck 0
+- [x] Migration applies on Postgres (MigrationTests 4/4)
+- [x] Append-only (no UPDATE/DELETE except retention job); fire-and-forget; secrets never in metadata
+
+**Deviations:** SSO `login_failed` not wired (failures throw before the success hook); org endpoint enforces id-match in-controller (RequireOrgOwner checks owner claim only).

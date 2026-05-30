@@ -35,6 +35,7 @@ public sealed class StripeService : IStripeService
     private readonly IEmailService _email;
     private readonly ILogger<StripeService> _logger;
     private readonly IStripeEventVerifier _verifier;
+    private readonly IAuditService? _audit;
 
     public StripeService(
         IOptions<StripeOptions> options,
@@ -45,7 +46,8 @@ public sealed class StripeService : IStripeService
         IConnectionMultiplexer redis,
         IEmailService email,
         ILogger<StripeService> logger,
-        IStripeEventVerifier? verifier = null)
+        IStripeEventVerifier? verifier = null,
+        IAuditService? audit = null)
     {
         _options = options.Value;
         _organisations = organisations;
@@ -56,6 +58,7 @@ public sealed class StripeService : IStripeService
         _email = email;
         _logger = logger;
         _verifier = verifier ?? new StripeEventVerifier();
+        _audit = audit;
 
         // Stripe.net reads ApiKey from this static; only set it when a real key is configured so the
         // app starts (and tests run) with no network/credential coupling.
@@ -242,6 +245,19 @@ public sealed class StripeService : IStripeService
         sub.UpdatedAt = now;
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Audit: org-level billing event. No Stripe secrets/ids in metadata.
+        _audit?.RecordAsync(new Core.Models.AuditEventRequest
+        {
+            OrgId = orgId,
+            ActorType = "system",
+            EventType = "billing.plan_upgraded",
+            ResourceType = "billing",
+            ResourceId = orgId,
+            Action = "updated",
+            Metadata = new { planId },
+        }, ct);
+
         _logger.LogInformation("StripeService checkout.session.completed activated org={OrgId} plan={PlanId}", orgId, planId);
     }
 
@@ -307,6 +323,16 @@ public sealed class StripeService : IStripeService
             "If you need help, reply to this email or contact support@flowamaz.io.</p>",
             "Your most recent Flowamaz payment did not go through. Update your payment method in Settings → Billing → Manage billing.",
             ct);
+
+        _audit?.RecordAsync(new Core.Models.AuditEventRequest
+        {
+            OrgId = org.Id,
+            ActorType = "system",
+            EventType = "billing.payment_failed",
+            ResourceType = "billing",
+            ResourceId = org.Id,
+            Action = "updated",
+        }, ct);
 
         _logger.LogInformation("StripeService invoice.payment_failed flagged org={OrgId}", org.Id);
     }

@@ -27,6 +27,7 @@ public sealed class WorkflowService
     private readonly IWorkspaceGitService _git;
     private readonly IEditionService _edition;
     private readonly ILogger<WorkflowService> _logger;
+    private readonly IAuditService? _audit;
 
     public WorkflowService(
         IWorkflowDefinitionRepository definitions,
@@ -36,7 +37,8 @@ public sealed class WorkflowService
         SfgParser parser,
         IWorkspaceGitService git,
         IEditionService edition,
-        ILogger<WorkflowService> logger)
+        ILogger<WorkflowService> logger,
+        IAuditService? audit = null)
     {
         _definitions = definitions;
         _versions = versions;
@@ -46,6 +48,7 @@ public sealed class WorkflowService
         _git = git;
         _edition = edition;
         _logger = logger;
+        _audit = audit;
     }
 
     public async Task<List<WorkflowDefinitionListItem>> ListAsync(Guid workspaceId, CancellationToken ct = default)
@@ -97,6 +100,18 @@ public sealed class WorkflowService
         if (commit is not null) definition.CurrentVersion = commit.CommitSha;
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        _audit?.RecordAsync(new AuditEventRequest
+        {
+            WorkspaceId = workspaceId,
+            ActorUserId = createdBy,
+            ActorType = "user",
+            EventType = "workflow.created",
+            ResourceType = "workflow",
+            ResourceId = definition.Id,
+            ResourceLabel = definition.Name,
+            Action = "created",
+        }, ct);
 
         _logger.LogInformation("WorkflowService.CreateAsync exit workflow={WorkflowId} commit={Commit}", definition.Id, definition.CurrentVersion);
         return ToResponse(definition);
@@ -201,6 +216,20 @@ public sealed class WorkflowService
         _definitions.Update(definition);
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        _audit?.RecordAsync(new AuditEventRequest
+        {
+            WorkspaceId = workspaceId,
+            ActorUserId = publishedBy,
+            ActorType = "user",
+            EventType = "workflow.published",
+            ResourceType = "workflow",
+            ResourceId = id,
+            ResourceLabel = definition.Name,
+            Action = "published",
+            Metadata = new { version = versionNumber, commit = commitSha },
+        }, ct);
+
         _logger.LogInformation("WorkflowService.PublishAsync exit workflow={WorkflowId} version={VersionId}", id, version.Id);
         return ToVersionResponse(version);
     }

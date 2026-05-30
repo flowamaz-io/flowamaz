@@ -33,6 +33,7 @@ public sealed class SsoService : ISsoService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SsoService> _logger;
+    private readonly IAuditService? _audit;
 
     public SsoService(
         IOrgSsoConfigRepository configs,
@@ -47,7 +48,8 @@ public sealed class SsoService : ISsoService
         IOidcStateStore stateStore,
         IUnitOfWork unitOfWork,
         IConfiguration configuration,
-        ILogger<SsoService> logger)
+        ILogger<SsoService> logger,
+        IAuditService? audit = null)
     {
         _configs = configs;
         _orgs = orgs;
@@ -62,6 +64,7 @@ public sealed class SsoService : ISsoService
         _unitOfWork = unitOfWork;
         _configuration = configuration;
         _logger = logger;
+        _audit = audit;
     }
 
     private string BaseUrl => _configuration["Platform:BaseUrl"]?.TrimEnd('/') ?? "https://app.flowamaz.io";
@@ -247,6 +250,20 @@ public sealed class SsoService : ISsoService
     {
         var memberships = await _members.GetActiveMembershipsForUserAsync(user.Id, ct);
         var token = _jwt.GenerateAccessToken(user, orgSlug, memberships);
+
+        _audit?.RecordAsync(new Core.Models.AuditEventRequest
+        {
+            OrgId = user.OrgId,
+            ActorUserId = user.Id,
+            ActorType = "user",
+            ActorLabel = user.Email,
+            EventType = "sso.login_succeeded",
+            ResourceType = "sso",
+            ResourceId = user.Id,
+            ResourceLabel = user.Email,
+            Action = "created",
+        }, ct);
+
         return new SsoLoginResult(user, token, orgSlug);
     }
 

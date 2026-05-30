@@ -20,17 +20,20 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEditionService _edition;
     private readonly ILogger<WorkspaceMemberService> _logger;
+    private readonly IAuditService? _audit;
 
     public WorkspaceMemberService(
         IWorkspaceMemberRepository memberRepository,
         IUnitOfWork unitOfWork,
         IEditionService edition,
-        ILogger<WorkspaceMemberService> logger)
+        ILogger<WorkspaceMemberService> logger,
+        IAuditService? audit = null)
     {
         _memberRepository = memberRepository;
         _unitOfWork = unitOfWork;
         _edition = edition;
         _logger = logger;
+        _audit = audit;
     }
 
     public async Task<WorkspaceMember> AddMemberAsync(
@@ -62,6 +65,18 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
 
             await _memberRepository.AddAsync(member, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            _audit?.RecordAsync(new AuditEventRequest
+            {
+                WorkspaceId = workspaceId,
+                ActorUserId = addedByUserId,
+                ActorType = "user",
+                EventType = "member.invited",
+                ResourceType = "member",
+                ResourceId = orgUserId,
+                Action = "invited",
+                Metadata = new { role = role.ToString() },
+            }, cancellationToken);
 
             _logger.LogInformation(
                 "WorkspaceMemberService.AddMemberAsync exit workspaceId={WorkspaceId} orgUserId={OrgUserId} role={Role}",

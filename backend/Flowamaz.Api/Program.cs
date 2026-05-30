@@ -73,6 +73,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Registered here (not Infrastructure) so Infrastructure stays free of the web framework.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Flowamaz.Core.Interfaces.Services.ICurrentUserService, Flowamaz.Api.Identity.HttpContextCurrentUserService>();
+builder.Services.AddSingleton<Flowamaz.Core.Interfaces.Services.IRequestContextAccessor, Flowamaz.Api.Identity.HttpRequestContextAccessor>();
 
 // Live instance-status WebSocket handler (prompt 02-04). Uses IServiceScopeFactory internally.
 builder.Services.AddSingleton<InstanceStatusWebSocketHandler>();
@@ -220,6 +221,12 @@ if (backgroundWorkersEnabled)
         var gitInitKey = new JobKey(nameof(WorkspaceGitInitialisationJob));
         q.AddJob<WorkspaceGitInitialisationJob>(gitInitKey);
         q.AddTrigger(t => t.ForJob(gitInitKey).StartNow());
+
+        // Audit-log retention (prompt 07-02) — daily at 03:30 UTC. Deletes events past the plan window.
+        var auditRetentionKey = new JobKey(nameof(AuditRetentionJob));
+        q.AddJob<AuditRetentionJob>(auditRetentionKey);
+        q.AddTrigger(t => t.ForJob(auditRetentionKey)
+            .WithCronSchedule("0 30 3 * * ?"));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 }
