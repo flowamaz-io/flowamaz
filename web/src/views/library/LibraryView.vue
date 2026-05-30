@@ -204,7 +204,7 @@ onMounted(load);
       <!-- Loading -->
       <div
         v-if="loading"
-        class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
       >
         <div
           v-for="n in 3"
@@ -243,7 +243,7 @@ onMounted(load);
       <!-- Grid -->
       <div
         v-else
-        class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
       >
         <ConnectorCard
           v-for="c in filteredConnectors"

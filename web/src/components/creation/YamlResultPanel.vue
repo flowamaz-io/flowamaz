@@ -35,6 +35,7 @@
               </button>
               <button
                 class="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors text-lg leading-none"
+                aria-label="Close"
                 @click="requestDiscard"
               >
                 ×

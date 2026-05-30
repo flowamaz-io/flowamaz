@@ -61,6 +61,16 @@
   --color-sidebar-text-muted: #475569;
 }
 
+:root {
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F8FAFC;
+  --color-text-primary: #111827;
+  --color-text-secondary: #6B7280;
+  --color-border: #E5E7EB;
+}
+
+/* Dark mode ready — implementation in a future phase */
+
 html,
 body,
 #app {

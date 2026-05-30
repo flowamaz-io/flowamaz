@@ -80,7 +80,10 @@ watch(
       >
         <Menu class="h-5 w-5" />
       </button>
-      <main :class="isFullScreen ? 'flex-1 overflow-hidden flex flex-col' : 'flex-1 overflow-y-auto bg-slate-50'">
+      <main
+        id="main-content"
+        :class="isFullScreen ? 'flex-1 overflow-hidden flex flex-col' : 'flex-1 overflow-y-auto bg-slate-50'"
+      >
         <RouterView />
       </main>
     </div>

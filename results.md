@@ -1537,3 +1537,24 @@ New standalone Vue 3 SPA in `marketing/` (separate from `web/`, served on flowam
 - [x] Required security headers present in nginx; CORS production-only verified by tests
 
 **Deviations:** STRIPE_SECRET_KEY not added to hard startup validation (billing self-degrades). nginx api `burst` tuned 20→40 to match the 200 r/m rate. The 20/hour per-workspace Co-pilot cap is intentionally below the 60/user cap per the prompt — it is a workspace-wide AI-cost ceiling.
+
+---
+
+## 08-06 — Final UI Polish: Consistency, Accessibility, Mobile  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Audit found the app already largely consistent — changes are surgical. (Spec's `teal-*`/`gray-*` mapped to the codebase's real `primary-*`/`slate-*` tokens.)
+
+- **Skip nav + landmark** — `App.vue` skip-to-main-content link (sr-only, visible on focus, `text-primary-700`); `AppShell.vue` `<main id="main-content">`.
+- **Dark-mode tokens** — `main.css` `:root` custom properties (`--color-bg-primary` etc.) scaffolded for a future dark mode (tokens only).
+- **Modal a11y (`FmModal`)** — added `useId()` `aria-labelledby`→title, a focus trap (Tab/Shift+Tab cycling, auto-focus first focusable on open, restore focus on close), `tabindex="-1"` dialog. Escape-close + Close label already present. Fixes a11y for every modal that uses FmModal.
+- **Icon-button labels** — `aria-label="Close"` on `YamlResultPanel` and `NodeInspector` close buttons (others already labelled).
+- **Mobile** — `LibraryView` connector grids now explicit single-column on mobile (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`).
+- **Contrast / page consistency** — audited; no changes needed. No bare `text-primary` body-text usages exist (all are numbered shades or the dark-sidebar token on a dark bg); the six listed views already had `p-6` padding, H1+subtitle headers, and loading/empty/error states. Dashboard/workspace grids already stack correctly at 375px.
+
+**DoD**
+- [x] Web build 0 vue-tsc errors; **lint 0 errors**; vitest **61/61**
+- [x] Skip link + main landmark; modal focus trap + aria-labelledby; dark-mode tokens
+
+**Deviations:** Headers keep the codebase's `font-semibold` (not the spec's `font-bold`) to match existing style. No `NotificationsView` exists (notifications live in `NotificationBell`/dropdown) — skipped. Contrast/padding items were already compliant, so no-ops.

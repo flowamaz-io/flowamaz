@@ -25,6 +25,7 @@
         </button>
         <button
           class="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+          aria-label="Close"
           @click="$emit('close')"
         >
           <X class="w-4 h-4" />
