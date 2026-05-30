@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia';
 import {
   Activity, BarChart2, BookOpen, ChevronLeft, ChevronRight, CircleCheck, CloudSun,
   HelpCircle, HeartPulse, LayoutDashboard, Microscope, Plug, Settings, Sparkles,
-  Terminal, Workflow, X,
+  Terminal, Workflow, X, Upload, KeyRound, Users, Webhook, ShieldCheck,
 } from 'lucide-vue-next';
 import { useUiStore } from '@/stores/ui.store';
 import { useWorkspace } from '@/composables/useWorkspace';
@@ -13,6 +13,7 @@ import { gateService } from '@/services/gate.service';
 import { APP_NAME } from '@/utils/constants';
 import WorkspaceSwitcher from './WorkspaceSwitcher.vue';
 import UserMenu from './UserMenu.vue';
+import NotificationBell from './NotificationBell.vue';
 import EditionBanner from './EditionBanner.vue';
 
 const ui = useUiStore();
@@ -54,6 +55,17 @@ const sections: NavSection[] = [
     items: [
       { label: 'Library', to: '/library', icon: Plug },
       { label: 'Connector Health', to: '/library/health', icon: HeartPulse },
+      { label: 'Submit Connector', to: '/library/submit', icon: Upload },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
+      { label: 'Workspace', to: '/settings', icon: Settings },
+      { label: 'Members', to: '/settings/members', icon: Users },
+      { label: 'API Keys', to: '/settings/api-keys', icon: KeyRound },
+      { label: 'Webhooks', to: '/settings/webhooks', icon: Webhook },
+      { label: 'SSO', to: '/settings/sso', icon: ShieldCheck },
     ],
   },
   {
@@ -237,8 +249,9 @@ function closeMobile(): void {
       </div>
     </nav>
 
-    <!-- Bottom: Settings, Help, expand toggle, user -->
+    <!-- Bottom: Notifications, Settings, Help, expand toggle, user -->
     <div class="border-t border-sidebar-border px-2 py-2 space-y-1">
+      <NotificationBell :collapsed="sidebarMinimized" />
       <div class="group relative">
         <RouterLink
           to="/settings"

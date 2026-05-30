@@ -7,6 +7,7 @@ using Flowamaz.Core.Entities.Connector;
 using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Entities.Library;
+using Flowamaz.Core.Entities.Notifications;
 using Flowamaz.Core.Entities.Webhooks;
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Interfaces.Services;
@@ -77,6 +78,9 @@ public class FlowAmazDbContext : DbContext
 
     public DbSet<ConnectorRating> ConnectorRatings => Set<ConnectorRating>();
     public DbSet<ConnectorSubmission> ConnectorSubmissions => Set<ConnectorSubmission>();
+
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

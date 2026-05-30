@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Check, X } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useWorkflowStore } from '@/stores/workflow.store';
+import { preferencesService } from '@/services/preferences.service';
 
 const props = defineProps<{
   runsThisMonth?: number;
@@ -16,8 +17,22 @@ const { workflows } = storeToRefs(workflowStore);
 const router = useRouter();
 
 const workspaceId = computed(() => ws.currentWorkspaceId.value ?? 'default');
-const dismissKey = computed(() => `fmz_checklist_dismissed_${workspaceId.value}`);
-const dismissed = ref(localStorage.getItem(dismissKey.value) === 'true');
+const prefKey = computed(() => `checklist_${workspaceId.value}`);
+const dismissed = ref(false);
+
+interface ChecklistState { dismissed?: boolean; completedItems?: string[] }
+
+async function loadState(): Promise<void> {
+  try {
+    const state = await preferencesService.get<ChecklistState>(prefKey.value);
+    dismissed.value = state?.dismissed === true;
+  } catch {
+    dismissed.value = false;
+  }
+}
+
+onMounted(loadState);
+watch(workspaceId, loadState);
 
 // Phase 1: no connector API yet
 const installedConnectorsCount = ref(0);
@@ -57,8 +72,12 @@ const completedCount = computed(() => items.value.filter((i) => i.done).length);
 const showChecklist = computed(() => !dismissed.value && completedCount.value < 4);
 
 function dismiss(): void {
-  localStorage.setItem(dismissKey.value, 'true');
   dismissed.value = true;
+  // Persist server-side so the dismissal follows the user across devices.
+  void preferencesService.set<ChecklistState>(prefKey.value, {
+    dismissed: true,
+    completedItems: items.value.filter((i) => i.done).map((i) => i.id),
+  });
 }
 </script>
 

@@ -1235,3 +1235,23 @@ Real install counts + ratings/reviews + community connector submissions, replaci
 - [x] Install increments atomically (single transaction); one rating per org (upsert); average recomputed each submission
 - [x] Submit validates manifest then opens a GitHub PR; submission row tracked as `pending`
 - [~] GitHub PR creation requires real GitHub App credentials (`GITHUB_CONNECTORS_TOKEN`) — verified structurally + mocked in tests, exercised against the live repo in staging
+
+---
+
+## 06-06 — App Shell Polish (Notifications, Help, Nav, UX fixes)  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Notification centre, help-panel improvements, Phase 6 navigation, and three UX fixes.
+
+- **Notifications** — `Notification` entity (per-user, indexed `(UserId, IsRead)`), `INotificationService`/`NotificationService` (read paths + best-effort `Notify*` helpers that never throw to the caller), `NotificationsController` (`GET /api/v1/notifications`, `unread-count`, `{id}/read`, `read-all`). Wired the **orchestrator** to notify the run creator on terminal completion (best-effort, fired after the step commits, via an optional injected service so existing constructions are unaffected). Migration `AddNotificationsAndPreferences`.
+- **User preferences** — `UserPreference` entity (unique `(UserId, Key)`, jsonb value) + `UserPreferencesController` (GET/PUT `/api/v1/preferences/{key}`) so the getting-started checklist persists server-side (key `checklist_{workspaceId}`) instead of localStorage.
+- **Help feedback** — `HelpFeedbackController` (`POST /api/v1/help/feedback`) logs structured 👍/👎 telemetry.
+- **Frontend** — `NotificationBell.vue` (red unread badge max "9+", 60s auto-poll) + `NotificationDropdown.vue` (list, mark-read/all, "You're all caught up", view all), placed in the sidebar; `HelpPanel.vue` gains a working debounced (300ms) search (existing `HelpSearch`), **Contact support** mailto (`support@flowamaz.io — {page} — {org}`), Escape-to-close (existing), and a per-article `HelpFeedbackWidget` (👍/👎 → POST → "Thanks for your feedback!"). Sidebar nav: new **Settings** section (Workspace/Members/API Keys/Webhooks/SSO) + **Submit Connector** under Build.
+- **UX fixes** — canvas title resolves the real workflow name even on the NL-generation path (`loadWorkflowName`); dashboard subtitle uses `name || slug || 'your workspace'` (no more "happening in ."); checklist dismissal persists via the preferences API.
+
+**DoD**
+- [x] Backend build 0/0; unit **488/488** (+4 NotificationService: instance-complete→creator, gate-pending→assignee, mark-all-read, user-scoping)
+- [x] Web typecheck 0; lint 0 errors; web tests **53/53** (+2: help search filter, feedback POST)
+- [x] Bell badge shows unread count; mark-all-read clears it; 60s poll; help search filters; canvas shows real workflow name; dashboard subtitle fixed
+- [x] Notifications best-effort (never break the originating workflow/gate/member operation)

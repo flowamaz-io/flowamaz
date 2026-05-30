@@ -308,6 +308,18 @@ function onDrop(e: DragEvent) {
   snapshotYaml();
 }
 
+async function loadWorkflowName(): Promise<void> {
+  const workspaceId = (route.query.workspaceId as string) || ws.currentWorkspaceId.value;
+  const workflowId = route.params.id as string;
+  if (!workspaceId || !workflowId) return;
+  try {
+    const wf = await workflowService.get(workspaceId, workflowId);
+    if (wf.name) workflowName.value = wf.name;
+  } catch {
+    // Title stays as-is if the workflow can't be loaded.
+  }
+}
+
 function onContextMenu(e: MouseEvent) {
   if (!canvas.cy.value) return;
   // Find the selected node or the one under cursor
@@ -326,6 +338,9 @@ onMounted(async () => {
     yamlContent.value = storedYaml;
     await nextTick();
     syncYamlToCanvas(storedYaml);
+    // The NL-generation path skips loadWorkflow(); still resolve the real title from the API
+    // so the toolbar shows the workflow name, not "Untitled Workflow".
+    void loadWorkflowName();
   } else {
     await loadWorkflow();
   }

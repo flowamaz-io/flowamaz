@@ -35,6 +35,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
     // Community-edition run-limit enforcement (prompt 05-07) — a no-op in cloud editions.
     private readonly ISagaEngine? _sagaEngine;
     private readonly IEditionService? _edition;
+    // Best-effort in-app notifications on terminal state (prompt 06-06); optional for unit tests.
+    private readonly INotificationService? _notifications;
 
     public WorkflowOrchestrator(
         IWorkflowDefinitionRepository definitions,
@@ -49,7 +51,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         SfgParser parser,
         ILogger<WorkflowOrchestrator> logger,
         ISagaEngine? sagaEngine = null,
-        IEditionService? edition = null)
+        IEditionService? edition = null,
+        INotificationService? notifications = null)
     {
         _definitions = definitions;
         _versions = versions;
@@ -64,6 +67,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _logger = logger;
         _sagaEngine = sagaEngine;
         _edition = edition;
+        _notifications = notifications;
     }
 
     public async Task<WorkflowInstance> TriggerAsync(
@@ -297,6 +301,11 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Best-effort: notify the run's creator once the instance commits as Completed.
+            if (isComplete && _notifications is not null && instance.CreatedBy is { } creator)
+                await _notifications.NotifyInstanceCompleteAsync(
+                    creator, Guid.Empty, instance.WorkspaceId, instance.Id, InstanceStatus.Completed, cancellationToken);
 
             _logger.LogInformation(
                 "WorkflowOrchestrator.StepAsync exit instance={InstanceId} next={Next} complete={Complete} gate={Gate}",

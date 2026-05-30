@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { X, ChevronDown, ChevronRight, BookOpen } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { X, ChevronDown, ChevronRight, BookOpen, LifeBuoy } from 'lucide-vue-next';
 import { useHelp } from '@/composables/useHelp';
+import { useWorkspace } from '@/composables/useWorkspace';
 import HelpSearch from './HelpSearch.vue';
 import ArticleRenderer from './ArticleRenderer.vue';
+import HelpFeedbackWidget from './HelpFeedbackWidget.vue';
 
 const help = useHelp();
+const ws = useWorkspace();
 const collapsed = ref<Record<string, boolean>>({});
+
+const supportMailto = computed(() => {
+  const page = window.location.pathname;
+  const org = ws.current.value?.name ?? 'my organisation';
+  const subject = encodeURIComponent(`Flowamaz Support — ${page} — ${org}`);
+  return `mailto:support@flowamaz.io?subject=${subject}`;
+});
 
 function toggleSection(section: string): void {
   collapsed.value[section] = !collapsed.value[section];
@@ -96,8 +106,22 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
             class="mt-6 border-t border-slate-100 pt-5"
           >
             <ArticleRenderer :article="help.currentArticle.value" />
+            <HelpFeedbackWidget
+              :key="help.currentArticle.value.slug"
+              :slug="help.currentArticle.value.slug"
+            />
           </div>
         </div>
+
+        <footer class="border-t border-slate-200 px-4 py-3">
+          <a
+            :href="supportMailto"
+            class="flex items-center justify-center gap-2 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            <LifeBuoy class="h-4 w-4" />
+            Contact support
+          </a>
+        </footer>
       </aside>
     </Transition>
   </Teleport>

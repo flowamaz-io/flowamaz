@@ -14,6 +14,9 @@ import type { WeatherResponse, WorkspaceRoiSummary } from '@/types';
 const { user } = useAuth();
 const ws = useWorkspace();
 const { current } = ws;
+
+// Use name, falling back to slug, so the subtitle never reads "happening in ." with no name.
+const workspaceLabel = computed(() => current.value?.name || current.value?.slug || 'your workspace');
 const workflowStore = useWorkflowStore();
 const { workflows } = storeToRefs(workflowStore);
 const router = useRouter();
@@ -72,7 +75,7 @@ onMounted(async () => {
         Welcome back, {{ user?.name?.split(' ')[0] ?? 'there' }}
       </h1>
       <p class="text-sm text-slate-500">
-        Here's what's happening in {{ current?.name ?? 'your workspace' }}.
+        Here's what's happening in {{ workspaceLabel }}.
       </p>
     </header>
 
