@@ -79,6 +79,7 @@ public class FlowAmazDbContext : DbContext
 
     public DbSet<ConnectorRating> ConnectorRatings => Set<ConnectorRating>();
     public DbSet<ConnectorSubmission> ConnectorSubmissions => Set<ConnectorSubmission>();
+    public DbSet<WorkflowTemplate> WorkflowTemplates => Set<WorkflowTemplate>();
 
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();

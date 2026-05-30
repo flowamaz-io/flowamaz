@@ -196,6 +196,7 @@ public static class DependencyInjection
     {
         services.AddScoped<ICredentialVaultService, CredentialVaultService>();
         services.AddScoped<IConnectorMarketplaceRepository, ConnectorMarketplaceRepository>();
+        services.AddScoped<IWorkflowTemplateRepository, WorkflowTemplateRepository>();
         services.AddHttpClient(ConnectorSubmissionPrService.HttpClientName);
         services.AddScoped<IConnectorSubmissionPrService, ConnectorSubmissionPrService>();
         services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();

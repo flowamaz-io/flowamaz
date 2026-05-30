@@ -63,6 +63,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'library/connectors/:connectorId', name: 'connector-detail', component: () => import('@/views/library/ConnectorDetailView.vue') },
       { path: 'library/health', name: 'connector-health', component: () => import('@/views/library/ConnectorHealthView.vue') },
       { path: 'library/submit', name: 'connector-submit', component: () => import('@/views/library/ConnectorSubmissionView.vue') },
+      { path: 'library/templates/:id', name: 'template-detail', component: () => import('@/views/library/TemplateDetailView.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/views/workspace/WorkspaceSettingsView.vue') },
       { path: 'settings/members', name: 'members', component: () => import('@/views/workspace/MembersView.vue') },
       { path: 'settings/api-keys', name: 'api-keys', component: () => import('@/views/workspace/ApiKeysView.vue') },

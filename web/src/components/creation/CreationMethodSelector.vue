@@ -1,6 +1,14 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router';
+
 defineProps<{ modelValue: string | null }>();
 defineEmits<{ 'update:modelValue': [value: string] }>();
+
+const router = useRouter();
+
+function startFromTemplate(): void {
+  void router.push({ name: 'library', query: { tab: 'templates' } });
+}
 
 const methods = [
   { id: 'nl', icon: '✍️', label: 'Write a description', description: 'Describe your workflow in plain English using a guided form.' },
@@ -31,6 +39,20 @@ const methods = [
       </p>
       <p class="text-xs text-neutral-500 mt-1 leading-relaxed">
         {{ method.description }}
+      </p>
+    </button>
+
+    <!-- Start from a template (onboarding shortcut → template gallery) -->
+    <button
+      class="text-left rounded-2xl border-2 border-dashed border-violet-300 bg-violet-50/40 p-5 transition-all hover:border-violet-500 hover:bg-violet-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
+      @click="startFromTemplate"
+    >
+      <span class="text-2xl mb-3 block">📋</span>
+      <p class="font-semibold text-neutral-800 text-sm">
+        Start from a template
+      </p>
+      <p class="text-xs text-neutral-500 mt-1 leading-relaxed">
+        Browse ready-made workflows and install one in a click, then customise it.
       </p>
     </button>
   </div>

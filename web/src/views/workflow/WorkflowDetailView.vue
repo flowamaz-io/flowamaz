@@ -2,8 +2,9 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { Pencil, Play, XCircle, AlertTriangle, Webhook, Copy, Check } from 'lucide-vue-next';
+import { Pencil, Play, XCircle, AlertTriangle, Webhook, Copy, Check, Share2 } from 'lucide-vue-next';
 import TriggerModal from '@/components/workflow/TriggerModal.vue';
+import PublishTemplateModal from '@/components/library/PublishTemplateModal.vue';
 import FmBadge from '@/components/common/FmBadge.vue';
 import FmButton from '@/components/common/FmButton.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
@@ -44,6 +45,7 @@ const validationWarnings = ref<Array<{ message: string; line?: number }>>([]);
 
 const triggerOpen = ref(false);
 const forceTestRun = ref(false);
+const publishTemplateOpen = ref(false);
 
 // Git version history (prompt 05-01).
 const history = ref<WorkflowCommit[]>([]);
@@ -292,6 +294,14 @@ watch(id, () => store.loadWorkflow(id.value));
           >
             Publish
           </FmButton>
+          <button
+            v-if="currentWorkflow.status === 'Published'"
+            class="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            @click="publishTemplateOpen = true"
+          >
+            <Share2 class="w-4 h-4" />
+            Publish as template
+          </button>
           <button
             v-if="currentWorkflow.status === 'Published'"
             class="flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-600 transition-colors"
@@ -682,6 +692,15 @@ watch(id, () => store.loadWorkflow(id.value));
       :workflow-id="id"
       :from-sha="diffFrom"
       :to-sha="diffTo"
+    />
+
+    <PublishTemplateModal
+      v-if="currentWorkflow"
+      v-model="publishTemplateOpen"
+      :workspace-id="workspaceId"
+      :workflow-id="id"
+      :workflow-name="currentWorkflow.name"
+      @published="toast.success('Template submitted for review.')"
     />
 
     <Teleport to="body">

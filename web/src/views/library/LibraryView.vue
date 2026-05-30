@@ -6,6 +6,7 @@ import FmEmptyState from '@/components/common/FmEmptyState.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import ConnectorCard from '@/components/library/ConnectorCard.vue';
 import CredentialSetupWizard from '@/components/library/CredentialSetupWizard.vue';
+import TemplateGalleryView from '@/views/library/TemplateGalleryView.vue';
 import { connectorService } from '@/services/connector.service';
 import { useWorkspace } from '@/composables/useWorkspace';
 import type { ConnectorDefinition } from '@/services/connector.service';
@@ -255,17 +256,7 @@ onMounted(load);
     </div>
 
     <!-- Templates tab -->
-    <div
-      v-else-if="activeTab === 'templates'"
-      class="flex flex-col items-center gap-2 py-16 text-center"
-    >
-      <p class="text-sm font-medium text-slate-700">
-        Templates are coming in Phase 6
-      </p>
-      <p class="text-sm text-slate-400">
-        Reusable workflow blueprints will live here — ready to install and customise.
-      </p>
-    </div>
+    <TemplateGalleryView v-else-if="activeTab === 'templates'" />
 
     <!-- Wizard -->
     <CredentialSetupWizard

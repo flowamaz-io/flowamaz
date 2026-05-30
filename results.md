@@ -1318,3 +1318,25 @@ Immutable, append-only audit trail (who/what/when/where + before/after) for comp
 - [x] Append-only (no UPDATE/DELETE except retention job); fire-and-forget; secrets never in metadata
 
 **Deviations:** SSO `login_failed` not wired (failures throw before the success hook); org endpoint enforces id-match in-controller (RequireOrgOwner checks owner claim only).
+
+---
+
+## 07-03 — Workflow Templates  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Template gallery — browse/preview/install/publish; 10 official templates seeded.
+
+- **WorkflowTemplate** (`Core/Entities/Library/WorkflowTemplate.cs`, AuditableEntity) — name/slug(unique)/description/category/is_official/org_id(nullable)/yaml_content/preview_image_url/install_count/average_rating/tags/version/is_active/review_status. Config + unique slug index + migration `AddWorkflowTemplates` (seeds 10 via HasData; applies on Postgres — MigrationTests 4/4).
+- **TemplateService** (`Application/Library/Services`, `ITemplateService`) — list (category/search/page), get, **install** (creates WorkflowDefinition via the existing `WorkflowService.CreateAsync` path so versioning/Git/validation/edition-gating run identically; `install_count` bumped atomically via EF `ExecuteUpdateAsync(InstallCount+1)`), **publish** (validates workflow is Published, creates community template marked pending review). `IWorkflowTemplateRepository` + EF impl.
+- **TemplatesController** — `GET /templates` + `GET /templates/{id}` [Anon]; `POST /workspaces/{workspaceId}/templates/{templateId}/install` + `POST /workspaces/{workspaceId}/templates/publish` [Designer].
+- **10 official templates** — Purchase Approval, Employee Onboarding, Leave Request, IT Support Ticket, Contract Review, Expense Claim, Vendor Onboarding, Incident Response, Customer Refund, Compliance Checklist. All `flowamaz/v1` SFG YAML; all pass the real 6-layer `WorkflowValidator` (asserted by `AllOfficialTemplates_PassValidator`).
+- **Frontend** — Templates tab wired in `LibraryView.vue` (replaced "Soon"); `TemplateGalleryView.vue`, `TemplateDetailView.vue`, `TemplateCard.vue`, `InstallTemplateModal.vue`, `PublishTemplateModal.vue`, `template.service.ts`. Install → name modal → navigate to `/workflows/{id}/edit`. Publish button on `WorkflowDetailView` when Published. "Start from a template" card added to `CreationMethodSelector.vue`. Routes registered. Zero `<style>` blocks; loading/empty/error states.
+
+**DoD**
+- [x] Backend build 0/0; unit **510/510** (+7 Library: atomic install_count, install→WorkflowDefinition, publish rejects non-Published, publish→pending, anon list, auth-attribute contract, all-10-pass-validator)
+- [x] Web typecheck 0
+- [x] Migration regenerated to clear snapshot drift; applies on Postgres (MigrationTests 4/4)
+- [x] YAML only via YamlDotNet/validator path; workspace isolation on install/publish
+
+**Deviations:** seeded template YAML omits optional integer fields (`sla_threshold_ms`/node `timeout`) — the validator's YAML→object step stringifies scalars and rejects unquoted integers; templates remain valid (human-gate-without-timeout is a warning, not an error).
