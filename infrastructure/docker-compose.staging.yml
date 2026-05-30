@@ -1,0 +1,129 @@
+# Staging variant of the full Flowamaz stack (proxy → web + backend → db + redis) plus an
+# OWASP ZAP service for automated DAST scanning. Mirrors infrastructure/docker-compose.yml but:
+#   - ASPNETCORE_ENVIRONMENT=Staging
+#   - reduced deploy.resources.limits (this is a smaller, shared staging box)
+#   - ALL secrets are supplied via ${VAR} interpolation — no hardcoded defaults
+#
+# Usage:
+#   cp infrastructure/staging.env.example infrastructure/staging.env   # fill in real values
+#   docker compose -f infrastructure/docker-compose.staging.yml --env-file infrastructure/staging.env up -d
+#
+# ZAP baseline scan (opt-in via the "scan" profile — does not start with the stack):
+#   docker compose -f infrastructure/docker-compose.staging.yml --env-file infrastructure/staging.env \
+#     --profile scan run --rm zap
+services:
+  proxy:
+    image: nginx:alpine
+    container_name: flowamaz-staging-proxy
+    ports:
+      - "8306:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - web
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  backend:
+    build: ../backend
+    container_name: flowamaz-staging-backend
+    env_file: ./staging.env
+    environment:
+      # Override the documented host-dev connection strings with the in-network service names.
+      ASPNETCORE_ENVIRONMENT: Staging
+      ASPNETCORE_URLS: "http://+:8307"
+      DB_CONNECTION_STRING: "Host=db;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}"
+      REDIS_CONNECTION_STRING: "redis:6379"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8307/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    container_name: flowamaz-staging-web
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  db:
+    image: postgres:16-alpine
+    container_name: flowamaz-staging-db
+    env_file: ./staging.env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5442:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  redis:
+    image: redis:7-alpine
+    container_name: flowamaz-staging-redis
+    volumes:
+      - redisdata:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  # OWASP ZAP — automated DAST baseline scan against the running proxy.
+  # Opt-in: only runs under the "scan" profile, not as part of `up`.
+  zap:
+    image: zaproxy/zap-stable
+    container_name: flowamaz-staging-zap
+    profiles: ["scan"]
+    depends_on:
+      - proxy
+    # Baseline (passive) scan of the SPA + API surface served through the proxy.
+    # Swap http://proxy:80 for your external staging URL to scan the deployed site.
+    command: >
+      zap-baseline.py -t http://proxy:80 -I -m 5
+    restart: "no"
+
+volumes:
+  pgdata:
+  redisdata:

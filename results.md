@@ -1513,3 +1513,27 @@ New standalone Vue 3 SPA in `marketing/` (separate from `web/`, served on flowam
 - [x] Zero style blocks; all API via service layer; workspace isolation preserved
 
 **Deviations:** "Archive pauses running instances" implemented as trigger-rejection on archived workspaces (orchestrator guard) rather than actively cancelling in-flight instances — existing runs finish, no new runs start. Overview counts computed per-workspace in the service (no dedicated count repo methods added) — fine at current scale.
+
+---
+
+## 08-05 — Launch Readiness: k6, Staging, Security Headers, Rate Limits, Env Audit  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+**Code**
+- **Co-pilot per-workspace cap** — added a 20/hour `copilot-ws:{workspaceId}` AI-cost guard alongside the existing 60/hour per-user cap; returns an actionable 429-style message. +1 unit test.
+- **CORS** — extracted `CorsOriginPolicy.Resolve(isDev, configured, marketingSiteUrl)` (testable): Production uses only configured origins (never localhost), Development falls back to localhost (incl. :5173/:5174), and `MARKETING_SITE_URL` (flowamaz.com) is always added when set. Program.cs now uses it. +4 unit tests.
+- **Startup validation** — verified it already enforces all 6 critical secrets (DB_CONNECTION_STRING, JWT_SECRET, CREDENTIAL_MASTER_KEY, GATE_SIGNING_KEY, Email__ResendApiKey, Ai__AnthropicPlatformKey) in non-Development. STRIPE_SECRET_KEY intentionally NOT required (billing degrades to a 503 NotConfigured rather than blocking startup).
+
+**Infra / config**
+- **nginx.conf** — added CSP, Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy headers (existing X-Frame-Options/X-Content-Type-Options/HSTS/Referrer/Permissions verified); api zone 100→200 r/m; new webhook zone 1000 r/m + a `/api/v1/webhooks/receive` location. +9 unit tests (header presence + webhook zone, read from the real nginx.conf).
+- **k6/** — trigger-workflow (50 VU/2m), auth-load (10 VU/1m), copilot-load (5 VU/1m), instance-status (100 VU/2m), all with p95<500 / error<1% thresholds + `docs/LOAD-TESTING.md`.
+- **infrastructure/docker-compose.staging.yml** — Staging env, reduced resource limits, ZAP service behind a `scan` profile, all secrets via `${VAR}` → `staging.env`. + `infrastructure/staging.env.example`.
+- **.env.example** (new, repo root) — full env audit grouped by section (Database/Redis/JWT/Security/Email/AI/Git/Stripe/GitHub/OAuth-SSO/Platform/Edition/CORS-Marketing/Rate Limits); the six startup-enforced vars marked `# REQUIRED`.
+
+**DoD**
+- [x] Backend build 0/0; unit **553/553** (+14); integration unaffected (110/110)
+- [x] Web build 0 errors; staging compose validates (`docker compose config`); k6 scripts parse
+- [x] Required security headers present in nginx; CORS production-only verified by tests
+
+**Deviations:** STRIPE_SECRET_KEY not added to hard startup validation (billing self-degrades). nginx api `burst` tuned 20→40 to match the 200 r/m rate. The 20/hour per-workspace Co-pilot cap is intentionally below the 60/user cap per the prompt — it is a workspace-wide AI-cost ceiling.

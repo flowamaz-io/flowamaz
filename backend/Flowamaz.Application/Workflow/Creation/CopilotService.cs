@@ -91,14 +91,24 @@ public sealed class CopilotService : ICopilotService
     {
         _log.LogInformation("CopilotService.ProcessCommandAsync entry workspaceId={WorkspaceId} userId={UserId}", workspaceId, userId);
 
-        // 1. Rate check
-        var rateLimitKey = $"copilot:{workspaceId}:{userId}";
-        var allowed = await _rateLimit.CheckAndIncrementAsync(rateLimitKey, 60, 3600, cancellationToken);
-        if (!allowed)
+        // 1. Rate checks — per-user (60/hour) then a per-workspace AI-cost guard (20/hour, prompt 08-05).
+        var userKey = $"copilot:{workspaceId}:{userId}";
+        var userAllowed = await _rateLimit.CheckAndIncrementAsync(userKey, 60, 3600, cancellationToken);
+        if (!userAllowed)
         {
             _log.LogWarning("CopilotService.ProcessCommandAsync rate_limited userId={UserId}", userId);
             return new CopilotResult(false, null, null, false, null,
                 "Rate limit exceeded. You can send 60 Co-pilot commands per hour. Wait a moment and try again.");
+        }
+
+        var workspaceKey = $"copilot-ws:{workspaceId}";
+        var workspaceAllowed = await _rateLimit.CheckAndIncrementAsync(workspaceKey, 20, 3600, cancellationToken);
+        if (!workspaceAllowed)
+        {
+            _log.LogWarning("CopilotService.ProcessCommandAsync workspace_rate_limited workspaceId={WorkspaceId}", workspaceId);
+            return new CopilotResult(false, null, null, false, null,
+                "This workspace has reached its hourly Co-pilot limit (20 commands/hour). " +
+                "Wait a moment, or ask a workspace Admin to raise the limit.");
         }
 
         // 2. Budget check

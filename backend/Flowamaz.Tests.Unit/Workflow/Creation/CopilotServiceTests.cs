@@ -131,6 +131,24 @@ public sealed class CopilotServiceTests
     }
 
     [Fact]
+    public async Task WorkspaceRateLimited_Returns_Failure_When_Over_20_Per_Hour()
+    {
+        // Per-user cap passes, but the per-workspace AI-cost guard (copilot-ws:*, 20/hour) blocks.
+        var rateLimit = new Mock<IRateLimitService>();
+        rateLimit.Setup(r => r.CheckAndIncrementAsync(
+                It.Is<string>(k => k.StartsWith("copilot-ws:")), 20, 3600, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        rateLimit.Setup(r => r.CheckAndIncrementAsync(
+                It.Is<string>(k => !k.StartsWith("copilot-ws:")), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var result = await Build(rateLimit: rateLimit).ProcessCommandAsync("add step", null, WorkspaceId, UserId);
+
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("workspace has reached its hourly Co-pilot limit");
+    }
+
+    [Fact]
     public async Task BudgetExhausted_Returns_Failure()
     {
         var svc = Build(budget: BudgetExhausted());

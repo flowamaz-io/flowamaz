@@ -93,31 +93,22 @@ builder.Services.AddValidatorsFromAssemblyContaining<Flowamaz.Api.Validators.Che
 // 10. CORS — origin allowlist from CORS_ALLOWED_ORIGINS env var (comma separated).
 // ──────────────────────────────────────────────────────────────────────────────
 const string CorsPolicyName = "FlowamazCors";
-var allowedOrigins = (builder.Configuration["CORS_ALLOWED_ORIGINS"] ?? "")
+var configuredOrigins = (builder.Configuration["CORS_ALLOWED_ORIGINS"] ?? "")
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+var corsOrigins = Flowamaz.Api.Cors.CorsOriginPolicy.Resolve(
+    builder.Environment.IsDevelopment(), configuredOrigins, builder.Configuration["MARKETING_SITE_URL"]);
+if (corsOrigins.Length == 0 && !builder.Environment.IsDevelopment())
+{
+    // Production MUST set CORS_ALLOWED_ORIGINS — log a warning so the misconfiguration is visible.
+    Log.Warning("CORS_ALLOWED_ORIGINS is not set in Production. All cross-origin requests will be blocked.");
+}
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(CorsPolicyName, policy =>
     {
-        if (allowedOrigins.Length == 0)
+        if (corsOrigins.Length > 0)
         {
-            if (!builder.Environment.IsDevelopment())
-            {
-                // Production MUST set CORS_ALLOWED_ORIGINS — log a warning so the misconfiguration is visible.
-                Log.Warning("CORS_ALLOWED_ORIGINS is not set in Production. All cross-origin requests will be blocked.");
-            }
-            // Dev fallback — Docker proxy ports + Vite dev server.
-            policy.WithOrigins(
-                    "http://localhost:8306",
-                    "http://localhost:8443",
-                    "https://localhost:8443",
-                    "http://localhost:3000",
-                    "http://localhost:5173")
-                .AllowAnyHeader().AllowAnyMethod().AllowCredentials();
-        }
-        else
-        {
-            policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+            policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
         }
     });
 });
