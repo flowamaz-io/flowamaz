@@ -1151,3 +1151,23 @@ Real per-workflow inbound webhook endpoints with HMAC-SHA256 verification, idemp
 - [x] Idempotency dedup via orchestrator; rate limit 100/min/endpoint; `/webhooks/*` excluded from JWT
 - [x] Loading / empty / error states + actionable messages on the settings view
 - [~] Sidebar SETTINGS nav entry for Webhooks deferred to 06-06 (dedicated app-shell nav prompt); route reachable now
+
+---
+
+## 06-02 — Node Config Editor  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Full per-node configuration: a 480px slide-in panel with Basic/Inputs/Outputs/Advanced tabs and per-type config sub-components. Config is YAML-authoritative.
+
+- **Architecture note** — the YAML→canvas sync (`useYamlCanvasSync`) only hydrates Cytoscape, not the canvas store, so loaded nodes aren't in `canvasStore.nodes`. The panel is therefore **YAML-authoritative**: `buildConfigNode(id)` reads the node's `config` from the parsed `yamlContent`; `applyNodeConfig` merges `label`+`config` back into the YAML, re-dumps, then `snapshotYaml()` + `syncYamlToCanvas()` so the canvas re-renders. Works for loaded nodes (which `canvasStore.updateNode` could not reach).
+- **`NodeConfigPanel.vue`** — slide-in (`translate-x-full → 0`, 250ms), header (type icon + editable label + close), tabs, Cancel / Save node footer, Escape-to-close, local working copy of config (deep clone, reset on node change). Outputs tab only for action/ai. Advanced tab: retry (count/delay/backoff), error handling, timeout, tags.
+- **Per-type Basic configs** — `TriggerConfig` (manual/webhook/schedule/event + cron human-readable preview), `ActionConfig` (installed-connector + action dropdowns, dynamic fields from manifest `input_schema`), `HumanGateConfig` (assignee role/user/variable, decision options add/remove/rename, notification channels, timeout + on-timeout), `RouterConditionBuilder` (branch list with `${var}` conditions + default catch-all), `AiNodeConfig` (provider/model/system+user prompt/max-tokens/output var), `EndConfig` (outcome + description).
+- **Shared** — `VariableAutocomplete` (`${`-triggered dropdown filtered by the open fragment, inserts `${name}`) and `InputMappingEditor` (field ← value rows, add/remove).
+- **Canvas wiring** (`SfgCanvas.vue`) — double-click (`dbltap`) a node and the context-menu Edit / Configure / Add-branch / Edit-conditions actions open the panel; variables derived from `spec.variables` + node `outputVariable`s.
+
+**DoD**
+- [x] Web typecheck 0; lint 0 errors (1 pre-existing `vue/no-v-html`); web tests **49/49** (+5: panel 3, RouterConditionBuilder 1, VariableAutocomplete 1)
+- [x] Zero `<style>` blocks; all Tailwind; panel slide-in + Escape close + role="dialog"
+- [x] Double-click / Edit opens panel; config saved to YAML (not a separate API call); canvas re-renders on save
+- [x] Variable autocomplete dropdown on `${`; dynamic action fields from connector manifest

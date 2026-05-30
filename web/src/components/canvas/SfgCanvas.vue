@@ -104,6 +104,16 @@
       @edit-conditions="onCtxEditConditions"
       @set-default-branch="onCtxSetDefaultBranch"
     />
+
+    <!-- Node config panel (prompt 06-02) -->
+    <NodeConfigPanel
+      :open="configPanel.open"
+      :node="configPanel.node"
+      :workspace-id="ws.currentWorkspaceId.value ?? ''"
+      :variables="configVariables"
+      @close="configPanel = { open: false, node: null }"
+      @save="applyNodeConfig"
+    />
   </div>
 </template>
 
@@ -123,6 +133,8 @@ import NodePalette from './NodePalette.vue';
 import CanvasToolbar from './CanvasToolbar.vue';
 import NodeInspector from './NodeInspector.vue';
 import NodeContextMenu from './NodeContextMenu.vue';
+import NodeConfigPanel, { type ConfigNode } from './NodeConfigPanel.vue';
+import type { WorkflowVariable } from './shared/VariableAutocomplete.vue';
 import { Clipboard } from 'lucide-vue-next';
 import type { NodeType, CanvasNode } from '@/types/canvas.types';
 
@@ -147,6 +159,75 @@ const { syncYamlToCanvas } = useYamlCanvasSync(() => canvas.cy.value);
 const workflowStore = useWorkflowStore();
 
 const ctxMenu = ref({ visible: false, x: 0, y: 0, nodeId: '', nodeType: '' });
+
+// ── Node config panel (prompt 06-02) ─────────────────────────────────────────
+const configPanel = ref<{ open: boolean; node: ConfigNode | null }>({ open: false, node: null });
+const configVariables = ref<WorkflowVariable[]>([]);
+
+function buildConfigNode(nodeId: string): ConfigNode | null {
+  if (!nodeId) return null;
+  let nodeFromYaml: Record<string, unknown> | undefined;
+  try {
+    const parsed = jsYaml.load(yamlContent.value) as Record<string, unknown> | undefined;
+    const spec = (parsed?.spec as Record<string, unknown>) ?? {};
+    const nodes = (spec.nodes as Array<Record<string, unknown>>) ?? [];
+    nodeFromYaml = nodes.find((n) => n.id === nodeId);
+  } catch { /* fall back to canvas data */ }
+  const cyNode = canvas.cy.value?.getElementById(nodeId);
+  const type = (nodeFromYaml?.type as string) ?? (cyNode?.data('nodeType') as string) ?? 'action';
+  const label = (nodeFromYaml?.label as string) ?? (cyNode?.data('label') as string) ?? nodeId;
+  const config = (nodeFromYaml?.config as Record<string, unknown>) ?? {};
+  return { id: nodeId, type, label, config };
+}
+
+function refreshConfigVariables(): void {
+  const vars: WorkflowVariable[] = [];
+  try {
+    const parsed = jsYaml.load(yamlContent.value) as Record<string, unknown> | undefined;
+    const spec = (parsed?.spec as Record<string, unknown>) ?? {};
+    const declared = (spec.variables as Array<{ name?: string; type?: string }>) ?? [];
+    for (const v of declared) {
+      if (v.name) vars.push({ name: v.name, type: v.type ?? 'string' });
+    }
+    // Node outputs are addressable as variables too.
+    const nodes = (spec.nodes as Array<Record<string, unknown>>) ?? [];
+    for (const n of nodes) {
+      const out = (n.config as Record<string, unknown>)?.outputVariable as string | undefined;
+      if (out) vars.push({ name: out, type: 'string' });
+    }
+  } catch { /* no variables available */ }
+  configVariables.value = vars;
+}
+
+function openConfigPanel(nodeId: string): void {
+  const node = buildConfigNode(nodeId);
+  if (!node) return;
+  refreshConfigVariables();
+  configPanel.value = { open: true, node };
+  ctxMenu.value.visible = false;
+}
+
+function applyNodeConfig(payload: { id: string; label: string; config: Record<string, unknown> }): void {
+  // Merge the config + label into the YAML, then rebuild so the canvas re-renders.
+  try {
+    const parsed = (jsYaml.load(yamlContent.value) as Record<string, unknown>) ?? {};
+    const spec = (parsed.spec as Record<string, unknown>) ?? (parsed.spec = {});
+    const nodes = (spec.nodes as Array<Record<string, unknown>>) ?? (spec.nodes = []);
+    const existing = nodes.find((n) => n.id === payload.id);
+    if (existing) {
+      existing.label = payload.label;
+      existing.config = payload.config;
+    } else {
+      nodes.push({ id: payload.id, type: configPanel.value.node?.type ?? 'action', label: payload.label, config: payload.config });
+    }
+    yamlContent.value = jsYaml.dump(parsed, { indent: 2, lineWidth: -1 });
+  } catch { /* leave YAML unchanged on parse failure */ }
+
+  canvas.cy.value?.getElementById(payload.id).data('label', payload.label);
+  snapshotYaml();
+  syncYamlToCanvas(yamlContent.value);
+  configPanel.value = { open: false, node: null };
+}
 
 async function loadWorkflow() {
   const workspaceId = (route.query.workspaceId as string) || ws.currentWorkspaceId.value;
@@ -250,6 +331,11 @@ onMounted(async () => {
   }
   // Render initial minimap thumbnail after canvas is ready
   setTimeout(updateMinimap, 500);
+  // Double-click a node to open its configuration panel (prompt 06-02).
+  canvas.cy.value?.on('dbltap', 'node', (evt) => {
+    const id = evt.target.id();
+    if (id) openConfigPanel(id);
+  });
 });
 
 onUnmounted(() => {
@@ -273,8 +359,7 @@ function onNodeHelp(nodeType: string) {
 
 // Context menu actions
 function onCtxEdit() {
-  ctxMenu.value.visible = false;
-  // Inspector is already open via selectedNode
+  openConfigPanel(ctxMenu.value.nodeId || canvasStore.selectedNodeId || '');
 }
 
 function onCtxDuplicate() {
@@ -309,11 +394,11 @@ function onCtxDelete() {
   ctxMenu.value.visible = false;
 }
 
-function onCtxConfigure(_action: string) { ctxMenu.value.visible = false; }
-function onCtxAddBranch() { ctxMenu.value.visible = false; }
+function onCtxConfigure(_action: string) { openConfigPanel(ctxMenu.value.nodeId || canvasStore.selectedNodeId || ''); }
+function onCtxAddBranch() { openConfigPanel(ctxMenu.value.nodeId || canvasStore.selectedNodeId || ''); }
 function onCtxTest(_nodeType: string) { ctxMenu.value.visible = false; }
 function onCtxPreviewGate() { ctxMenu.value.visible = false; }
-function onCtxEditConditions() { ctxMenu.value.visible = false; }
+function onCtxEditConditions() { openConfigPanel(ctxMenu.value.nodeId || canvasStore.selectedNodeId || ''); }
 function onCtxSetDefaultBranch() { ctxMenu.value.visible = false; }
 
 function handleAddGroup() {
