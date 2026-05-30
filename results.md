@@ -1486,3 +1486,30 @@ New standalone Vue 3 SPA in `marketing/` (separate from `web/`, served on flowam
 - [x] DEVELOPER.md + SECURITY.md at `docs/`
 
 **Deviations:** Articles live in the existing categorised folder taxonomy (not the flat `web/src/help/articles/*.md` layout the prompt sketched) to fit the established loader and avoid slug duplication with Phase-1 articles. Getting-started/your-first-workflow/understanding-the-canvas/inviting-your-team map to existing articles instead of new duplicates.
+
+---
+
+## 08-04 — Multi-Workspace: Switching, Creation, Overview, Archive  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+**Backend**
+- New `WorkspaceStatus` enum (Active/Archived) + `Workspace.Status` column (EF migration `AddWorkspaceStatus`, default `"Active"` for existing rows, stored via `HasConversion<string>`).
+- `WorkspaceService.ArchiveAsync`/`RestoreAsync` (org-scoped, set status) + `GetUserWorkspaceOverviewAsync` (per-workspace member count, workflow count, last-active = max workflow `UpdatedAt`, status, role) — added `IWorkflowDefinitionRepository` dep.
+- `WorkspaceMemberService.LeaveWorkspaceAsync` — self-removal allowed, last active Admin → `LastAdminException` (409).
+- `WorkflowOrchestrator.TriggerAsync` now rejects archived workspaces (`WorkspaceArchivedException` → 409) via an optional injected `IWorkspaceRepository` (null in unit tests).
+- Endpoints: `GET /api/v1/workspaces/overview`, `POST /api/v1/workspaces/{id}/archive|restore` (Admin), `DELETE /api/v1/workspaces/{id}/members/me` (Viewer+). `WorkspaceResponse` gains `Status`; new `WorkspaceOverviewResponse`.
+
+**Frontend**
+- `WorkspaceSwitcher` — name search, hashed-colour avatar (deterministic via `avatarColor`), name+slug+role badge per item, teal dot/text for current, keyboard nav (↑/↓/Enter/Esc), `[+ Create workspace]` → modal.
+- `CreateWorkspaceModal` (+ pure `slugify`) — name auto-generates slug, `flowamaz.io/{slug}` preview, creates+switches, surfaces API errors.
+- `WorkspaceOverviewView` at `/workspaces` (linked from UserMenu) — loading/empty/error, card grid with stats + Archived badge + `[Open]` (switch→dashboard), `[+ New workspace]`.
+- `WorkspaceSettingsView` danger zone — Leave (surfaces 409) + Admin-only Archive → `ArchiveWorkspaceModal`.
+- Service methods `overview/archive/restore/leave`; types `WorkspaceStatus`, `status` on `WorkspaceResponse`, `WorkspaceOverviewResponse`.
+
+**DoD**
+- [x] Backend build 0/0; unit **539/539** (+4: archive, restore, leave-last-admin→409, leave-non-last-admin); integration **110/110** (+1 skipped)
+- [x] Web build 0 errors; vitest **61/61** (+3: slugify auto-gen, switcher search filter)
+- [x] Zero style blocks; all API via service layer; workspace isolation preserved
+
+**Deviations:** "Archive pauses running instances" implemented as trigger-rejection on archived workspaces (orchestrator guard) rather than actively cancelling in-flight instances — existing runs finish, no new runs start. Overview counts computed per-workspace in the service (no dedicated count repo methods added) — fine at current scale.

@@ -19,6 +19,12 @@ public interface IWorkspaceMemberService
     Task RemoveMemberAsync(
         Guid workspaceId, Guid targetUserId, Guid requestingUserId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The current user leaves the workspace. Unlike <see cref="RemoveMemberAsync"/> this permits
+    /// self-removal, but still refuses (409) when it would leave the workspace with no active Admin.
+    /// </summary>
+    Task LeaveWorkspaceAsync(Guid workspaceId, Guid userId, CancellationToken cancellationToken = default);
+
     Task<List<WorkspaceMemberDto>> GetMembersAsync(Guid workspaceId, CancellationToken cancellationToken = default);
 
     /// <summary>Members enriched with email + name — for the members list view.</summary>

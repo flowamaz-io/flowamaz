@@ -41,7 +41,7 @@ describe('WorkspaceSwitcher', () => {
     expect(wrapper.find('input').exists()).toBe(true);
     expect(wrapper.text()).toContain('Finance Team');
     expect(wrapper.text()).toContain('Marketing');
-    expect(wrapper.text()).toContain('New Workspace');
+    expect(wrapper.text()).toContain('Create workspace');
   });
 
   it('filters workspaces by the search query', async () => {
@@ -58,7 +58,8 @@ describe('WorkspaceSwitcher', () => {
     const store = useWorkspaceStore();
     const wrapper = mountSwitcher();
     await wrapper.find('button').trigger('click');
-    const marketing = wrapper.findAll('button').find((b) => b.text() === 'Marketing');
+    const list = wrapper.find('ul');
+    const marketing = list.findAll('button').find((b) => b.text().includes('Marketing'));
     expect(marketing).toBeTruthy();
     await marketing!.trigger('click');
     expect(store.currentWorkspaceId).toBe('w2');

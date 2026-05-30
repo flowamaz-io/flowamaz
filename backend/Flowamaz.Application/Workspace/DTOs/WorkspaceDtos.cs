@@ -27,7 +27,12 @@ public sealed record FunctionOverrideRequest(string FunctionId, string Provider,
 
 // ── Responses ───────────────────────────────────────────────────────────────
 
-public sealed record WorkspaceResponse(Guid Id, Guid OrgId, string Name, string Slug, WorkspaceSettings Settings, DateTime CreatedAt, string Edition);
+public sealed record WorkspaceResponse(
+    Guid Id, Guid OrgId, string Name, string Slug, WorkspaceSettings Settings, DateTime CreatedAt, string Edition, WorkspaceStatus Status);
+
+/// <summary>Overview card for the multi-workspace page: counts, last-active, status, and the user's role.</summary>
+public sealed record WorkspaceOverviewResponse(
+    Guid Id, string Name, string Slug, string UserRole, int MemberCount, int WorkflowCount, DateTime? LastActiveAt, WorkspaceStatus Status);
 
 public sealed record WorkspaceEnvironmentResponse(Guid Id, string Name, Guid WorkspaceId, DateTime CreatedAt);
 

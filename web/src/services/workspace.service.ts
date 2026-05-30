@@ -13,6 +13,7 @@ import type {
   UpdateWorkspaceSettingsRequest,
   WorkspaceEnvironment,
   WorkspaceListItem,
+  WorkspaceOverviewResponse,
   WorkspaceResponse,
 } from '@/types';
 
@@ -25,6 +26,23 @@ export const workspaceService = {
   async create(payload: CreateWorkspaceRequest): Promise<WorkspaceResponse> {
     const res = await http.post<ApiEnvelope<WorkspaceResponse>>('/api/v1/workspaces', payload);
     return unwrap(res);
+  },
+
+  async overview(): Promise<WorkspaceOverviewResponse[]> {
+    const res = await http.get<ApiEnvelope<WorkspaceOverviewResponse[]>>('/api/v1/workspaces/overview');
+    return unwrap(res);
+  },
+
+  async archive(id: string): Promise<void> {
+    await http.post(`/api/v1/workspaces/${id}/archive`);
+  },
+
+  async restore(id: string): Promise<void> {
+    await http.post(`/api/v1/workspaces/${id}/restore`);
+  },
+
+  async leave(id: string): Promise<void> {
+    await http.delete(`/api/v1/workspaces/${id}/members/me`);
   },
 
   async get(id: string): Promise<WorkspaceResponse> {

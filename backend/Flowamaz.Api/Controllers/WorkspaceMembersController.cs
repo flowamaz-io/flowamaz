@@ -81,4 +81,13 @@ public sealed class WorkspaceMembersController : ControllerBase
         await _memberService.RemoveMemberAsync(workspaceId, userId, _currentUser.UserId!.Value, cancellationToken);
         return NoContent();
     }
+
+    /// <summary>The current user leaves this workspace. Refused (409) if they are the last active Admin.</summary>
+    [HttpDelete("me")]
+    [RequireWorkspaceRole(WorkspaceRole.Viewer)]
+    public async Task<IActionResult> Leave(Guid workspaceId, CancellationToken cancellationToken)
+    {
+        await _memberService.LeaveWorkspaceAsync(workspaceId, _currentUser.UserId!.Value, cancellationToken);
+        return NoContent();
+    }
 }

@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
 import FmAlert from '@/components/common/FmAlert.vue';
 import FmBadge from '@/components/common/FmBadge.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
+import ArchiveWorkspaceModal from '@/components/workspace/ArchiveWorkspaceModal.vue';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useToast } from '@/composables/useToast';
+import { workspaceService } from '@/services/workspace.service';
 import { toUserFacingError } from '@/utils/error.util';
 import {
   AI_FUNCTIONS,
@@ -21,6 +24,11 @@ import type { FunctionOverrideRequest, MarketplacePolicy } from '@/types';
 
 const ws = useWorkspace();
 const toast = useToast();
+const router = useRouter();
+
+const isAdmin = computed(() => ws.current.value?.role === 'Admin');
+const archiveOpen = ref(false);
+const leaving = ref(false);
 
 const loading = ref(true);
 const loadError = ref('');
@@ -124,6 +132,27 @@ async function saveAiConfig(): Promise<void> {
 }
 
 const allowedProviders = (): string[] => ws.aiConfig.value?.allowedProviders ?? ['anthropic'];
+
+async function leaveWorkspace(): Promise<void> {
+  const id = ws.currentWorkspaceId.value;
+  if (!id) return;
+  leaving.value = true;
+  try {
+    await workspaceService.leave(id);
+    toast.success('You have left this workspace.');
+    await ws.loadWorkspaces();
+    router.push('/workspaces');
+  } catch (e) {
+    toast.error(toUserFacingError(e).message);
+  } finally {
+    leaving.value = false;
+  }
+}
+
+async function onArchived(): Promise<void> {
+  await ws.loadWorkspaces();
+  router.push('/workspaces');
+}
 </script>
 
 <template>
@@ -307,6 +336,62 @@ const allowedProviders = (): string[] => ws.aiConfig.value?.allowedProviders ?? 
           </FmButton>
         </div>
       </section>
+
+      <!-- Danger zone -->
+      <section class="rounded-xl border border-danger-200 bg-white p-6">
+        <h2 class="text-base font-semibold text-danger-700">
+          Danger zone
+        </h2>
+        <p class="mb-4 text-sm text-slate-500">
+          These actions affect your access to the workspace and its running instances.
+        </p>
+        <div class="space-y-4">
+          <div class="flex flex-col gap-2 rounded-lg border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p class="text-sm font-medium text-slate-800">
+                Leave workspace
+              </p>
+              <p class="text-xs text-slate-500">
+                You'll lose access to this workspace. You can be re-invited by an admin later.
+              </p>
+            </div>
+            <FmButton
+              variant="secondary"
+              :loading="leaving"
+              @click="leaveWorkspace"
+            >
+              Leave workspace
+            </FmButton>
+          </div>
+          <div
+            v-if="isAdmin"
+            class="flex flex-col gap-2 rounded-lg border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div>
+              <p class="text-sm font-medium text-slate-800">
+                Archive workspace
+              </p>
+              <p class="text-xs text-slate-500">
+                Pause running instances and disable new triggers. Data is preserved and can be restored.
+              </p>
+            </div>
+            <FmButton
+              variant="danger"
+              @click="archiveOpen = true"
+            >
+              Archive workspace
+            </FmButton>
+          </div>
+        </div>
+      </section>
     </template>
+
+    <ArchiveWorkspaceModal
+      :open="archiveOpen"
+      :workspace-id="ws.currentWorkspaceId.value ?? ''"
+      :workspace-name="name"
+      @close="archiveOpen = false"
+      @archived="onArchived"
+    />
   </div>
 </template>

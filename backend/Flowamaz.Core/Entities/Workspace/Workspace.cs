@@ -1,3 +1,4 @@
+using Flowamaz.Core.Enums;
 using Flowamaz.Core.Models;
 
 namespace Flowamaz.Core.Entities.Workspaces;
@@ -14,4 +15,7 @@ public class Workspace : BaseEntity
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
     public WorkspaceSettings Settings { get; set; } = new();
+
+    /// <summary>Lifecycle status. Archived workspaces reject new triggers but keep all data.</summary>
+    public WorkspaceStatus Status { get; set; } = WorkspaceStatus.Active;
 }

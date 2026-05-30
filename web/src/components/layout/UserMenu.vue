@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { onClickOutside } from '@vueuse/core';
-import { ChevronUp, CreditCard, LogOut, User } from 'lucide-vue-next';
+import { ChevronUp, CreditCard, LayoutGrid, LogOut, User } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
 import { useWorkspaceStore } from '@/stores/workspace.store';
 import { initial } from '@/utils/string.util';
@@ -47,6 +47,11 @@ function goProfile(): void {
 function goBilling(): void {
   open.value = false;
   router.push('/settings');
+}
+
+function goWorkspaces(): void {
+  open.value = false;
+  router.push('/workspaces');
 }
 
 async function logout(): Promise<void> {
@@ -112,6 +117,14 @@ async function logout(): Promise<void> {
       >
         <User class="h-4 w-4" />
         Profile
+      </button>
+      <button
+        type="button"
+        class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-sidebar-text-secondary transition-colors hover:bg-sidebar-hover hover:text-sidebar-text-primary"
+        @click="goWorkspaces"
+      >
+        <LayoutGrid class="h-4 w-4" />
+        Workspaces
       </button>
       <button
         type="button"

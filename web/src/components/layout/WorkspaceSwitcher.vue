@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { onClickOutside } from '@vueuse/core';
 import { Building2, ChevronDown, Plus, Search } from 'lucide-vue-next';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useAuth } from '@/composables/useAuth';
-import { initial } from '@/utils/string.util';
+import { avatarColor, initial } from '@/utils/string.util';
+import FmBadge from '@/components/common/FmBadge.vue';
+import CreateWorkspaceModal from '@/components/workspace/CreateWorkspaceModal.vue';
 
 // Collapsed (icon-only) hides the labels and renders just the workspace initial.
 defineProps<{ collapsed?: boolean }>();
 
-const router = useRouter();
 const ws = useWorkspace();
 const { allWorkspaces, current } = ws;
 const auth = useAuth();
 const { user } = auth;
+
+const createOpen = ref(false);
 
 const open = ref(false);
 const query = ref('');
@@ -52,9 +54,9 @@ function select(id: string): void {
   close();
 }
 
-function newWorkspace(): void {
+function openCreate(): void {
   close();
-  router.push('/settings');
+  createOpen.value = true;
 }
 
 function onSearchKeydown(event: KeyboardEvent): void {
@@ -136,18 +138,40 @@ function onSearchKeydown(event: KeyboardEvent): void {
             type="button"
             :class="[
               'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors',
-              idx === highlighted ? 'bg-sidebar-hover text-sidebar-text-primary' : 'text-sidebar-text-secondary hover:bg-sidebar-hover hover:text-sidebar-text-primary',
+              idx === highlighted ? 'bg-sidebar-hover' : 'hover:bg-sidebar-hover',
             ]"
             @click="select(w.id)"
             @mouseenter="highlighted = idx"
           >
             <span
               :class="[
+                'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold text-white',
+                avatarColor(w.name),
+              ]"
+            >
+              {{ initial(w.name) }}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span
+                :class="[
+                  'block truncate font-medium',
+                  current?.id === w.id ? 'text-sidebar-active' : 'text-sidebar-text-primary',
+                ]"
+              >{{ w.name }}</span>
+              <span class="block truncate text-[11px] text-sidebar-text-muted">{{ w.slug }}</span>
+            </span>
+            <FmBadge
+              variant="slate"
+              class="shrink-0"
+            >
+              {{ w.role }}
+            </FmBadge>
+            <span
+              :class="[
                 'h-2 w-2 shrink-0 rounded-full',
                 current?.id === w.id ? 'bg-sidebar-active' : 'bg-transparent',
               ]"
             />
-            <span class="min-w-0 flex-1 truncate">{{ w.name }}</span>
           </button>
         </li>
         <li
@@ -160,11 +184,17 @@ function onSearchKeydown(event: KeyboardEvent): void {
       <button
         type="button"
         class="flex w-full items-center gap-2 border-t border-sidebar-border px-3 py-2 text-left text-sm font-medium text-sidebar-active transition-colors hover:bg-sidebar-hover"
-        @click="newWorkspace"
+        @click="openCreate"
       >
         <Plus class="h-4 w-4 shrink-0" />
-        New Workspace
+        Create workspace
       </button>
     </div>
+
+    <CreateWorkspaceModal
+      :open="createOpen"
+      @close="createOpen = false"
+      @created="createOpen = false"
+    />
   </div>
 </template>

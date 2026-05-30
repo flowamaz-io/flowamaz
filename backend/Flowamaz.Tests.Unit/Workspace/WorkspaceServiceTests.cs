@@ -15,6 +15,7 @@ public class WorkspaceServiceTests
 {
     private readonly Mock<IWorkspaceRepository> _workspaceRepo = new();
     private readonly Mock<IWorkspaceMemberRepository> _memberRepo = new();
+    private readonly Mock<IWorkflowDefinitionRepository> _workflowRepo = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
     private readonly Mock<IWorkspaceGitService> _git = new();
@@ -24,7 +25,7 @@ public class WorkspaceServiceTests
         _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_tx.Object);
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         return new WorkspaceService(
-            _workspaceRepo.Object, _memberRepo.Object, _uow.Object, _git.Object, NullLogger<WorkspaceService>.Instance);
+            _workspaceRepo.Object, _memberRepo.Object, _workflowRepo.Object, _uow.Object, _git.Object, NullLogger<WorkspaceService>.Instance);
     }
 
     [Fact]
@@ -87,7 +88,7 @@ public class WorkspaceServiceTests
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("db down"));
 
         var service = new WorkspaceService(
-            _workspaceRepo.Object, _memberRepo.Object, _uow.Object, _git.Object, NullLogger<WorkspaceService>.Instance);
+            _workspaceRepo.Object, _memberRepo.Object, _workflowRepo.Object, _uow.Object, _git.Object, NullLogger<WorkspaceService>.Instance);
 
         var act = () => service.CreateWorkspaceAsync(orgId, "Acme", "acme", Guid.NewGuid());
 
@@ -110,5 +111,33 @@ public class WorkspaceServiceTests
         var result = await service.GetByIdAsync(workspaceId, otherOrg);
 
         result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ArchiveAsync_sets_status_archived_and_persists()
+    {
+        var workspaceId = Guid.NewGuid();
+        var orgId = Guid.NewGuid();
+        var workspace = new Workspace { Id = workspaceId, OrgId = orgId, Name = "Ops", Slug = "ops", Status = WorkspaceStatus.Active };
+        _workspaceRepo.Setup(r => r.GetByIdForOrgAsync(workspaceId, orgId, It.IsAny<CancellationToken>())).ReturnsAsync(workspace);
+
+        await CreateService().ArchiveAsync(workspaceId, orgId);
+
+        workspace.Status.Should().Be(WorkspaceStatus.Archived);
+        _workspaceRepo.Verify(r => r.Update(It.Is<Workspace>(w => w.Status == WorkspaceStatus.Archived)), Times.Once);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_sets_status_active()
+    {
+        var workspaceId = Guid.NewGuid();
+        var orgId = Guid.NewGuid();
+        var workspace = new Workspace { Id = workspaceId, OrgId = orgId, Name = "Ops", Slug = "ops", Status = WorkspaceStatus.Archived };
+        _workspaceRepo.Setup(r => r.GetByIdForOrgAsync(workspaceId, orgId, It.IsAny<CancellationToken>())).ReturnsAsync(workspace);
+
+        await CreateService().RestoreAsync(workspaceId, orgId);
+
+        workspace.Status.Should().Be(WorkspaceStatus.Active);
     }
 }

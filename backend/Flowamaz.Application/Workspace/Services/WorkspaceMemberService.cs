@@ -174,6 +174,42 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
         }
     }
 
+    public async Task LeaveWorkspaceAsync(Guid workspaceId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug(
+            "WorkspaceMemberService.LeaveWorkspaceAsync enter workspaceId={WorkspaceId} user={UserId}",
+            workspaceId, userId);
+        try
+        {
+            var member = await _memberRepository.GetAsync(workspaceId, userId, cancellationToken);
+            if (member is null)
+            {
+                _logger.LogWarning(
+                    "WorkspaceMemberService.LeaveWorkspaceAsync no-op workspaceId={WorkspaceId} user={UserId} — not a member",
+                    workspaceId, userId);
+                return;
+            }
+
+            var isLastAdmin = member.Role == WorkspaceRole.Admin && member.IsActive;
+            if (isLastAdmin && await _memberRepository.CountActiveAdminsAsync(workspaceId, cancellationToken) <= 1)
+            {
+                throw new LastAdminException();
+            }
+
+            _memberRepository.Remove(member);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "WorkspaceMemberService.LeaveWorkspaceAsync exit workspaceId={WorkspaceId} user={UserId}", workspaceId, userId);
+        }
+        catch (Exception ex) when (ex is not LastAdminException)
+        {
+            _logger.LogError(ex,
+                "WorkspaceMemberService.LeaveWorkspaceAsync error workspaceId={WorkspaceId} user={UserId}", workspaceId, userId);
+            throw;
+        }
+    }
+
     public async Task<List<WorkspaceMemberDto>> GetMembersAsync(Guid workspaceId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("WorkspaceMemberService.GetMembersAsync enter workspaceId={WorkspaceId}", workspaceId);

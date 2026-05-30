@@ -12,6 +12,7 @@ public sealed class WorkspaceConfiguration : IEntityTypeConfiguration<Workspace>
         builder.HasKey(w => w.Id);
         builder.Property(w => w.Name).HasMaxLength(256).IsRequired();
         builder.Property(w => w.Slug).HasMaxLength(128).IsRequired();
+        builder.Property(w => w.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
 
         // Slug is unique per org, not globally (FUNCTIONAL.md §2.1).
         builder.HasIndex(w => new { w.OrgId, w.Slug }).IsUnique();

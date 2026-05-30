@@ -18,6 +18,7 @@ public sealed class WorkspaceService : IWorkspaceService
 {
     private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IWorkspaceMemberRepository _memberRepository;
+    private readonly IWorkflowDefinitionRepository _workflowRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IWorkspaceGitService _git;
     private readonly ILogger<WorkspaceService> _logger;
@@ -25,12 +26,14 @@ public sealed class WorkspaceService : IWorkspaceService
     public WorkspaceService(
         IWorkspaceRepository workspaceRepository,
         IWorkspaceMemberRepository memberRepository,
+        IWorkflowDefinitionRepository workflowRepository,
         IUnitOfWork unitOfWork,
         IWorkspaceGitService git,
         ILogger<WorkspaceService> logger)
     {
         _workspaceRepository = workspaceRepository;
         _memberRepository = memberRepository;
+        _workflowRepository = workflowRepository;
         _unitOfWork = unitOfWork;
         _git = git;
         _logger = logger;
@@ -200,10 +203,62 @@ public sealed class WorkspaceService : IWorkspaceService
         }
     }
 
+    public async Task ArchiveAsync(Guid workspaceId, Guid orgId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("WorkspaceService.ArchiveAsync enter workspaceId={WorkspaceId}", workspaceId);
+        await SetStatusAsync(workspaceId, orgId, WorkspaceStatus.Archived, cancellationToken);
+        _logger.LogInformation("WorkspaceService.ArchiveAsync exit workspaceId={WorkspaceId}", workspaceId);
+    }
+
+    public async Task RestoreAsync(Guid workspaceId, Guid orgId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("WorkspaceService.RestoreAsync enter workspaceId={WorkspaceId}", workspaceId);
+        await SetStatusAsync(workspaceId, orgId, WorkspaceStatus.Active, cancellationToken);
+        _logger.LogInformation("WorkspaceService.RestoreAsync exit workspaceId={WorkspaceId}", workspaceId);
+    }
+
+    private async Task SetStatusAsync(Guid workspaceId, Guid orgId, WorkspaceStatus status, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var workspace = await _workspaceRepository.GetByIdForOrgAsync(workspaceId, orgId, cancellationToken)
+                ?? throw new InvalidOperationException($"Workspace '{workspaceId}' was not found in this organisation.");
+            workspace.Status = status;
+            _workspaceRepository.Update(workspace);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not AppException)
+        {
+            _logger.LogError(ex, "WorkspaceService.SetStatusAsync error workspaceId={WorkspaceId} status={Status}", workspaceId, status);
+            throw;
+        }
+    }
+
     public Task<List<WorkspaceMembership>> GetUserMembershipsAsync(Guid orgUserId, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("WorkspaceService.GetUserMembershipsAsync enter orgUserId={OrgUserId}", orgUserId);
         return _memberRepository.GetActiveMembershipsForUserAsync(orgUserId, cancellationToken);
+    }
+
+    public async Task<List<WorkspaceOverviewItem>> GetUserWorkspaceOverviewAsync(Guid orgUserId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("WorkspaceService.GetUserWorkspaceOverviewAsync enter orgUserId={OrgUserId}", orgUserId);
+        var memberships = await _memberRepository.GetActiveMembershipsForUserAsync(orgUserId, cancellationToken);
+        var items = new List<WorkspaceOverviewItem>(memberships.Count);
+        foreach (var m in memberships)
+        {
+            var workspace = await _workspaceRepository.GetByIdAsync(m.WorkspaceId, cancellationToken);
+            if (workspace is null) continue;
+            var members = await _memberRepository.GetForWorkspaceAsync(m.WorkspaceId, cancellationToken);
+            var workflows = await _workflowRepository.GetForWorkspaceAsync(m.WorkspaceId, cancellationToken);
+            DateTime? lastActive = workflows.Count == 0 ? null : workflows.Max(w => w.UpdatedAt);
+
+            items.Add(new WorkspaceOverviewItem(
+                workspace.Id, workspace.Name, workspace.Slug, m.RoleName,
+                members.Count(x => x.IsActive), workflows.Count, lastActive, workspace.Status));
+        }
+        _logger.LogInformation("WorkspaceService.GetUserWorkspaceOverviewAsync exit count={Count}", items.Count);
+        return items;
     }
 
     public async Task SoftDeleteAsync(Guid workspaceId, CancellationToken cancellationToken = default)

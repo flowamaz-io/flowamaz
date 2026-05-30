@@ -2,6 +2,8 @@
 
 export type WorkspaceRole = 'Viewer' | 'Runner' | 'Operator' | 'Designer' | 'Admin';
 
+export type WorkspaceStatus = 'Active' | 'Archived';
+
 export type MarketplacePolicy = 'AllowAll' | 'OfficialAndVerified' | 'Allowlist';
 
 export interface WorkspaceSettings {
@@ -44,6 +46,20 @@ export interface WorkspaceResponse {
   createdAt: string;
   /** Platform edition (community | starter | pro | enterprise), driven by the EDITION env var. */
   edition: string;
+  /** Lifecycle state — Archived workspaces pause running instances and disable new triggers. */
+  status: WorkspaceStatus;
+}
+
+/** GET /api/v1/workspaces/overview item — per-workspace stats for the overview grid. */
+export interface WorkspaceOverviewResponse {
+  id: string;
+  name: string;
+  slug: string;
+  userRole: string;
+  memberCount: number;
+  workflowCount: number;
+  lastActiveAt: string | null;
+  status: WorkspaceStatus;
 }
 
 export interface CreateWorkspaceRequest {

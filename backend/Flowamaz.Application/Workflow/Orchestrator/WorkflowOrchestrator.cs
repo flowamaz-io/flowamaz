@@ -43,6 +43,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
     // pauses before the node. Both optional so unit tests can omit them (no breakpoint behaviour).
     private readonly IBreakpointRegistry? _breakpoints;
     private readonly IHostEnvironment? _environment;
+    // Optional (null in unit tests): when present, an archived workspace rejects new triggers (08-04).
+    private readonly IWorkspaceRepository? _workspaces;
 
     public WorkflowOrchestrator(
         IWorkflowDefinitionRepository definitions,
@@ -61,7 +63,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         INotificationService? notifications = null,
         IAuditService? audit = null,
         IBreakpointRegistry? breakpoints = null,
-        IHostEnvironment? environment = null)
+        IHostEnvironment? environment = null,
+        IWorkspaceRepository? workspaces = null)
     {
         _definitions = definitions;
         _versions = versions;
@@ -80,6 +83,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _audit = audit;
         _breakpoints = breakpoints;
         _environment = environment;
+        _workspaces = workspaces;
     }
 
     public async Task<WorkflowInstance> TriggerAsync(
@@ -109,6 +113,14 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                         idempotencyKey, existing.Id);
                     return existing;
                 }
+            }
+
+            // Archived workspaces preserve data but reject new runs (prompt 08-04).
+            if (_workspaces is not null)
+            {
+                var workspace = await _workspaces.GetByIdAsync(workspaceId, cancellationToken);
+                if (workspace?.Status == WorkspaceStatus.Archived)
+                    throw new WorkspaceArchivedException();
             }
 
             // Edition gate (prompt 05-07): Community edition caps real (non-test) runs per month.

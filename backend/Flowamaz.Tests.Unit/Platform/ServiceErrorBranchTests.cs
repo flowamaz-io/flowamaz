@@ -90,7 +90,8 @@ public class ServiceErrorBranchTests
         var memberRepo = new Mock<IWorkspaceMemberRepository>();
 
         var git = new Mock<Flowamaz.Core.Interfaces.Git.IWorkspaceGitService>();
-        var service = new WorkspaceService(wsRepo.Object, memberRepo.Object, uow.Object, git.Object, NullLogger<WorkspaceService>.Instance);
+        var workflowRepo = new Mock<Flowamaz.Core.Interfaces.Repositories.IWorkflowDefinitionRepository>();
+        var service = new WorkspaceService(wsRepo.Object, memberRepo.Object, workflowRepo.Object, uow.Object, git.Object, NullLogger<WorkspaceService>.Instance);
 
         await service.Invoking(s => s.CreateWorkspaceAsync(Guid.NewGuid(), "Marketing", "marketing", Guid.NewGuid()))
             .Should().ThrowAsync<InvalidOperationException>();

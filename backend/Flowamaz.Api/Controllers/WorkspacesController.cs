@@ -63,12 +63,47 @@ public sealed class WorkspacesController : ControllerBase
         return Ok(ToResponse(workspace));
     }
 
+    /// <summary>Overview cards for every workspace the user belongs to (counts, last-active, role).</summary>
+    [HttpGet("overview")]
+    [Authorize]
+    public async Task<ActionResult<IReadOnlyList<WorkspaceOverviewResponse>>> Overview(CancellationToken cancellationToken)
+    {
+        var items = await _workspaceService.GetUserWorkspaceOverviewAsync(_currentUser.UserId!.Value, cancellationToken);
+        var response = items
+            .Select(i => new WorkspaceOverviewResponse(
+                i.Id, i.Name, i.Slug, i.UserRole, i.MemberCount, i.WorkflowCount, i.LastActiveAt, i.Status))
+            .ToList();
+        return Ok(response);
+    }
+
     [HttpGet("{id:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Viewer)]
     public async Task<ActionResult<WorkspaceResponse>> Get(Guid id, CancellationToken cancellationToken)
     {
         var workspace = await _workspaceService.GetByIdAsync(id, _currentUser.OrgId!.Value, cancellationToken);
         return workspace is null ? NotFound() : Ok(ToResponse(workspace));
+    }
+
+    /// <summary>Archives the workspace: new triggers are refused, all data is preserved. Admin only.</summary>
+    [HttpPost("{id:guid}/archive")]
+    [RequireWorkspaceRole(WorkspaceRole.Admin)]
+    public async Task<IActionResult> Archive(Guid id, CancellationToken cancellationToken)
+    {
+        var workspace = await _workspaceService.GetByIdAsync(id, _currentUser.OrgId!.Value, cancellationToken);
+        if (workspace is null) return NotFound();
+        await _workspaceService.ArchiveAsync(id, _currentUser.OrgId!.Value, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>Restores an archived workspace to Active. Admin only.</summary>
+    [HttpPost("{id:guid}/restore")]
+    [RequireWorkspaceRole(WorkspaceRole.Admin)]
+    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
+    {
+        var workspace = await _workspaceService.GetByIdAsync(id, _currentUser.OrgId!.Value, cancellationToken);
+        if (workspace is null) return NotFound();
+        await _workspaceService.RestoreAsync(id, _currentUser.OrgId!.Value, cancellationToken);
+        return NoContent();
     }
 
     [HttpGet("{id:guid}/environments")]
@@ -142,5 +177,5 @@ public sealed class WorkspacesController : ControllerBase
     // Edition is platform-wide (driven by the EDITION env var via IEditionService), surfaced here so
     // the web app can label the active plan without a second /usage call.
     private WorkspaceResponse ToResponse(Core.Entities.Workspaces.Workspace w) =>
-        new(w.Id, w.OrgId, w.Name, w.Slug, w.Settings, w.CreatedAt, _edition.Edition);
+        new(w.Id, w.OrgId, w.Name, w.Slug, w.Settings, w.CreatedAt, _edition.Edition, w.Status);
 }

@@ -1,6 +1,7 @@
 using Flowamaz.Application.Workspace.Services;
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Enums;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Git;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
@@ -31,8 +32,9 @@ public class WorkspaceServicesCoverageTests
     {
         var repo = new Mock<IWorkspaceRepository>();
         var members = new Mock<IWorkspaceMemberRepository>();
+        var workflows = new Mock<IWorkflowDefinitionRepository>();
         var git = new Mock<IWorkspaceGitService>();
-        return (new WorkspaceService(repo.Object, members.Object, _uow.Object, git.Object, NullLogger<WorkspaceService>.Instance), repo);
+        return (new WorkspaceService(repo.Object, members.Object, workflows.Object, _uow.Object, git.Object, NullLogger<WorkspaceService>.Instance), repo);
     }
 
     [Fact]
@@ -99,6 +101,34 @@ public class WorkspaceServicesCoverageTests
         var repo = new Mock<IWorkspaceMemberRepository>();
         var edition = new Mock<IEditionService>();
         return (new WorkspaceMemberService(repo.Object, _uow.Object, edition.Object, NullLogger<WorkspaceMemberService>.Instance), repo);
+    }
+
+    [Fact]
+    public async Task MemberService_Leave_last_admin_throws_409()
+    {
+        var (svc, repo) = NewMemberService();
+        var userId = Guid.NewGuid();
+        repo.Setup(r => r.GetAsync(_workspaceId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceMember { WorkspaceId = _workspaceId, OrgUserId = userId, Role = WorkspaceRole.Admin, IsActive = true });
+        repo.Setup(r => r.CountActiveAdminsAsync(_workspaceId, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var act = () => svc.LeaveWorkspaceAsync(_workspaceId, userId);
+
+        (await act.Should().ThrowAsync<LastAdminException>()).And.HttpStatusCode.Should().Be(409);
+        repo.Verify(r => r.Remove(It.IsAny<WorkspaceMember>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task MemberService_Leave_non_last_admin_removes_membership()
+    {
+        var (svc, repo) = NewMemberService();
+        var userId = Guid.NewGuid();
+        repo.Setup(r => r.GetAsync(_workspaceId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceMember { WorkspaceId = _workspaceId, OrgUserId = userId, Role = WorkspaceRole.Designer, IsActive = true });
+
+        await svc.LeaveWorkspaceAsync(_workspaceId, userId);
+
+        repo.Verify(r => r.Remove(It.IsAny<WorkspaceMember>()), Times.Once);
     }
 
     [Fact]
