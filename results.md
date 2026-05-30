@@ -1171,3 +1171,24 @@ Full per-node configuration: a 480px slide-in panel with Basic/Inputs/Outputs/Ad
 - [x] Zero `<style>` blocks; all Tailwind; panel slide-in + Escape close + role="dialog"
 - [x] Double-click / Edit opens panel; config saved to YAML (not a separate API call); canvas re-renders on save
 - [x] Variable autocomplete dropdown on `${`; dynamic action fields from connector manifest
+
+---
+
+## 06-03 — Public API  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Clean, documented, separately-rate-limited public REST API at `/api/public/v1` using workspace API keys.
+
+- **`PublicApiController` base** — not wrapped by `ResponseWrapperMiddleware` (`/api/public` + `/api-docs` added to its skip list). Emits `{ data, meta }` / `{ error: { code, message, docs } }` with **snake_case** field names (`JsonNamingPolicy.SnakeCaseLower`) via per-action `JsonResult.SerializerSettings`. `GuardAsync` resolves the API-key workspace (401 + SDK hint if none) and enforces the rate limit (429), always setting `X-RateLimit-Limit/Remaining/Reset`.
+- **`IPublicApiRateLimiter` / `RedisPublicApiRateLimiter`** — fixed 1-hour window, INCR + TTL, reports remaining + reset epoch; **fails open** if Redis is down. Separate from the internal `IRateLimitService`. Limits: 1000/hr read, 100/hr trigger, per API key (proxied by workspace).
+- **Controllers** — `PublicWorkflowsController` (list/get published by slug, trigger with raw-body payload + `X-Idempotency-Key`, list instances), `PublicInstancesController` (get, SSE `/events`, cancel), `PublicGatesController` (pending, decide). Workflows/Instances depend on repository + orchestrator **interfaces** (not the sealed services) and project to small public DTOs (`PublicWorkflow/Instance/Event`) — fully workspace-scoped and unit-testable.
+- **Slug lookup** — added `IWorkflowDefinitionRepository.GetBySlugForWorkspaceAsync`.
+- **Docs** — second OpenAPI document `public` (document transformer keeps only `/api/public/*` paths, retitled "Flowamaz Public API") served at `/openapi/public.json`; second Scalar UI at **`/api-docs`**. Existing `/scalar` unchanged.
+
+**DoD**
+- [x] Backend build 0/0; unit **474/474** (+7: workflows 4, instances 3)
+- [x] No AutoWrapper on public routes; snake_case `{data,meta}` / `{error}`; rate-limit headers on every response
+- [x] API-key-only auth; missing key → 401 with `app.flowamaz.io/settings/api-keys` hint; 429 carries `X-RateLimit-Reset`
+- [x] Workspace isolation (every query scoped by the API key's workspace); idempotency on `/trigger`
+- [x] `/api-docs` Scalar shows only the public endpoints

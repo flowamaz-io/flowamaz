@@ -172,6 +172,7 @@ public static class DependencyInjection
     {
         services.AddScoped<ICredentialVaultService, CredentialVaultService>();
         services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
+        services.AddSingleton<IPublicApiRateLimiter, RedisPublicApiRateLimiter>();
         services.AddScoped<IWebhookEndpointRepository, WebhookEndpointRepository>();
         services.AddScoped<IConnectorCatalogueService, ConnectorCatalogueService>();
         services.AddHttpClient(ConnectorSandbox.HttpClientName);

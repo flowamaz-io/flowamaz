@@ -228,6 +228,22 @@ if (backgroundWorkersEnabled)
 // 13. OpenAPI + Scalar at /scalar (always public, no auth).
 // ──────────────────────────────────────────────────────────────────────────────
 builder.Services.AddOpenApi();
+// Second OpenAPI document exposing ONLY the public developer API (/api/public/*) at /api-docs.
+builder.Services.AddOpenApi("public", options =>
+{
+    options.AddDocumentTransformer((document, _, _) =>
+    {
+        document.Info.Title = "Flowamaz Public API";
+        document.Info.Description = "REST API for triggering workflows and reading instances.";
+        var publicPaths = document.Paths
+            .Where(p => p.Key.StartsWith("/api/public", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        document.Paths.Clear();
+        foreach (var path in publicPaths)
+            document.Paths.Add(path.Key, path.Value);
+        return Task.CompletedTask;
+    });
+});
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
@@ -259,6 +275,13 @@ app.MapOpenApi();
 app.MapScalarApiReference(options =>
 {
     options.WithTitle("Flowamaz API")
+           .WithTheme(ScalarTheme.Default);
+});
+// Public developer API docs — public endpoints only.
+app.MapScalarApiReference("/api-docs", options =>
+{
+    options.WithTitle("Flowamaz Public API")
+           .WithOpenApiRoutePattern("/openapi/public.json")
            .WithTheme(ScalarTheme.Default);
 });
 

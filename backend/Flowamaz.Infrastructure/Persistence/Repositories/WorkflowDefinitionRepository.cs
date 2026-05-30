@@ -14,6 +14,9 @@ public sealed class WorkflowDefinitionRepository(FlowAmazDbContext db) : IWorkfl
         db.WorkflowDefinitions.AsNoTracking().Where(w => w.WorkspaceId == workspaceId)
             .OrderByDescending(w => w.UpdatedAt).ToListAsync(cancellationToken);
 
+    public Task<WorkflowDefinition?> GetBySlugForWorkspaceAsync(Guid workspaceId, string slug, CancellationToken cancellationToken = default) =>
+        db.WorkflowDefinitions.FirstOrDefaultAsync(w => w.WorkspaceId == workspaceId && w.Slug == slug, cancellationToken);
+
     public Task<bool> SlugExistsInWorkspaceAsync(Guid workspaceId, string slug, CancellationToken cancellationToken = default) =>
         db.WorkflowDefinitions.AnyAsync(w => w.WorkspaceId == workspaceId && w.Slug == slug, cancellationToken);
 
