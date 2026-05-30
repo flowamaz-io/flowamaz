@@ -62,7 +62,7 @@ public sealed class WorkflowInstancesController : ControllerBase
         await _triggerValidator.ValidateAndThrowAsync(request, cancellationToken);
         var instance = await _orchestrator.TriggerAsync(
             workspaceId, request.WorkflowDefinitionId, request.Payload, request.IdempotencyKey,
-            isTest: request.IsTest, cancellationToken: cancellationToken);
+            isTest: request.IsTest, triggeredByUserId: _currentUser.UserId, cancellationToken: cancellationToken);
         return Ok(new TriggerInstanceResponse(instance.Id, instance.Status.ToString(), instance.CreatedAt));
     }
 

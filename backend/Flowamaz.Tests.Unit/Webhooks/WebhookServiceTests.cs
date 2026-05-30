@@ -135,7 +135,7 @@ public class WebhookServiceTests
         var instanceId = Guid.NewGuid();
         // Orchestrator dedups by idempotency key: same key → same instance.
         _orchestrator.Setup(o => o.TriggerAsync(
-                Workspace, Workflow, body, "idem-1", InstanceTriggerType.Webhook, null, false, It.IsAny<CancellationToken>()))
+                Workspace, Workflow, body, "idem-1", InstanceTriggerType.Webhook, null, false, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkflowInstance { Id = instanceId, Status = InstanceStatus.Pending });
 
         var svc = CreateService();
@@ -145,7 +145,7 @@ public class WebhookServiceTests
         first.InstanceId.Should().Be(instanceId);
         second.InstanceId.Should().Be(instanceId);
         _orchestrator.Verify(o => o.TriggerAsync(
-            Workspace, Workflow, body, "idem-1", InstanceTriggerType.Webhook, null, false, It.IsAny<CancellationToken>()),
+            Workspace, Workflow, body, "idem-1", InstanceTriggerType.Webhook, null, false, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
             Times.Exactly(2));
     }
 
@@ -159,7 +159,7 @@ public class WebhookServiceTests
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
         _orchestrator.Verify(o => o.TriggerAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<string?>(),
-            It.IsAny<InstanceTriggerType>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            It.IsAny<InstanceTriggerType>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

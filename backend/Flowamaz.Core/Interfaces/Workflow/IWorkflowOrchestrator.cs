@@ -24,6 +24,7 @@ public interface IWorkflowOrchestrator
         InstanceTriggerType triggerType = InstanceTriggerType.Manual,
         string? correlationId = null,
         bool isTest = false,
+        Guid? triggeredByUserId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Advances the instance: figures out the next node(s) from the graph and records transitions.</summary>

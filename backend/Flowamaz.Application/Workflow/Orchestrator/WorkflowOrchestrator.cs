@@ -81,6 +81,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         InstanceTriggerType triggerType = InstanceTriggerType.Manual,
         string? correlationId = null,
         bool isTest = false,
+        Guid? triggeredByUserId = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
@@ -150,7 +151,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             _audit?.RecordAsync(new Core.Models.AuditEventRequest
             {
                 WorkspaceId = workspaceId,
-                ActorType = triggerType == InstanceTriggerType.Manual ? "user" : "system",
+                ActorUserId = triggeredByUserId,
+                // A human trigger carries a user id; webhook/API/scheduled triggers have none → "system".
+                ActorType = triggeredByUserId.HasValue ? "user" : "system",
                 EventType = "instance.started",
                 ResourceType = "instance",
                 ResourceId = instance.Id,
