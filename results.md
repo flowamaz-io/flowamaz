@@ -1423,3 +1423,26 @@ DB index audit, rich health checks, response caching, skeletons, startup env val
 - [x] checkpoint → PHASE_COMPLETE
 
 **Skipped/deviations:** live Stripe checkout integration test skipped (network — not runnable in CI; not-configured path asserted + unit-tested). fix-07 candidates logged in checkpoint: template-publish vs workflow-publish YAML-format incompatibility (+ non-actionable publish exception); orchestrator instance.started audit lacks actor_user_id; breakpoint auto-pause scaffolded but not wired into the orchestrator step loop.
+
+---
+
+## 08-01 — Deferred fix-07 Items: DTO Validators + Stripe Allowlist + Domain Exceptions + Breakpoint + UX  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+The five fix-07 items deferred for tool-delivery reasons, all verified against the real codebase.
+
+- **FIX 1 — 6 DTO validators + Stripe redirect allowlist.** New `Flowamaz.Api/Validators/`: `CheckoutRequestValidator`, `PortalRequestValidator`, `PublishTemplateRequestValidator`, `InstallTemplateRequestValidator`, `ReplayRequestValidator`, `SetBreakpointRequestValidator`. Shared `RedirectUrlPolicy.IsAllowed(url, Platform:BaseUrl host, isDev→localhost)` gates Checkout success/cancel + Portal return URLs. Registered via `AddValidatorsFromAssemblyContaining<CheckoutRequestValidator>()` in Program.cs (Api-assembly scan — `AddApplication` only scans the Application assembly). `ValidateAndThrowAsync` wired into Billing/Templates/InstanceDebug controllers.
+- **FIX 2 — `TemplateException : AppException`.** Factory methods carry the spec status codes: not-found→404, workflow-not-published / invalid-yaml→422, validation→400. `TemplateService` install/publish now throw it instead of bare `InvalidOperationException`; `GlobalExceptionMiddleware` maps it unchanged. `TemplateServiceTests` asserts type + 422 + `workflow_not_published` code.
+- **FIX 3 — Breakpoint auto-pause in `StepAsync`.** New `InstanceStatus.BreakpointHit` (+ Running↔BreakpointHit transitions). Orchestrator takes optional `IBreakpointRegistry` + `IHostEnvironment` (null in unit tests → no-op); pre-node check in the frontier loop sets BreakpointHit + CurrentNodeId and returns `Continue([])` (worker idles, no re-enqueue). Resume transitions back to Running. `IBreakpointRegistry` gained `ShouldPause(ws,wf,instance,node)` + `MarkResumed(instance,node)` (per-(instance,node) resume set so the same breakpoint doesn't re-trigger). 2 new orchestrator tests (pause + resume).
+- **FIX 4 — Dev-endpoint workspace membership check.** `InstanceDebugController` breakpoint/resume/step now 403 when the caller isn't a workspace member (`IWorkspaceMemberRepository.GetAsync`). Resume/step also `MarkResumed` the paused node.
+- **FIX 5 — Frontend UX polish.** `FmTooltip` 150ms close-grace + bubble mouseenter/leave (pointer can travel into the bubble). Gates nav badge gets an `FmTooltip` explainer (Sidebar). GatesView empty state gains a "Learn about human gates" CTA → docs. ProductTour steps 4–5 reworded, all "canvas" references removed.
+- **Pre-existing build break fixed (unblocks DoD):** `SsoSettingsView` passed `'green'` to `FmBadge` (no such variant) → `vue-tsc` failure on `develop` before this prompt. Changed to `'primary'` (the green-family active variant). One-line, surgical.
+
+**DoD**
+- [x] Backend build 0 errors / 0 warnings; unit **535/535** (+3); integration **110/110** (+1 skipped)
+- [x] Web `vue-tsc -b && vite build` 0 errors; vitest **58/58**
+- [x] Serilog entry/exit/error preserved; breakpoint pause logged; workspace isolation enforced on dev endpoints
+- [x] Every new error actionable; empty-state CTA added
+
+**Deviations:** Prompt FIX 5 referenced an `isVisible`/`content`/`cta-href` API; adapted to the real `FmTooltip` (`open`/`text`) and `FmEmptyState` (`ctaLabel` + `@cta` emit). ProductTour step 4 reuses the "Create your first workflow" title per the prompt copy. Fixed an unrelated pre-existing `FmBadge` type error to satisfy the web-build DoD.

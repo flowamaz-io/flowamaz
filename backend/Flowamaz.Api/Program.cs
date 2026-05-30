@@ -8,6 +8,7 @@ using Flowamaz.Application.Health;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Infrastructure;
 using Flowamaz.Infrastructure.Jobs;
+using FluentValidation;
 using Quartz;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -83,6 +84,10 @@ builder.Services.AddSingleton<InstanceStatusWebSocketHandler>();
 // 8. Application layer — services + FluentValidation validators (one assembly scan).
 // ──────────────────────────────────────────────────────────────────────────────
 builder.Services.AddApplication();
+
+// Api-layer request validators (DTOs declared on the controllers themselves): billing checkout/
+// portal redirect allowlist, template publish/install, replay payload + breakpoint requests.
+builder.Services.AddValidatorsFromAssemblyContaining<Flowamaz.Api.Validators.CheckoutRequestValidator>();
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 10. CORS — origin allowlist from CORS_ALLOWED_ORIGINS env var (comma separated).

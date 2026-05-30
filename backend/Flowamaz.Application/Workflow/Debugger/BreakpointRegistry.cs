@@ -13,6 +13,8 @@ namespace Flowamaz.Application.Workflow.Debugger;
 public sealed class BreakpointRegistry : IBreakpointRegistry
 {
     private readonly ConcurrentDictionary<Guid, WorkflowBreakpoint> _breakpoints = new();
+    // (instanceId, nodeId) pairs already stepped past, so a resumed breakpoint does not re-pause.
+    private readonly ConcurrentDictionary<(Guid InstanceId, string NodeId), byte> _resumed = new();
     private readonly ILogger<BreakpointRegistry> _logger;
 
     public BreakpointRegistry(ILogger<BreakpointRegistry> logger) => _logger = logger;
@@ -47,4 +49,15 @@ public sealed class BreakpointRegistry : IBreakpointRegistry
         _breakpoints.Values.Any(
             b => b.WorkspaceId == workspaceId && b.WorkflowId == workflowId &&
                  string.Equals(b.NodeId, nodeId, StringComparison.Ordinal));
+
+    public bool ShouldPause(Guid workspaceId, Guid workflowId, Guid instanceId, string nodeId) =>
+        IsBreakpointSet(workspaceId, workflowId, nodeId) &&
+        !_resumed.ContainsKey((instanceId, nodeId));
+
+    public void MarkResumed(Guid instanceId, string nodeId)
+    {
+        _resumed[(instanceId, nodeId)] = 1;
+        _logger.LogInformation(
+            "BreakpointRegistry.MarkResumed instance={InstanceId} node={NodeId}", instanceId, nodeId);
+    }
 }

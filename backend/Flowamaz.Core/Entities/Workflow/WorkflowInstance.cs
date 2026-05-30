@@ -63,8 +63,10 @@ public class WorkflowInstance : WorkspaceEntity
             [InstanceStatus.Running] =
             [
                 InstanceStatus.Waiting, InstanceStatus.Completed, InstanceStatus.Failed,
-                InstanceStatus.Cancelled, InstanceStatus.Compensating,
+                InstanceStatus.Cancelled, InstanceStatus.Compensating, InstanceStatus.BreakpointHit,
             ],
+            // A breakpoint pause resumes back to Running, or the run can be cancelled outright.
+            [InstanceStatus.BreakpointHit] = [InstanceStatus.Running, InstanceStatus.Cancelled],
             [InstanceStatus.Waiting] =
             [
                 InstanceStatus.Running, InstanceStatus.Failed,

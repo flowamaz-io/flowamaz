@@ -3,6 +3,7 @@ using Flowamaz.Core.Enums;
 using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,6 +24,8 @@ public sealed class BillingController : ControllerBase
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IUsageAggregateRepository _usage;
     private readonly ICurrentUserService _currentUser;
+    private readonly IValidator<CheckoutRequest> _checkoutValidator;
+    private readonly IValidator<PortalRequest> _portalValidator;
     private readonly ILogger<BillingController> _logger;
 
     public BillingController(
@@ -32,6 +35,8 @@ public sealed class BillingController : ControllerBase
         ISubscriptionRepository subscriptions,
         IUsageAggregateRepository usage,
         ICurrentUserService currentUser,
+        IValidator<CheckoutRequest> checkoutValidator,
+        IValidator<PortalRequest> portalValidator,
         ILogger<BillingController> logger)
     {
         _stripe = stripe;
@@ -40,6 +45,8 @@ public sealed class BillingController : ControllerBase
         _subscriptions = subscriptions;
         _usage = usage;
         _currentUser = currentUser;
+        _checkoutValidator = checkoutValidator;
+        _portalValidator = portalValidator;
         _logger = logger;
     }
 
@@ -104,6 +111,7 @@ public sealed class BillingController : ControllerBase
     public async Task<ActionResult<CheckoutSessionResponse>> Checkout(
         [FromBody] CheckoutRequest request, CancellationToken cancellationToken)
     {
+        await _checkoutValidator.ValidateAndThrowAsync(request, cancellationToken);
         var orgId = RequireOrg();
         _logger.LogInformation("BillingController.Checkout enter org={OrgId} plan={PlanId}", orgId, request.PlanId);
 
@@ -120,6 +128,7 @@ public sealed class BillingController : ControllerBase
     public async Task<ActionResult<PortalSessionResponse>> Portal(
         [FromBody] PortalRequest request, CancellationToken cancellationToken)
     {
+        await _portalValidator.ValidateAndThrowAsync(request, cancellationToken);
         var orgId = RequireOrg();
         _logger.LogInformation("BillingController.Portal enter org={OrgId}", orgId);
 

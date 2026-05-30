@@ -15,4 +15,14 @@ public interface IBreakpointRegistry
 
     /// <summary>True if a breakpoint is set for this workflow + node in the workspace.</summary>
     bool IsBreakpointSet(Guid workspaceId, Guid workflowId, string nodeId);
+
+    /// <summary>
+    /// True when the orchestrator should pause this instance before <paramref name="nodeId"/>: a
+    /// breakpoint is set AND this (instance, node) has not already been resumed past. Resuming marks
+    /// the pair via <see cref="MarkResumed"/> so the same breakpoint does not re-trigger immediately.
+    /// </summary>
+    bool ShouldPause(Guid workspaceId, Guid workflowId, Guid instanceId, string nodeId);
+
+    /// <summary>Records that this instance has been resumed past <paramref name="nodeId"/>'s breakpoint.</summary>
+    void MarkResumed(Guid instanceId, string nodeId);
 }

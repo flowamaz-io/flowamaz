@@ -3,6 +3,7 @@ using Flowamaz.Application.Workflow.DTOs;
 using Flowamaz.Application.Workflow.Services;
 using Flowamaz.Core.Entities.Library;
 using Flowamaz.Core.Enums;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Library;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
@@ -101,8 +102,7 @@ public sealed partial class TemplateService : ITemplateService
             templateId, workspaceId);
 
         var template = await _templates.GetByIdAsync(templateId, ct)
-            ?? throw new InvalidOperationException(
-                $"Template '{templateId}' was not found or is no longer available. Refresh the gallery and try again.");
+            ?? throw TemplateException.NotFound(templateId);
 
         var workflowName = string.IsNullOrWhiteSpace(name) ? template.Name : name.Trim();
 
@@ -148,24 +148,20 @@ public sealed partial class TemplateService : ITemplateService
             workflowId, workspaceId);
 
         if (string.IsNullOrWhiteSpace(details.Name))
-            throw new InvalidOperationException("A template name is required to publish.");
+            throw TemplateException.Validation("A template name is required to publish.");
         if (string.IsNullOrWhiteSpace(details.Category))
-            throw new InvalidOperationException("A category is required to publish a template.");
+            throw TemplateException.Validation("A category is required to publish a template.");
 
         var definition = await _definitions.GetByIdForWorkspaceAsync(workflowId, workspaceId, ct)
-            ?? throw new InvalidOperationException(
-                $"Workflow '{workflowId}' was not found in this workspace. You can only publish a workflow you own.");
+            ?? throw TemplateException.WorkflowNotFound(workflowId);
 
         if (definition.Status != WorkflowStatus.Published)
-            throw new InvalidOperationException(
-                "Only a published workflow can be turned into a template. Publish the workflow first, then publish it as a template.");
+            throw TemplateException.WorkflowNotPublished();
 
         // Validate via the six-layer validator (never string manipulation) — refuse a broken template.
         var validation = await _validator.ValidateAsync(definition.YamlContent, workspaceId, ct);
         if (!validation.IsValid)
-            throw new InvalidOperationException(
-                "This workflow's YAML is not valid and cannot be published as a template. Fix the workflow, then publish again. First error: "
-                + validation.Errors[0].Message);
+            throw TemplateException.InvalidYaml(validation.Errors[0].Message);
 
         var slug = await BuildUniqueTemplateSlugAsync(details.Name, ct);
 

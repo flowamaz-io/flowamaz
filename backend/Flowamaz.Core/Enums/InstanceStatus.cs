@@ -13,4 +13,10 @@ public enum InstanceStatus
     Failed,
     Cancelled,
     Compensating,
+
+    /// <summary>
+    /// Paused at a Development breakpoint before a node executed (prompt 07-04 / 08-01). Reachable
+    /// only in the Development environment; resume transitions back to Running.
+    /// </summary>
+    BreakpointHit,
 }

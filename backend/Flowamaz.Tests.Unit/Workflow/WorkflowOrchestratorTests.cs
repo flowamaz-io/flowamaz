@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Flowamaz.Application.Workflow.Debugger;
 using Flowamaz.Application.Workflow.Orchestrator;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
@@ -7,7 +8,9 @@ using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Queue;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Workflow;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
@@ -281,6 +284,109 @@ public class WorkflowOrchestratorTests
         instance.Status.Should().Be(InstanceStatus.Compensating);
         instance.SagaState.Should().Be(SagaState.Compensating);
         appended.Select(e => e.EventType).Should().Contain("CompensationStarted");
+    }
+
+    [Fact]
+    public async Task StepAsync_with_breakpoint_set_pauses_instance_at_node()
+    {
+        const string yaml = """
+            workflow: { id: w, version: v1, name: W }
+            nodes:
+              - { id: start, type: Trigger }
+              - { id: a, type: Action }
+              - { id: done, type: End }
+            edges:
+              - { id: e1, from: start, to: a }
+              - { id: e2, from: a, to: done }
+            """;
+        var (instanceId, instance) = SetupCapturedRunnableInstance(yaml);
+        AllConditionsTrue();
+
+        var registry = new BreakpointRegistry(NullLogger<BreakpointRegistry>.Instance);
+        registry.Add(_workspaceId, _definitionId, "a");
+
+        var result = await NewOrchestratorWithBreakpoints(registry, DevEnvironment).StepAsync(instanceId, "worker-1");
+
+        instance.Status.Should().Be(InstanceStatus.BreakpointHit);
+        instance.CurrentNodeId.Should().Be("a");
+        result.IsComplete.Should().BeFalse();
+        result.NextNodes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StepAsync_after_resume_clears_pause_and_surfaces_node()
+    {
+        const string yaml = """
+            workflow: { id: w, version: v1, name: W }
+            nodes:
+              - { id: start, type: Trigger }
+              - { id: a, type: Action }
+              - { id: done, type: End }
+            edges:
+              - { id: e1, from: start, to: a }
+              - { id: e2, from: a, to: done }
+            """;
+        var (instanceId, instance) = SetupCapturedRunnableInstance(yaml);
+        AllConditionsTrue();
+
+        var registry = new BreakpointRegistry(NullLogger<BreakpointRegistry>.Instance);
+        registry.Add(_workspaceId, _definitionId, "a");
+        var orchestrator = NewOrchestratorWithBreakpoints(registry, DevEnvironment);
+
+        // First step pauses at the breakpoint.
+        await orchestrator.StepAsync(instanceId, "worker-1");
+        instance.Status.Should().Be(InstanceStatus.BreakpointHit);
+
+        // Resume clears the per-instance pause. The first step persisted the trigger as completed; the
+        // breakpoint node "a" was never entered, so the frontier re-seeds "a".
+        registry.MarkResumed(instanceId, "a");
+        _nodeStates.Setup(r => r.GetForInstanceAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WorkflowNodeState
+            {
+                WorkspaceId = _workspaceId, InstanceId = instanceId, NodeId = "start",
+                NodeType = "Trigger", Status = NodeStatus.Completed,
+            }]);
+
+        var result = await orchestrator.StepAsync(instanceId, "worker-1");
+
+        instance.Status.Should().Be(InstanceStatus.Running);
+        result.NextNodes.Should().ContainSingle().Which.Should().Be("a");
+    }
+
+    private static readonly IHostEnvironment DevEnvironment = new FakeHostEnvironment(Environments.Development);
+
+    private sealed class FakeHostEnvironment : IHostEnvironment
+    {
+        public FakeHostEnvironment(string environmentName) => EnvironmentName = environmentName;
+        public string EnvironmentName { get; set; }
+        public string ApplicationName { get; set; } = "Flowamaz.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!;
+    }
+
+    private WorkflowOrchestrator NewOrchestratorWithBreakpoints(IBreakpointRegistry breakpoints, IHostEnvironment environment) => new(
+        _definitions.Object, _versions.Object, _instances.Object, _nodeStates.Object,
+        _variables.Object, _events.Object, _queue.Object, _variableEvaluation.Object,
+        _unitOfWork.Object, new SfgParser(), NullLogger<WorkflowOrchestrator>.Instance,
+        breakpoints: breakpoints, environment: environment);
+
+    private (Guid InstanceId, WorkflowInstance Instance) SetupCapturedRunnableInstance(string yaml)
+    {
+        var instanceId = Guid.NewGuid();
+        var instance = new WorkflowInstance
+        {
+            Id = instanceId,
+            WorkspaceId = _workspaceId,
+            WorkflowDefinitionId = _definitionId,
+            WorkflowVersionId = _versionId,
+            Status = InstanceStatus.Pending,
+        };
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(instance);
+        _versions.Setup(r => r.GetByIdForWorkspaceAsync(_versionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowVersion { Id = _versionId, WorkspaceId = _workspaceId, YamlContent = yaml });
+        _nodeStates.Setup(r => r.GetForInstanceAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _events.Setup(r => r.GetNextSequenceNumberAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        return (instanceId, instance);
     }
 
     private static string ActionYaml() => """

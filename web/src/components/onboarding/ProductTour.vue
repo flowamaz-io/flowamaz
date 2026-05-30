@@ -51,13 +51,13 @@ const STEPS: TourStepDef[] = [
     selector: '[data-tour="library-nav"]',
   },
   {
-    title: 'The visual canvas',
-    body: 'This is the visual canvas. Drag nodes, connect them, and use Co-pilot to make changes in plain English.',
+    title: 'Create your first workflow',
+    body: 'Choose how you want to build — describe it in plain English, upload a document, or start from a template.',
     selector: '[data-tour="creation-methods"]',
   },
   {
-    title: "You're ready to automate",
-    body: "You're all set. Here's a ready-made template to get your first automation running fast.",
+    title: 'Ready to automate',
+    body: 'Start from a pre-built template or explore on your own.',
     selector: '[data-tour="creation-methods"]',
     primaryActionLabel: 'Start from template',
     onPrimaryAction: () => {

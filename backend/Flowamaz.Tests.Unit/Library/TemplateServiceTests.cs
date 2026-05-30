@@ -134,8 +134,9 @@ public sealed class TemplateServiceTests
         var details = new PublishTemplateDetails("My Template", "desc", "Finance", ["finance"], null);
         var act = async () => await NewService().PublishTemplateAsync(workflowId, _ws, _user, _org, details);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*published workflow*");
+        (await act.Should().ThrowAsync<Flowamaz.Core.Exceptions.TemplateException>()
+            .Where(e => e.HttpStatusCode == 422 && e.ErrorCode == "workflow_not_published"))
+            .And.Message.Should().Contain("Publish the workflow");
         _templates.Verify(r => r.AddAsync(It.IsAny<WorkflowTemplate>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

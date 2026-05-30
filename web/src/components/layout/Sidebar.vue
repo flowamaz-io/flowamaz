@@ -15,6 +15,7 @@ import WorkspaceSwitcher from './WorkspaceSwitcher.vue';
 import UserMenu from './UserMenu.vue';
 import NotificationBell from './NotificationBell.vue';
 import EditionBanner from './EditionBanner.vue';
+import FmTooltip from '@/components/common/FmTooltip.vue';
 
 const ui = useUiStore();
 const { sidebarCollapsed, sidebarMinimized } = storeToRefs(ui);
@@ -238,9 +239,18 @@ function closeMobile(): void {
               <span :class="['flex-1', { 'md:hidden': sidebarMinimized }]">{{ item.label }}</span>
               <span
                 v-if="badgeCount(item) > 0 && !sidebarMinimized"
-                :title="item.badgeKey === 'gates' ? 'Workflows waiting for your approval.' : undefined"
                 class="ml-auto rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-white"
               >{{ badgeCount(item) }}</span>
+              <span
+                v-if="item.badgeKey === 'gates' && !sidebarMinimized"
+                class="ml-1 inline-flex"
+                @click.stop.prevent
+              >
+                <FmTooltip
+                  text="Gates pause a workflow for a human decision. This badge shows approvals waiting on you."
+                  label="About gates"
+                />
+              </span>
             </RouterLink>
 
             <!-- Tooltip (desktop collapsed only) -->

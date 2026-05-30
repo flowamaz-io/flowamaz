@@ -7,6 +7,7 @@ using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Workflow;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Flowamaz.Application.Workflow.Orchestrator;
@@ -38,6 +39,10 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
     // Best-effort in-app notifications on terminal state (prompt 06-06); optional for unit tests.
     private readonly INotificationService? _notifications;
     private readonly IAuditService? _audit;
+    // Development breakpoints (prompt 07-04 / 08-01): when set and the host is Development, StepAsync
+    // pauses before the node. Both optional so unit tests can omit them (no breakpoint behaviour).
+    private readonly IBreakpointRegistry? _breakpoints;
+    private readonly IHostEnvironment? _environment;
 
     public WorkflowOrchestrator(
         IWorkflowDefinitionRepository definitions,
@@ -54,7 +59,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         ISagaEngine? sagaEngine = null,
         IEditionService? edition = null,
         INotificationService? notifications = null,
-        IAuditService? audit = null)
+        IAuditService? audit = null,
+        IBreakpointRegistry? breakpoints = null,
+        IHostEnvironment? environment = null)
     {
         _definitions = definitions;
         _versions = versions;
@@ -71,6 +78,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _edition = edition;
         _notifications = notifications;
         _audit = audit;
+        _breakpoints = breakpoints;
+        _environment = environment;
     }
 
     public async Task<WorkflowInstance> TriggerAsync(
@@ -207,6 +216,14 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                 return OrchestratorResult.Complete;
             }
 
+            // Resuming from a breakpoint: the run was paused before a node; return it to Running so the
+            // frontier can advance. The resumed (instance, node) was marked so it will not re-pause.
+            if (instance.Status == InstanceStatus.BreakpointHit)
+            {
+                instance.TransitionTo(InstanceStatus.Running);
+                _instances.Update(instance);
+            }
+
             var graph = await LoadGraphAsync(instance, cancellationToken);
             var states = await _nodeStates.GetForInstanceAsync(instanceId, cancellationToken);
             var statedNodeIds = states.Select(s => s.NodeId).ToHashSet(StringComparer.Ordinal);
@@ -252,6 +269,22 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                 if (!statedNodeIds.Add(nodeId)) continue; // already entered
                 var node = graph.FindNode(nodeId);
                 if (node is null) continue;
+
+                // Development breakpoint: pause the run before this node executes. The instance is left
+                // BreakpointHit with CurrentNodeId pointing at the node; resume re-enters StepAsync.
+                if (_environment?.IsDevelopment() == true && _breakpoints is not null &&
+                    _breakpoints.ShouldPause(instance.WorkspaceId, instance.WorkflowDefinitionId, instance.Id, node.Id))
+                {
+                    instance.TransitionTo(InstanceStatus.BreakpointHit);
+                    instance.CurrentNodeId = node.Id;
+                    _instances.Update(instance);
+                    seq = await AppendEventAsync(seq, instance, "BreakpointHit", node.Id, node.Type.ToString(), "{}", cancellationToken);
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                    _logger.LogInformation(
+                        "WorkflowOrchestrator.StepAsync breakpoint — instance {InstanceId} paused at node {NodeId}",
+                        instance.Id, node.Id);
+                    return OrchestratorResult.Continue([]);
+                }
 
                 switch (node.Type)
                 {

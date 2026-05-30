@@ -1,17 +1,22 @@
 ## Checkpoint
-Phase: fix-phase-07
-Phase Title: Phase 7 Fix — Template Format + DTO Validation + Audit + Polish
-Total Prompts This Phase: 2
-Completed: 2
-Current Prompt: fix-07-02-medium-low
-Next Prompt: PHASE_COMPLETE
-Phase End Status: complete
+Phase: 08
+Phase Title: Deferred Fixes + Marketing Site + Documentation + Multi-Workspace + Launch Readiness + UI Polish + Final Integration
+Total Prompts This Phase: 7
+Completed: 1
+Current Prompt: 08-02-marketing-site
+Next Prompt: 08-03-documentation
+Phase End Status: not started
 Session Tokens: Low
 Last Updated: 2026-05-30
 Notes: |
-  Critical SfgParser fix + audit actor + dev hardening committed.
-  Verified: dotnet test Flowamaz.sln — Unit 533/533, Integration 110 passed / 1 skipped, 0 failed.
-  Commits: 6dbae64 (SfgParser spec.nodes), 582e270 (dev filter + replay 404 + .env cleanup),
-  5f89fb8 (instance.started actor_user_id).
-  Deferred to fix-07-02 or Phase 8: DTO validators, Stripe URL allowlist,
-  breakpoint auto-pause, frontend UX polish.
+  Phases 01-07 + all fix phases complete. Starting Phase 08 — FINAL phase.
+  Phase 08 delivers: deferred fix-07 items, marketing site, documentation,
+  multi-workspace UX, launch readiness (k6, staging, security headers),
+  final UI polish, and integration to S80.
+  After Phase 08 PHASE_COMPLETE: comprehensive testing session begins.
+  Phase report: phase-08-report.md
+  08-01 DONE: 6 DTO validators + Stripe redirect allowlist, TemplateException (404/422/400),
+  breakpoint auto-pause wired into orchestrator StepAsync (InstanceStatus.BreakpointHit +
+  per-instance resume set), dev-endpoint workspace membership check, FmTooltip/Gates/ProductTour
+  UX polish. Also fixed pre-existing SsoSettingsView FmBadge 'green'→'primary' web-build break.
+  unit 535/535, integration 110/110(+1 skip), web build + vitest 58/58.

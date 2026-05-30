@@ -14,6 +14,10 @@ type Tab = 'pending' | 'all';
 
 const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
 
+function openHumanGatesDocs(): void {
+  window.open('https://docs.flowamaz.io/human-gates', '_blank', 'noopener');
+}
+
 const allGates = ref<GateResponse[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -182,6 +186,8 @@ onMounted(load);
           ? 'All caught up — no workflows are waiting for your approval right now.'
           : 'Gates will appear here once workflows reach a human-approval step.'
       "
+      cta-label="Learn about human gates"
+      @cta="openHumanGatesDocs"
     />
 
     <!-- Table -->

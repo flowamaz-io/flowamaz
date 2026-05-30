@@ -37,7 +37,7 @@ const statusLabel = computed(() => {
   return config.value.isActive ? 'Configured + Active' : 'Configured but inactive';
 });
 const statusVariant = computed(() =>
-  !config.value ? 'slate' : config.value.isActive ? 'green' : 'amber',
+  !config.value ? 'slate' : config.value.isActive ? 'primary' : 'amber',
 );
 
 async function load(): Promise<void> {

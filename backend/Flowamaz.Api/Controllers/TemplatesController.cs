@@ -3,6 +3,7 @@ using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Library;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Models;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,11 +19,19 @@ public sealed class TemplatesController : ControllerBase
 {
     private readonly ITemplateService _templates;
     private readonly ICurrentUserService _currentUser;
+    private readonly IValidator<InstallTemplateRequest> _installValidator;
+    private readonly IValidator<PublishTemplateRequest> _publishValidator;
 
-    public TemplatesController(ITemplateService templates, ICurrentUserService currentUser)
+    public TemplatesController(
+        ITemplateService templates,
+        ICurrentUserService currentUser,
+        IValidator<InstallTemplateRequest> installValidator,
+        IValidator<PublishTemplateRequest> publishValidator)
     {
         _templates = templates;
         _currentUser = currentUser;
+        _installValidator = installValidator;
+        _publishValidator = publishValidator;
     }
 
     [HttpGet("templates")]
@@ -47,6 +56,7 @@ public sealed class TemplatesController : ControllerBase
     public async Task<ActionResult<InstallTemplateResponse>> Install(
         Guid workspaceId, Guid templateId, [FromBody] InstallTemplateRequest request, CancellationToken ct)
     {
+        await _installValidator.ValidateAndThrowAsync(request, ct);
         var userId = _currentUser.UserId
             ?? throw new InvalidOperationException("A signed-in user is required to install a template.");
         var workflowId = await _templates.InstallTemplateAsync(templateId, workspaceId, userId, request.Name, ct);
@@ -58,6 +68,7 @@ public sealed class TemplatesController : ControllerBase
     public async Task<ActionResult<PublishTemplateResult>> Publish(
         Guid workspaceId, [FromBody] PublishTemplateRequest request, CancellationToken ct)
     {
+        await _publishValidator.ValidateAndThrowAsync(request, ct);
         var userId = _currentUser.UserId
             ?? throw new InvalidOperationException("A signed-in user is required to publish a template.");
         var orgId = _currentUser.OrgId
