@@ -2,9 +2,9 @@
 Phase: 06
 Phase Title: Webhook Triggers + Node Config Editor + Public API + SSO + Connector Marketplace + App Shell Polish
 Total Prompts This Phase: 7
-Completed: 3
-Current Prompt: 06-04-sso
-Next Prompt: 06-05-connector-marketplace
+Completed: 4
+Current Prompt: 06-05-connector-marketplace
+Next Prompt: 06-06-sidebar-design-final
 Phase End Status: not started
 Session Tokens: Low
 Last Updated: 2026-05-30

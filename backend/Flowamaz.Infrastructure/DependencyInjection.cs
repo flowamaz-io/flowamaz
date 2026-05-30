@@ -174,6 +174,11 @@ public static class DependencyInjection
         services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
         services.AddSingleton<IPublicApiRateLimiter, RedisPublicApiRateLimiter>();
         services.AddScoped<IWebhookEndpointRepository, WebhookEndpointRepository>();
+        services.AddScoped<IOrgSsoConfigRepository, OrgSsoConfigRepository>();
+        services.AddSingleton<ISamlProcessor, Services.Sso.SamlProcessor>();
+        services.AddSingleton<IOidcStateStore, Services.Sso.RedisOidcStateStore>();
+        services.AddHttpClient(Services.Sso.OidcClient.HttpClientName);
+        services.AddScoped<IOidcClient, Services.Sso.OidcClient>();
         services.AddScoped<IConnectorCatalogueService, ConnectorCatalogueService>();
         services.AddHttpClient(ConnectorSandbox.HttpClientName);
         services.AddScoped<IConnectorSandbox, ConnectorSandbox>();

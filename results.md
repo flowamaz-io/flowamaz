@@ -1192,3 +1192,24 @@ Clean, documented, separately-rate-limited public REST API at `/api/public/v1` u
 - [x] API-key-only auth; missing key → 401 with `app.flowamaz.io/settings/api-keys` hint; 429 carries `X-RateLimit-Reset`
 - [x] Workspace isolation (every query scoped by the API key's workspace); idempotency on `/trigger`
 - [x] `/api-docs` Scalar shows only the public endpoints
+
+---
+
+## 06-04 — SSO (SAML 2.0 + OIDC)  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Enterprise SSO with JIT provisioning. Org owners configure their IdP; users in SSO-enabled orgs are redirected to the IdP and provisioned on first login with the Viewer role. Password login unchanged for non-SSO orgs.
+
+- **`OrgSsoConfig` entity** (one row/org, unique index) — SAML (idp entity/sso-url/encrypted cert/sp-entity) + OIDC (issuer/client-id/encrypted secret/scopes). Cert + client secret encrypted via the org-scoped `ISecretProtector`. Added `OrgUser.IsSsoProvisioned`. Migration `AddSsoConfig`.
+- **`SsoService`** — `GetStatusAsync` (login-screen probe), `ConfigureAsync`/`GetConfigAsync`/`DisableAsync` (no secrets in DTO), `ProvisionUserFromSsoAsync` (find-by-email-in-org → update name, else create with Viewer membership in every org workspace + `IsSsoProvisioned`), SAML metadata/initiate/`HandleSamlCallbackAsync`, OIDC initiate/`HandleOidcCallbackAsync`. Issues a Flowamaz JWT after provisioning — identical to password login downstream.
+- **Mockable protocol seams** (Core interfaces, Infra impls): `ISamlProcessor` (`SamlProcessor` — framework `SignedXml` enveloped-signature validation against the IdP cert + audience/NotOnOrAfter checks; SP metadata + AuthnRequest URL; **deviation:** used the built-in XML-DSig stack instead of ITfoxtec to avoid an unvetted dependency), `IOidcClient` (`OidcClient` — discovery + code exchange + id_token claim decode; full JWKS signature validation flagged as follow-up), `IOidcStateStore` (`RedisOidcStateStore` — single-use 10-min `state` via `StringGetDelete`, CSRF defence).
+- **Controllers** — `SsoController` (anonymous status + SAML metadata/login/ACS; org-owner-gated config GET/PUT/test/DELETE under `/api/v1/organisations/{id}/sso`), `OidcController` (anonymous initiate/callback). Successful callbacks redirect to the app with a short-lived `#sso_token` fragment.
+- **Frontend** — `sso.service.ts`; `LoginView.vue` detects SSO after the org slug is entered (debounced) → hides the password field, shows "Continue with SSO" → navigates to the backend initiate URL; `SsoSettingsView.vue` (org settings: SAML/OIDC forms, SP entity id, status badge, Save/Test, write-only cert/secret); routes `settings/sso`.
+
+**DoD**
+- [x] Backend build 0/0; unit **479/479** (+5 SSO: provision new/existing, SAML bad-sig throws, OIDC valid/invalid-state)
+- [x] Web typecheck 0; lint 0 errors; web tests **51/51** (+2 LoginView SSO detection)
+- [x] JIT provisioning (Viewer default); existing user updated, not duplicated; invalid SAML sig / OIDC state rejected
+- [x] IdP cert + client secret encrypted at rest; DTOs never expose them; password login still works for non-SSO orgs
+- [~] OIDC id_token JWKS signature validation + a third-party-hardened SAML library are documented follow-ups (functional scaffold validates signature via SignedXml + state/audience/timestamp)

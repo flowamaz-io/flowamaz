@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceApiKeyService, WorkspaceApiKeyService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
         services.AddScoped<AuthService>();
+        services.AddScoped<ISsoService, Auth.Services.SsoService>();
 
         // Workflow engine (prompt 02-02). SfgParser is stateless → singleton.
         services.AddSingleton<SfgParser>();

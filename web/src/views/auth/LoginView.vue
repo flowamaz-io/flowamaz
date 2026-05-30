@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
@@ -8,6 +8,7 @@ import { useAuth } from '@/composables/useAuth';
 import { isOnboardingComplete } from '@/composables/useOnboarding';
 import { toUserFacingError } from '@/utils/error.util';
 import { APP_NAME } from '@/utils/constants';
+import { ssoService } from '@/services/sso.service';
 
 const router = useRouter();
 const auth = useAuth();
@@ -17,6 +18,45 @@ const orgSlug = ref('');
 const password = ref('');
 const submitting = ref(false);
 const error = ref('');
+
+// SSO: once the org is known, check whether it enforces SSO and, if so, hide the
+// password field and offer a "Continue with {provider}" button instead.
+const ssoProvider = ref<string | null>(null);
+const checkingSso = ref(false);
+let ssoTimer: ReturnType<typeof setTimeout> | undefined;
+
+const providerLabel = (provider: string): string =>
+  provider === 'saml' ? 'SSO' : provider === 'oidc' ? 'SSO' : provider;
+
+async function checkSso(): Promise<void> {
+  ssoProvider.value = null;
+  const slug = orgSlug.value.trim();
+  if (!slug) return;
+  checkingSso.value = true;
+  try {
+    const status = await ssoService.getStatus(slug);
+    ssoProvider.value = status.enabled ? status.provider : null;
+  } catch {
+    ssoProvider.value = null;
+  } finally {
+    checkingSso.value = false;
+  }
+}
+
+function onOrgInput(): void {
+  ssoProvider.value = null;
+  if (ssoTimer) clearTimeout(ssoTimer);
+  ssoTimer = setTimeout(checkSso, 400);
+}
+
+function continueWithSso(): void {
+  if (!ssoProvider.value) return;
+  window.location.href = ssoService.initiateUrl(orgSlug.value.trim(), ssoProvider.value);
+}
+
+watch(orgSlug, onOrgInput);
+
+defineExpose({ checkSso, orgSlug });
 
 async function submit(): Promise<void> {
   error.value = '';
@@ -82,6 +122,7 @@ async function submit(): Promise<void> {
             help="Your organisation's unique slug, chosen at signup."
           />
           <FmInput
+            v-if="!ssoProvider"
             v-model="password"
             type="password"
             label="Password"
@@ -90,7 +131,10 @@ async function submit(): Promise<void> {
           />
         </div>
 
-        <div class="mt-2 text-right">
+        <div
+          v-if="!ssoProvider"
+          class="mt-2 text-right"
+        >
           <RouterLink
             to="/forgot-password"
             class="text-sm text-primary-600 hover:text-primary-700"
@@ -100,6 +144,7 @@ async function submit(): Promise<void> {
         </div>
 
         <FmButton
+          v-if="!ssoProvider"
           type="submit"
           :loading="submitting"
           block
@@ -107,6 +152,23 @@ async function submit(): Promise<void> {
         >
           Sign in
         </FmButton>
+
+        <div
+          v-else
+          class="mt-4"
+        >
+          <p class="mb-2 text-center text-sm text-slate-500">
+            Your organisation uses single sign-on.
+          </p>
+          <FmButton
+            type="button"
+            block
+            data-test="sso-button"
+            @click="continueWithSso"
+          >
+            Continue with {{ providerLabel(ssoProvider) }}
+          </FmButton>
+        </div>
       </form>
 
       <p class="mt-6 text-center text-sm text-slate-500">

@@ -72,6 +72,8 @@ public class FlowAmazDbContext : DbContext
 
     public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
 
+    public DbSet<OrgSsoConfig> OrgSsoConfigs => Set<OrgSsoConfig>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

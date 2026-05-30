@@ -16,4 +16,7 @@ public class OrgUser : BaseEntity
     public DateTime? LastLoginAt { get; set; }
     public DateTime? LockoutUntil { get; set; }
     public int FailedLoginCount { get; set; }
+
+    /// <summary>True when the account was just-in-time provisioned via SSO (no password login).</summary>
+    public bool IsSsoProvisioned { get; set; }
 }
