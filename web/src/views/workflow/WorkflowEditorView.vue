@@ -145,12 +145,20 @@ onUnmounted(() => {
 <template>
   <div class="flex flex-col h-full overflow-hidden bg-neutral-950">
     <!-- Loading -->
-    <div v-if="loading" class="flex-1 flex items-center justify-center">
+    <div
+      v-if="loading"
+      class="flex-1 flex items-center justify-center"
+    >
       <div class="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
     </div>
 
     <!-- Error -->
-    <div v-else-if="error" class="flex-1 flex items-center justify-center text-red-400 text-sm p-8">{{ error }}</div>
+    <div
+      v-else-if="error"
+      class="flex-1 flex items-center justify-center text-red-400 text-sm p-8"
+    >
+      {{ error }}
+    </div>
 
     <template v-else>
       <!-- Toolbar -->
@@ -158,7 +166,10 @@ onUnmounted(() => {
         <span class="text-sm font-semibold text-white truncate flex-1">Edit workflow</span>
 
         <!-- Health score -->
-        <div v-if="healthScore !== null" :class="['text-xs font-medium', healthColour(healthScore)]">
+        <div
+          v-if="healthScore !== null"
+          :class="['text-xs font-medium', healthColour(healthScore)]"
+        >
           Health: {{ healthScore }}%
         </div>
 
@@ -173,15 +184,22 @@ onUnmounted(() => {
           class="text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg px-3 py-1.5 disabled:opacity-40"
           :disabled="!isDirty || saveState === 'saving'"
           @click="save"
-        >Save</button>
+        >
+          Save
+        </button>
 
         <button
           class="text-xs bg-violet-900 hover:bg-violet-800 text-violet-300 rounded-lg px-3 py-1.5"
           @click="copilotOpen = !copilotOpen"
-        >✦ Co-pilot <kbd class="ml-1 text-neutral-400">⌘K</kbd></button>
+        >
+          ✦ Co-pilot <kbd class="ml-1 text-neutral-400">⌘K</kbd>
+        </button>
 
         <!-- Validation badge -->
-        <div ref="validationBadgeRef" class="relative shrink-0">
+        <div
+          ref="validationBadgeRef"
+          class="relative shrink-0"
+        >
           <button
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
             :class="validationErrorCount > 0
@@ -191,9 +209,18 @@ onUnmounted(() => {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
             @click="onValidationBadgeClick"
           >
-            <XCircle v-if="validationErrorCount > 0" class="w-3.5 h-3.5" />
-            <AlertTriangle v-else-if="validationWarningCount > 0" class="w-3.5 h-3.5" />
-            <CheckCircle2 v-else class="w-3.5 h-3.5 text-teal-500" />
+            <XCircle
+              v-if="validationErrorCount > 0"
+              class="w-3.5 h-3.5"
+            />
+            <AlertTriangle
+              v-else-if="validationWarningCount > 0"
+              class="w-3.5 h-3.5"
+            />
+            <CheckCircle2
+              v-else
+              class="w-3.5 h-3.5 text-teal-500"
+            />
             <span v-if="validationErrorCount > 0">{{ validationErrorCount }} error{{ validationErrorCount > 1 ? 's' : '' }}</span>
             <span v-else-if="validationWarningCount > 0">{{ validationWarningCount }} warning{{ validationWarningCount > 1 ? 's' : '' }}</span>
             <span v-else>Valid</span>
@@ -203,7 +230,10 @@ onUnmounted(() => {
             v-if="showValidationPanel"
             class="absolute top-full mt-1 right-0 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 p-3"
           >
-            <div v-if="validationErrorsList.length > 0" class="mb-3">
+            <div
+              v-if="validationErrorsList.length > 0"
+              class="mb-3"
+            >
               <p class="text-xs font-semibold text-red-700 uppercase tracking-wider mb-1">
                 Errors — must fix before publishing
               </p>
@@ -241,23 +271,35 @@ onUnmounted(() => {
           <button
             :class="['text-xs px-3 py-1.5 transition-colors', !empathyMode ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:text-gray-900']"
             @click="empathyMode = false"
-          >Technical</button>
+          >
+            Technical
+          </button>
           <button
             :class="['text-xs px-3 py-1.5 transition-colors', empathyMode ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-700 hover:text-gray-900']"
             @click="enableEmpathy"
-          >Empathy</button>
+          >
+            Empathy
+          </button>
         </div>
 
         <button
           class="text-xs text-neutral-400 hover:text-white"
           @click="openArticle('workflow-empathy')"
-        >Help</button>
+        >
+          Help
+        </button>
       </div>
 
       <!-- Editor split pane -->
-      <div class="flex flex-1 overflow-hidden" :class="{ 'cursor-col-resize': dragging }">
+      <div
+        class="flex flex-1 overflow-hidden"
+        :class="{ 'cursor-col-resize': dragging }"
+      >
         <!-- Canvas -->
-        <div :style="{ width: splitRatio + '%' }" class="relative overflow-hidden border-r border-neutral-700">
+        <div
+          :style="{ width: splitRatio + '%' }"
+          class="relative overflow-hidden border-r border-neutral-700"
+        >
           <SfgCanvas
             :key="workflowId"
             :initial-yaml="yaml"

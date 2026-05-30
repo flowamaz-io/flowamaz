@@ -86,8 +86,12 @@ onUnmounted(() => {
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-xl font-semibold text-slate-900">Connector Health</h1>
-        <p class="text-sm text-slate-500">Status of all installed connector credentials. Refreshes every 30 s.</p>
+        <h1 class="text-xl font-semibold text-slate-900">
+          Connector Health
+        </h1>
+        <p class="text-sm text-slate-500">
+          Status of all installed connector credentials. Refreshes every 30 s.
+        </p>
       </div>
     </div>
 
@@ -123,12 +127,24 @@ onUnmounted(() => {
       <table class="min-w-full divide-y divide-slate-200 text-sm">
         <thead class="bg-slate-50">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Connector</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Credential</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last Used</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Calls / Hour</th>
-            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Expires</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Connector
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Credential
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Status
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Last Used
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Calls / Hour
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Expires
+            </th>
             <th class="px-4 py-3" />
           </tr>
         </thead>
@@ -141,7 +157,9 @@ onUnmounted(() => {
             <td class="px-4 py-3 font-medium text-slate-800 font-mono text-xs">
               {{ item.connectorId }}
             </td>
-            <td class="px-4 py-3 text-slate-600">{{ item.credentialName }}</td>
+            <td class="px-4 py-3 text-slate-600">
+              {{ item.credentialName }}
+            </td>
             <td class="px-4 py-3">
               <div class="flex items-center gap-1.5">
                 <span :class="['h-2 w-2 rounded-full', statusBadge(item.status).dot]" />
@@ -160,7 +178,9 @@ onUnmounted(() => {
             <td class="px-4 py-3 text-slate-500 text-xs">
               {{ item.lastUsedAt ? new Date(item.lastUsedAt).toLocaleString() : '—' }}
             </td>
-            <td class="px-4 py-3 text-slate-600">{{ item.callsLastHour }}</td>
+            <td class="px-4 py-3 text-slate-600">
+              {{ item.callsLastHour }}
+            </td>
             <td class="px-4 py-3 text-slate-500 text-xs">
               {{ item.expiresAt ? new Date(item.expiresAt).toLocaleString() : '—' }}
             </td>

@@ -6,6 +6,7 @@ using Flowamaz.Core.Entities.Auth;
 using Flowamaz.Core.Entities.Connector;
 using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Entities.Workflow;
+using Flowamaz.Core.Entities.Webhooks;
 using Flowamaz.Core.Entities.Workspaces;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Infrastructure.Persistence.Configurations;
@@ -68,6 +69,8 @@ public class FlowAmazDbContext : DbContext
     public DbSet<ConnectorDefinition> ConnectorDefinitions => Set<ConnectorDefinition>();
     public DbSet<WorkspaceConnector> WorkspaceConnectors => Set<WorkspaceConnector>();
     public DbSet<WorkspaceCredential> WorkspaceCredentials => Set<WorkspaceCredential>();
+
+    public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

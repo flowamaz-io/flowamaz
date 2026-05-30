@@ -257,7 +257,10 @@ onMounted(load);
               >
                 {{ fromNow(gate.expiresAt) }}
               </span>
-              <span v-else class="text-slate-300">—</span>
+              <span
+                v-else
+                class="text-slate-300"
+              >—</span>
             </td>
 
             <!-- Status badge -->
@@ -282,7 +285,10 @@ onMounted(load);
               >
                 {{ gate.decisionNote }}
               </span>
-              <span v-else class="text-slate-300">—</span>
+              <span
+                v-else
+                class="text-slate-300"
+              >—</span>
             </td>
 
             <!-- Actions -->

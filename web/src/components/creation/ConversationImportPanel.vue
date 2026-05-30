@@ -1,8 +1,12 @@
 <template>
   <div class="space-y-6">
     <div>
-      <h2 class="text-lg font-semibold text-gray-100 mb-1">Create from Conversation</h2>
-      <p class="text-sm text-gray-400">Paste a Slack thread, email chain, or meeting notes. AI extracts the workflow.</p>
+      <h2 class="text-lg font-semibold text-gray-100 mb-1">
+        Create from Conversation
+      </h2>
+      <p class="text-sm text-gray-400">
+        Paste a Slack thread, email chain, or meeting notes. AI extracts the workflow.
+      </p>
     </div>
 
     <!-- Source type selector -->
@@ -23,7 +27,10 @@
     </div>
 
     <!-- Hint for Slack format -->
-    <div v-if="sourceType === 'slack'" class="text-xs text-gray-500 p-2 bg-gray-800 rounded border border-gray-700">
+    <div
+      v-if="sourceType === 'slack'"
+      class="text-xs text-gray-500 p-2 bg-gray-800 rounded border border-gray-700"
+    >
       Paste Slack's exported JSON (message array) or raw thread text. Both formats work.
     </div>
 
@@ -39,12 +46,18 @@
     </div>
 
     <!-- Error -->
-    <div v-if="error" class="p-3 bg-red-950 border border-red-700 rounded text-sm text-red-400">
+    <div
+      v-if="error"
+      class="p-3 bg-red-950 border border-red-700 rounded text-sm text-red-400"
+    >
       {{ error }}
     </div>
 
     <!-- Loading -->
-    <div v-if="importing" class="p-3 bg-gray-800 border border-gray-700 rounded text-sm text-indigo-400">
+    <div
+      v-if="importing"
+      class="p-3 bg-gray-800 border border-gray-700 rounded text-sm text-indigo-400"
+    >
       Extracting process from conversation... (10–15 seconds)
     </div>
 

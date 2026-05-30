@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { Pencil, Play, XCircle, AlertTriangle } from 'lucide-vue-next';
+import { Pencil, Play, XCircle, AlertTriangle, Webhook, Copy, Check } from 'lucide-vue-next';
 import TriggerModal from '@/components/workflow/TriggerModal.vue';
 import FmBadge from '@/components/common/FmBadge.vue';
 import FmButton from '@/components/common/FmButton.vue';
@@ -14,6 +14,7 @@ import type { WorkflowCommit } from '@/types';
 import { useWorkflowStore } from '@/stores/workflow.store';
 import { useWorkspaceStore } from '@/stores/workspace.store';
 import { workflowService } from '@/services/workflow.service';
+import { webhookService, webhookUrl, type WebhookEndpoint } from '@/services/webhook.service';
 import { useToast } from '@/composables/useToast';
 import { toUserFacingError } from '@/utils/error.util';
 import { fromNow, formatDate } from '@/utils/date.util';
@@ -194,6 +195,40 @@ async function loadAndValidate(): Promise<void> {
 }
 
 onMounted(loadAndValidate);
+
+// ── Webhook triggers (Overview tab) ──────────────────────────────────────────
+const webhookEndpoints = ref<WebhookEndpoint[]>([]);
+const curlCopied = ref(false);
+
+const firstWebhookUrl = computed(() =>
+  webhookEndpoints.value.length > 0 ? webhookUrl(webhookEndpoints.value[0]!.id) : '',
+);
+
+const curlExample = computed(() =>
+  firstWebhookUrl.value
+    ? `curl -X POST ${firstWebhookUrl.value} \\\n  -H "Content-Type: application/json" \\\n  -H "X-Flowamaz-Signature: $SIGNATURE" \\\n  -d '{"key":"value"}'`
+    : '',
+);
+
+async function loadWebhooks(): Promise<void> {
+  if (!workspaceId.value) return;
+  try {
+    webhookEndpoints.value = await webhookService.listForWorkflow(workspaceId.value, id.value);
+  } catch {
+    // Non-essential panel — degrade silently if webhooks can't be loaded.
+    webhookEndpoints.value = [];
+  }
+}
+
+async function copyCurl(): Promise<void> {
+  if (!curlExample.value) return;
+  await navigator.clipboard.writeText(curlExample.value);
+  curlCopied.value = true;
+  toast.success('Curl example copied to clipboard.');
+  window.setTimeout(() => (curlCopied.value = false), 2000);
+}
+
+onMounted(loadWebhooks);
 watch(id, () => store.loadWorkflow(id.value));
 </script>
 
@@ -279,18 +314,27 @@ watch(id, () => store.loadWorkflow(id.value));
           ]"
           @click="loadTab(tab)"
         >
-          <span v-if="tab === 'yaml'" class="flex items-center gap-1.5">
+          <span
+            v-if="tab === 'yaml'"
+            class="flex items-center gap-1.5"
+          >
             Yaml
-            <span v-if="validationWarnings.length > 0 && validationErrors.length === 0"
-              class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+            <span
+              v-if="validationWarnings.length > 0 && validationErrors.length === 0"
+              class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700"
+            >
               {{ validationWarnings.length }}
             </span>
-            <span v-if="validationErrors.length > 0"
-              class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">
+            <span
+              v-if="validationErrors.length > 0"
+              class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700"
+            >
               {{ validationErrors.length }}
             </span>
           </span>
-          <template v-else>{{ tab }}</template>
+          <template v-else>
+            {{ tab }}
+          </template>
         </button>
       </div>
 
@@ -337,6 +381,56 @@ watch(id, () => store.loadWorkflow(id.value));
             </dd>
           </div>
         </dl>
+
+        <section
+          v-if="webhookEndpoints.length > 0"
+          class="mt-6 rounded-xl border border-slate-200 bg-white p-5"
+        >
+          <div class="flex items-center justify-between">
+            <h2 class="flex items-center gap-2 text-base font-semibold text-slate-900">
+              <Webhook class="h-4 w-4 text-primary-600" />
+              Trigger via webhook
+            </h2>
+            <RouterLink
+              :to="{ name: 'webhooks' }"
+              class="text-sm font-medium text-primary-600 hover:text-primary-700"
+            >
+              Manage webhooks
+            </RouterLink>
+          </div>
+          <p class="mt-1 text-sm text-slate-500">
+            POST a signed request to this URL to start a run.
+          </p>
+          <div class="mt-3">
+            <p class="text-xs font-medium text-slate-400">
+              Endpoint URL
+            </p>
+            <code class="mt-1 block break-all rounded bg-slate-50 px-3 py-2 text-xs text-slate-700">{{ firstWebhookUrl }}</code>
+          </div>
+          <div class="mt-3">
+            <div class="flex items-center justify-between">
+              <p class="text-xs font-medium text-slate-400">
+                Curl example
+              </p>
+              <button
+                type="button"
+                class="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+                @click="copyCurl"
+              >
+                <Check
+                  v-if="curlCopied"
+                  class="h-3.5 w-3.5 text-primary-600"
+                />
+                <Copy
+                  v-else
+                  class="h-3.5 w-3.5"
+                />
+                Copy
+              </button>
+            </div>
+            <pre class="mt-1 overflow-x-auto rounded bg-slate-900 px-3 py-2 text-xs text-slate-100"><code>{{ curlExample }}</code></pre>
+          </div>
+        </section>
 
         <div class="mt-6 p-6 border border-gray-200 rounded-lg bg-gray-50 flex items-center justify-between">
           <div>
@@ -455,8 +549,12 @@ watch(id, () => store.loadWorkflow(id.value));
                     <FmBadge variant="primary">production</FmBadge>
                   </span>
                 </div>
-                <p class="truncate text-sm text-slate-700">{{ commit.message }}</p>
-                <p class="text-xs text-slate-400">{{ commit.authorName }} · {{ fromNow(commit.committedAt) }}</p>
+                <p class="truncate text-sm text-slate-700">
+                  {{ commit.message }}
+                </p>
+                <p class="text-xs text-slate-400">
+                  {{ commit.authorName }} · {{ fromNow(commit.committedAt) }}
+                </p>
               </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">
@@ -529,7 +627,10 @@ watch(id, () => store.loadWorkflow(id.value));
           v-if="validationErrors.length > 0 || validationWarnings.length > 0"
           class="border-t border-gray-200 bg-gray-50"
         >
-          <div v-if="validationErrors.length > 0" class="p-3">
+          <div
+            v-if="validationErrors.length > 0"
+            class="p-3"
+          >
             <p class="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">
               Errors ({{ validationErrors.length }}) — must fix before publishing
             </p>

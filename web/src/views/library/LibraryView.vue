@@ -117,8 +117,12 @@ onMounted(load);
   <div class="space-y-6 px-8 py-6">
     <!-- Header -->
     <div>
-      <h1 class="text-xl font-semibold text-slate-900">Library</h1>
-      <p class="text-sm text-slate-500">Connectors, templates, and packs for your workflows.</p>
+      <h1 class="text-xl font-semibold text-slate-900">
+        Library
+      </h1>
+      <p class="text-sm text-slate-500">
+        Connectors, templates, and packs for your workflows.
+      </p>
     </div>
 
     <!-- Tabs -->
@@ -148,7 +152,10 @@ onMounted(load);
     </div>
 
     <!-- Connectors tab -->
-    <div v-if="activeTab === 'connectors'" class="space-y-4">
+    <div
+      v-if="activeTab === 'connectors'"
+      class="space-y-4"
+    >
       <!-- Search + sort row -->
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="relative max-w-xs w-full">
@@ -164,9 +171,15 @@ onMounted(load);
           v-model="sortKey"
           class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
         >
-          <option value="installed">Most Installed</option>
-          <option value="newest">Newest</option>
-          <option value="az">A-Z</option>
+          <option value="installed">
+            Most Installed
+          </option>
+          <option value="newest">
+            Newest
+          </option>
+          <option value="az">
+            A-Z
+          </option>
         </select>
       </div>
 
@@ -246,7 +259,9 @@ onMounted(load);
       v-else-if="activeTab === 'templates'"
       class="flex flex-col items-center gap-2 py-16 text-center"
     >
-      <p class="text-sm font-medium text-slate-700">Templates are coming in Phase 6</p>
+      <p class="text-sm font-medium text-slate-700">
+        Templates are coming in Phase 6
+      </p>
       <p class="text-sm text-slate-400">
         Reusable workflow blueprints will live here — ready to install and customise.
       </p>

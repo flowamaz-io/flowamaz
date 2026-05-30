@@ -21,7 +21,7 @@ export function useVoiceInput(lang?: string) {
     }
     if (isListening.value) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     recognition = new SpeechRecognition();
     recognition.lang = lang ?? navigator.language ?? 'en-US';
     recognition.continuous = false;

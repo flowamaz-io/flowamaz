@@ -15,7 +15,7 @@ public sealed class JwtAuthMiddleware
 {
     private const string ApiKeyPrefix = "fmz_";
     private const string BearerPrefix = "Bearer ";
-    private static readonly string[] ExemptPrefixes = ["/api/v1/auth", "/scalar", "/health", "/openapi"];
+    private static readonly string[] ExemptPrefixes = ["/api/v1/auth", "/scalar", "/health", "/openapi", "/webhooks"];
 
     private readonly RequestDelegate _next;
     private readonly IServiceScopeFactory _scopeFactory;

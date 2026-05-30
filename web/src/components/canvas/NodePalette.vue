@@ -1,6 +1,8 @@
 <template>
   <div class="w-16 bg-[#F1F5F9] border-r border-[#E5E7EB] flex flex-col items-center py-3 gap-2 select-none">
-    <div class="text-xs text-[#374151] mb-1 font-medium tracking-wide">NODES</div>
+    <div class="text-xs text-[#374151] mb-1 font-medium tracking-wide">
+      NODES
+    </div>
     <div
       v-for="item in paletteItems"
       :key="item.type"
@@ -10,8 +12,15 @@
       :style="{ backgroundColor: item.color + '22', borderColor: item.color, borderWidth: '1px', borderStyle: 'solid' }"
       @dragstart="onDragStart($event, item.type)"
     >
-      <component :is="item.icon" class="w-5 h-5" :style="{ color: item.color }" />
-      <span class="text-[9px] font-medium" :style="{ color: item.color }">{{ item.shortLabel }}</span>
+      <component
+        :is="item.icon"
+        class="w-5 h-5"
+        :style="{ color: item.color }"
+      />
+      <span
+        class="text-[9px] font-medium"
+        :style="{ color: item.color }"
+      >{{ item.shortLabel }}</span>
     </div>
   </div>
 </template>

@@ -18,10 +18,18 @@
       <Redo2 class="w-4 h-4" />
     </button>
     <div class="w-px h-5 bg-gray-200 mx-1" />
-    <button class="toolbar-btn" title="Tidy Layout" @click="$emit('tidy')">
+    <button
+      class="toolbar-btn"
+      title="Tidy Layout"
+      @click="$emit('tidy')"
+    >
       <LayoutDashboard class="w-4 h-4" />
     </button>
-    <button class="toolbar-btn" title="Add Group" @click="$emit('addGroup')">
+    <button
+      class="toolbar-btn"
+      title="Add Group"
+      @click="$emit('addGroup')"
+    >
       <Group class="w-4 h-4" />
     </button>
 
@@ -32,17 +40,29 @@
         class="bg-transparent text-sm text-gray-700 text-center outline-none border-b border-transparent hover:border-gray-300 focus:border-primary-500 transition-colors w-64 py-0.5"
         placeholder="Workflow name"
         @input="$emit('rename', ($event.target as HTMLInputElement).value)"
-      />
+      >
     </div>
 
     <!-- Right: zoom + view -->
-    <button class="toolbar-btn" title="Zoom In" @click="$emit('zoomIn')">
+    <button
+      class="toolbar-btn"
+      title="Zoom In"
+      @click="$emit('zoomIn')"
+    >
       <ZoomIn class="w-4 h-4" />
     </button>
-    <button class="toolbar-btn" title="Zoom Out" @click="$emit('zoomOut')">
+    <button
+      class="toolbar-btn"
+      title="Zoom Out"
+      @click="$emit('zoomOut')"
+    >
       <ZoomOut class="w-4 h-4" />
     </button>
-    <button class="toolbar-btn" title="Fit to Screen" @click="$emit('fit')">
+    <button
+      class="toolbar-btn"
+      title="Fit to Screen"
+      @click="$emit('fit')"
+    >
       <Maximize2 class="w-4 h-4" />
     </button>
     <button

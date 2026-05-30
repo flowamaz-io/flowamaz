@@ -160,5 +160,8 @@ defineExpose({ setCursor });
 </script>
 
 <template>
-  <div ref="containerRef" class="h-full w-full overflow-hidden" />
+  <div
+    ref="containerRef"
+    class="h-full w-full overflow-hidden"
+  />
 </template>

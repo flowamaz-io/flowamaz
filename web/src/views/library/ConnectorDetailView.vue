@@ -152,13 +152,17 @@ onMounted(load);
           <span class="text-4xl leading-none">{{ icon }}</span>
           <div class="flex-1 space-y-1">
             <div class="flex flex-wrap items-center gap-2">
-              <h1 class="text-xl font-semibold text-slate-900">{{ connector.displayName }}</h1>
+              <h1 class="text-xl font-semibold text-slate-900">
+                {{ connector.displayName }}
+              </h1>
               <span :class="['rounded-full px-2 py-0.5 text-xs font-medium', tierClasses]">
                 {{ connector.tier }}
               </span>
               <span class="text-xs text-slate-400">v{{ connector.version }}</span>
             </div>
-            <p class="text-sm text-slate-500">by {{ connector.publisherId }}</p>
+            <p class="text-sm text-slate-500">
+              by {{ connector.publisherId }}
+            </p>
             <p class="mt-2 text-sm text-slate-700 leading-relaxed">
               {{ manifest.description ?? connector.displayName }}
             </p>
@@ -242,9 +246,15 @@ onMounted(load);
             <table class="w-full text-xs">
               <thead>
                 <tr class="text-left text-slate-500">
-                  <th class="pb-1 pr-4 font-medium">Field</th>
-                  <th class="pb-1 pr-4 font-medium">Type</th>
-                  <th class="pb-1 font-medium">Description</th>
+                  <th class="pb-1 pr-4 font-medium">
+                    Field
+                  </th>
+                  <th class="pb-1 pr-4 font-medium">
+                    Type
+                  </th>
+                  <th class="pb-1 font-medium">
+                    Description
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -253,9 +263,15 @@ onMounted(load);
                   :key="name"
                   class="border-t border-slate-200"
                 >
-                  <td class="py-1 pr-4 font-mono text-slate-700">{{ name }}</td>
-                  <td class="py-1 pr-4 text-slate-500">{{ field.type ?? 'string' }}</td>
-                  <td class="py-1 text-slate-500">{{ field.description ?? '—' }}</td>
+                  <td class="py-1 pr-4 font-mono text-slate-700">
+                    {{ name }}
+                  </td>
+                  <td class="py-1 pr-4 text-slate-500">
+                    {{ field.type ?? 'string' }}
+                  </td>
+                  <td class="py-1 text-slate-500">
+                    {{ field.description ?? '—' }}
+                  </td>
                 </tr>
               </tbody>
             </table>

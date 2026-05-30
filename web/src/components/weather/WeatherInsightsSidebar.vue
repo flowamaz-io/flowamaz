@@ -51,24 +51,57 @@ function groupByWorkflow(items: InsightResponse[]) {
 
 <template>
   <Transition name="slide-right">
-    <div v-if="open" class="fixed inset-y-0 right-0 z-50 w-96 bg-white shadow-2xl border-l border-neutral-200 flex flex-col">
+    <div
+      v-if="open"
+      class="fixed inset-y-0 right-0 z-50 w-96 bg-white shadow-2xl border-l border-neutral-200 flex flex-col"
+    >
       <!-- Header -->
       <div class="flex items-center justify-between px-5 py-4 border-b border-neutral-200">
-        <h2 class="font-semibold text-neutral-800">Insights</h2>
-        <button class="text-neutral-400 hover:text-neutral-700" @click="$emit('close')">✕</button>
+        <h2 class="font-semibold text-neutral-800">
+          Insights
+        </h2>
+        <button
+          class="text-neutral-400 hover:text-neutral-700"
+          @click="$emit('close')"
+        >
+          ✕
+        </button>
       </div>
 
       <!-- Body -->
       <div class="flex-1 overflow-y-auto p-4 space-y-4">
-        <div v-if="loading" class="text-sm text-neutral-400 text-center py-8">Loading…</div>
-        <div v-else-if="error" class="text-sm text-red-600 bg-red-50 rounded-xl p-3">{{ error }}</div>
-        <div v-else-if="!insights.length" class="text-sm text-neutral-400 text-center py-8">
+        <div
+          v-if="loading"
+          class="text-sm text-neutral-400 text-center py-8"
+        >
+          Loading…
+        </div>
+        <div
+          v-else-if="error"
+          class="text-sm text-red-600 bg-red-50 rounded-xl p-3"
+        >
+          {{ error }}
+        </div>
+        <div
+          v-else-if="!insights.length"
+          class="text-sm text-neutral-400 text-center py-8"
+        >
           No unacknowledged insights. All workflows are healthy.
         </div>
         <template v-else>
-          <div v-for="[wfId, items] in groupByWorkflow(insights)" :key="wfId" class="space-y-2">
-            <p class="text-xs font-medium text-neutral-500 uppercase tracking-wide truncate">{{ items[0].workflowDefinitionId }}</p>
-            <div v-for="item in items" :key="item.id" class="bg-neutral-50 rounded-xl p-3 space-y-2">
+          <div
+            v-for="[wfId, items] in groupByWorkflow(insights)"
+            :key="wfId"
+            class="space-y-2"
+          >
+            <p class="text-xs font-medium text-neutral-500 uppercase tracking-wide truncate">
+              {{ items[0].workflowDefinitionId }}
+            </p>
+            <div
+              v-for="item in items"
+              :key="item.id"
+              class="bg-neutral-50 rounded-xl p-3 space-y-2"
+            >
               <div class="flex items-start justify-between gap-2">
                 <span :class="['text-xs font-medium rounded-full px-2 py-0.5', SEVERITY_COLOURS[item.severity] ?? 'bg-neutral-100 text-neutral-700']">
                   {{ item.severity }}
@@ -76,9 +109,13 @@ function groupByWorkflow(items: InsightResponse[]) {
                 <button
                   class="text-xs text-neutral-400 hover:text-neutral-700 shrink-0"
                   @click="acknowledge(item.id)"
-                >Acknowledge</button>
+                >
+                  Acknowledge
+                </button>
               </div>
-              <p class="text-sm text-neutral-700">{{ item.message }}</p>
+              <p class="text-sm text-neutral-700">
+                {{ item.message }}
+              </p>
             </div>
           </div>
         </template>

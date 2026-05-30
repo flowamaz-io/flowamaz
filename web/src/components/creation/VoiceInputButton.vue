@@ -12,8 +12,14 @@
     :disabled="!isSupported"
     @click="toggle"
   >
-    <Mic class="w-4 h-4" v-if="!isListening" />
-    <MicOff class="w-4 h-4" v-else />
+    <Mic
+      v-if="!isListening"
+      class="w-4 h-4"
+    />
+    <MicOff
+      v-else
+      class="w-4 h-4"
+    />
   </button>
 </template>
 

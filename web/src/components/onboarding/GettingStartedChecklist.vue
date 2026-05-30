@@ -97,8 +97,12 @@ function dismiss(): void {
           <Check class="h-3.5 w-3.5 text-white" />
         </div>
         <div class="flex-1">
-          <p class="text-sm font-medium text-gray-500 line-through">{{ item.title }}</p>
-          <p class="text-xs text-gray-400">{{ item.description }}</p>
+          <p class="text-sm font-medium text-gray-500 line-through">
+            {{ item.title }}
+          </p>
+          <p class="text-xs text-gray-400">
+            {{ item.description }}
+          </p>
         </div>
       </li>
 
@@ -111,8 +115,12 @@ function dismiss(): void {
       >
         <div class="h-6 w-6 shrink-0 rounded-full border-2 border-gray-300" />
         <div class="flex-1">
-          <p class="text-sm font-medium text-gray-900">{{ item.title }}</p>
-          <p class="text-xs text-gray-500">{{ item.description }}</p>
+          <p class="text-sm font-medium text-gray-900">
+            {{ item.title }}
+          </p>
+          <p class="text-xs text-gray-500">
+            {{ item.description }}
+          </p>
         </div>
         <span class="shrink-0 text-sm font-medium text-teal-600">Start →</span>
       </li>

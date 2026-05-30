@@ -14,7 +14,9 @@
         <span class="text-sm text-gray-200 font-medium">{{ el.label }}</span>
         <span class="text-xs text-gray-500">Detected as: {{ el.detectedType }}</span>
       </div>
-      <div class="text-xs text-gray-400">Is this correct?</div>
+      <div class="text-xs text-gray-400">
+        Is this correct?
+      </div>
       <div class="flex flex-wrap gap-2">
         <button
           class="px-2 py-1 text-xs rounded bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
@@ -33,7 +35,10 @@
       </div>
     </div>
 
-    <div v-if="allConfirmed" class="text-sm text-green-400">
+    <div
+      v-if="allConfirmed"
+      class="text-sm text-green-400"
+    >
       All elements confirmed. Click "Apply to Canvas" to proceed.
     </div>
 

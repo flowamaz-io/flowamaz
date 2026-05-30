@@ -171,6 +171,8 @@ public static class DependencyInjection
     private static void AddConnectors(IServiceCollection services)
     {
         services.AddScoped<ICredentialVaultService, CredentialVaultService>();
+        services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
+        services.AddScoped<IWebhookEndpointRepository, WebhookEndpointRepository>();
         services.AddScoped<IConnectorCatalogueService, ConnectorCatalogueService>();
         services.AddHttpClient(ConnectorSandbox.HttpClientName);
         services.AddScoped<IConnectorSandbox, ConnectorSandbox>();

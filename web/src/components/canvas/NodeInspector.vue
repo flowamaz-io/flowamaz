@@ -53,7 +53,7 @@
               :value="node.label"
               class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-100 outline-none focus:border-indigo-500 transition-colors"
               @input="$emit('update', { label: ($event.target as HTMLInputElement).value })"
-            />
+            >
           </div>
 
           <!-- Annotation content -->
@@ -70,7 +70,10 @@
           </template>
 
           <!-- Generic config JSON -->
-          <div v-if="!['annotation', 'end', 'trigger'].includes(node.type)" class="space-y-1">
+          <div
+            v-if="!['annotation', 'end', 'trigger'].includes(node.type)"
+            class="space-y-1"
+          >
             <label class="text-xs text-gray-400 font-medium">Config (JSON)</label>
             <textarea
               :value="configJson"
@@ -85,19 +88,24 @@
           <div class="space-y-3">
             <div class="space-y-1">
               <label class="text-xs text-gray-400 font-medium">Max attempts</label>
-              <input type="number" min="1" max="100"
+              <input
+                type="number"
+                min="1"
+                max="100"
                 :value="node.retry?.maxAttempts ?? 3"
                 class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-100 outline-none focus:border-indigo-500 transition-colors"
                 @change="$emit('update', { retry: { maxAttempts: +($event.target as HTMLInputElement).value, backoffSeconds: node.retry?.backoffSeconds ?? 5, backoffMultiplier: node.retry?.backoffMultiplier ?? 2 } })"
-              />
+              >
             </div>
             <div class="space-y-1">
               <label class="text-xs text-gray-400 font-medium">Backoff (seconds)</label>
-              <input type="number" min="0"
+              <input
+                type="number"
+                min="0"
                 :value="node.retry?.backoffSeconds ?? 5"
                 class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-100 outline-none focus:border-indigo-500 transition-colors"
                 @change="$emit('update', { retry: { maxAttempts: node.retry?.maxAttempts ?? 3, backoffSeconds: +($event.target as HTMLInputElement).value, backoffMultiplier: node.retry?.backoffMultiplier ?? 2 } })"
-              />
+              >
             </div>
           </div>
         </template>
@@ -106,11 +114,13 @@
           <div class="space-y-3">
             <div class="space-y-1">
               <label class="text-xs text-gray-400 font-medium">Timeout (seconds)</label>
-              <input type="number" min="1"
+              <input
+                type="number"
+                min="1"
                 :value="node.timeout?.seconds ?? 30"
                 class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-100 outline-none focus:border-indigo-500 transition-colors"
                 @change="$emit('update', { timeout: { ...node.timeout, seconds: +($event.target as HTMLInputElement).value } })"
-              />
+              >
             </div>
             <div class="space-y-1">
               <label class="text-xs text-gray-400 font-medium">On timeout (node ID)</label>
@@ -119,7 +129,7 @@
                 class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-100 font-mono outline-none focus:border-indigo-500 transition-colors"
                 placeholder="Leave empty to fail"
                 @input="$emit('update', { timeout: { seconds: node.timeout?.seconds ?? 30, onTimeout: ($event.target as HTMLInputElement).value || undefined } })"
-              />
+              >
             </div>
           </div>
         </template>
@@ -133,9 +143,15 @@
                 class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-100 outline-none focus:border-indigo-500 transition-colors"
                 @change="$emit('update', { compensate: { ...node.compensate, strategy: ($event.target as HTMLSelectElement).value as 'backward' | 'forward' | 'pivot' } })"
               >
-                <option value="backward">Backward (undo all)</option>
-                <option value="forward">Forward (retry failed)</option>
-                <option value="pivot">Pivot (backward then forward)</option>
+                <option value="backward">
+                  Backward (undo all)
+                </option>
+                <option value="forward">
+                  Forward (retry failed)
+                </option>
+                <option value="pivot">
+                  Pivot (backward then forward)
+                </option>
               </select>
             </div>
           </div>

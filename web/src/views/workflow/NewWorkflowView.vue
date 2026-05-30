@@ -70,23 +70,36 @@ onMounted(() => {
   <div class="max-w-4xl mx-auto px-4 py-8 space-y-8">
     <!-- Header -->
     <div>
-      <h1 class="text-2xl font-bold text-neutral-900">Create a new workflow</h1>
-      <p class="text-neutral-500 mt-1">Choose how you'd like to define your process.</p>
+      <h1 class="text-2xl font-bold text-neutral-900">
+        Create a new workflow
+      </h1>
+      <p class="text-neutral-500 mt-1">
+        Choose how you'd like to define your process.
+      </p>
     </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-20">
+    <div
+      v-if="loading"
+      class="flex items-center justify-center py-20"
+    >
       <div class="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
     </div>
 
     <!-- Error -->
-    <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+    <div
+      v-else-if="error"
+      class="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700"
+    >
       {{ error }}
     </div>
 
     <template v-else>
       <!-- Method selector -->
-      <section v-if="!selectedMethod" class="space-y-4">
+      <section
+        v-if="!selectedMethod"
+        class="space-y-4"
+      >
         <div class="space-y-2">
           <label class="text-sm font-medium text-neutral-700">Workflow name</label>
           <input
@@ -95,7 +108,7 @@ onMounted(() => {
             placeholder="e.g. Invoice Approval, Customer Onboarding..."
             class="w-full border border-neutral-200 rounded-xl px-4 py-2.5 text-sm focus:border-violet-500 focus:outline-none"
             @input="checkCloneSuggestion(workflowName)"
-          />
+          >
         </div>
         <CloneSuggestion
           v-if="cloneSuggestion && !cloneDismissed"
@@ -108,7 +121,10 @@ onMounted(() => {
       </section>
 
       <!-- Active creation method -->
-      <section v-else class="space-y-6">
+      <section
+        v-else
+        class="space-y-6"
+      >
         <button
           class="text-sm text-neutral-500 hover:text-violet-600 flex items-center gap-1"
           @click="selectedMethod = null"
@@ -121,8 +137,13 @@ onMounted(() => {
           :workspace-id="workspaceId ?? ''"
         />
 
-        <div v-else-if="selectedMethod === 'voice'" class="space-y-4">
-          <p class="text-sm text-neutral-600">Speak your workflow description. Then switch to the form to refine it.</p>
+        <div
+          v-else-if="selectedMethod === 'voice'"
+          class="space-y-4"
+        >
+          <p class="text-sm text-neutral-600">
+            Speak your workflow description. Then switch to the form to refine it.
+          </p>
           <VoiceInputButton />
         </div>
 

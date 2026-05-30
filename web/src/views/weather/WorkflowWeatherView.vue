@@ -84,46 +84,78 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
     <!-- Header -->
     <div class="bg-white border-b border-neutral-200 px-6 py-4 flex items-center gap-4">
       <div class="flex-1">
-        <h1 class="text-xl font-bold text-neutral-900">Workflow Weather</h1>
-        <p v-if="lastUpdated" class="text-xs text-neutral-400 mt-0.5">Last updated: {{ formatLastUpdated() }}</p>
+        <h1 class="text-xl font-bold text-neutral-900">
+          Workflow Weather
+        </h1>
+        <p
+          v-if="lastUpdated"
+          class="text-xs text-neutral-400 mt-0.5"
+        >
+          Last updated: {{ formatLastUpdated() }}
+        </p>
       </div>
       <button
         class="text-sm bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg px-3 py-1.5"
         @click="load"
-      >Refresh</button>
+      >
+        Refresh
+      </button>
     </div>
 
     <div class="max-w-7xl mx-auto px-6 py-6 space-y-6">
       <!-- Loading -->
-      <div v-if="loading" class="flex justify-center py-20">
+      <div
+        v-if="loading"
+        class="flex justify-center py-20"
+      >
         <div class="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
       </div>
 
       <!-- Error -->
-      <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-700">
+      <div
+        v-else-if="error"
+        class="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-700"
+      >
         {{ error }}
       </div>
 
       <template v-else-if="data">
         <!-- Summary strip -->
         <div class="grid grid-cols-4 gap-4">
-          <div v-for="(count, status) in statusCounts" :key="status"
-               class="bg-white rounded-xl border border-neutral-200 p-4 flex items-center gap-3">
+          <div
+            v-for="(count, status) in statusCounts"
+            :key="status"
+            class="bg-white rounded-xl border border-neutral-200 p-4 flex items-center gap-3"
+          >
             <div :class="['w-4 h-4 rounded-full shrink-0', STATUS_STYLES[status]]" />
             <div>
-              <p class="text-2xl font-bold text-neutral-900">{{ count }}</p>
-              <p class="text-xs text-neutral-500 capitalize">{{ status }}</p>
+              <p class="text-2xl font-bold text-neutral-900">
+                {{ count }}
+              </p>
+              <p class="text-xs text-neutral-500 capitalize">
+                {{ status }}
+              </p>
             </div>
           </div>
         </div>
 
         <!-- Workflow cards grid -->
-        <div v-if="!data.workflows.length" class="text-center py-16 text-neutral-400">
-          <p class="text-lg font-medium">No workflows yet</p>
-          <p class="text-sm mt-1">Create your first workflow to see its health here.</p>
+        <div
+          v-if="!data.workflows.length"
+          class="text-center py-16 text-neutral-400"
+        >
+          <p class="text-lg font-medium">
+            No workflows yet
+          </p>
+          <p class="text-sm mt-1">
+            Create your first workflow to see its health here.
+          </p>
         </div>
 
-        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div
+          v-else
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        >
           <div
             v-for="wf in data.workflows"
             :key="wf.workflowId"
@@ -132,7 +164,9 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
           >
             <!-- Header -->
             <div class="flex items-start justify-between mb-3">
-              <p class="font-semibold text-neutral-900 text-sm leading-tight">{{ wf.workflowName }}</p>
+              <p class="font-semibold text-neutral-900 text-sm leading-tight">
+                {{ wf.workflowName }}
+              </p>
               <div class="flex items-center gap-1.5 shrink-0 ml-2">
                 <div :class="['w-3 h-3 rounded-full', STATUS_STYLES[wf.status]]" />
                 <button
@@ -164,7 +198,10 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
             </div>
 
             <!-- Insight preview on hover -->
-            <p v-if="wf.latestInsight" class="mt-3 text-xs text-neutral-500 italic line-clamp-2 group-hover:line-clamp-none transition-all">
+            <p
+              v-if="wf.latestInsight"
+              class="mt-3 text-xs text-neutral-500 italic line-clamp-2 group-hover:line-clamp-none transition-all"
+            >
               {{ wf.latestInsight }}
             </p>
           </div>

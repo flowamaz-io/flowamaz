@@ -60,6 +60,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'settings', name: 'settings', component: () => import('@/views/workspace/WorkspaceSettingsView.vue') },
       { path: 'settings/members', name: 'members', component: () => import('@/views/workspace/MembersView.vue') },
       { path: 'settings/api-keys', name: 'api-keys', component: () => import('@/views/workspace/ApiKeysView.vue') },
+      { path: 'settings/webhooks', name: 'webhooks', component: () => import('@/views/settings/WebhookSettingsView.vue') },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

@@ -80,8 +80,12 @@ function onCardClick(): void {
 
     <!-- Name + description -->
     <div>
-      <p class="font-semibold text-slate-900">{{ connector.displayName }}</p>
-      <p class="mt-1 text-sm text-slate-500 leading-snug">{{ shortDescription }}</p>
+      <p class="font-semibold text-slate-900">
+        {{ connector.displayName }}
+      </p>
+      <p class="mt-1 text-sm text-slate-500 leading-snug">
+        {{ shortDescription }}
+      </p>
     </div>
 
     <!-- Category -->

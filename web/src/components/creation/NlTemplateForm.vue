@@ -1,8 +1,12 @@
 <template>
   <div class="flex flex-col gap-6">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900 mb-1">Create Workflow from Description</h2>
-      <p class="text-sm text-slate-500">Fill in each section. Use the microphone to speak instead of type.</p>
+      <h2 class="text-lg font-semibold text-slate-900 mb-1">
+        Create Workflow from Description
+      </h2>
+      <p class="text-sm text-slate-500">
+        Fill in each section. Use the microphone to speak instead of type.
+      </p>
     </div>
 
     <div class="space-y-4">
@@ -13,55 +17,55 @@
           v-model="form.workflowName"
           placeholder="e.g. Purchase Approval"
           class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors placeholder-gray-400"
-        />
+        >
       </div>
 
       <!-- Purpose -->
       <FormField
+        v-model="form.purpose"
         label="Purpose"
         hint="What does this workflow do and who uses it? e.g. 'Routes purchase requests from employees to their manager for approval before submitting to finance.'"
         placeholder="What does this workflow do? Who uses it?"
-        v-model="form.purpose"
         :rows="2"
         @voice-transcript="(t) => (form.purpose += t)"
       />
 
       <!-- Trigger -->
       <FormField
+        v-model="form.triggerDescription"
         label="Trigger"
         hint="What starts this workflow? e.g. 'A form submission with fields: requester name, amount, description, and cost centre.'"
         placeholder="What starts this workflow? Manual, webhook, schedule, event? What inputs are needed?"
-        v-model="form.triggerDescription"
         :rows="2"
         @voice-transcript="(t) => (form.triggerDescription += t)"
       />
 
       <!-- Steps -->
       <FormField
+        v-model="form.stepsDescription"
         label="Steps"
         hint="Describe each step in order, including decisions and who does what. e.g. '1. Validate the requester is an active employee. 2. If amount > RM5000, route to manager approval. 3. Manager approves or rejects. 4. If approved, create PO in system.'"
         placeholder="Describe each step in order. Include decisions, branches, and who does what."
-        v-model="form.stepsDescription"
         :rows="4"
         @voice-transcript="(t) => (form.stepsDescription += t)"
       />
 
       <!-- Rules -->
       <FormField
+        v-model="form.rulesAndConstraints"
         label="Rules & Constraints"
         hint="SLA deadlines, approval thresholds, retry rules. e.g. 'Manager must respond within 48 hours. If no response, escalate to department head. Retry failed steps 3 times.'"
         placeholder="SLA thresholds, approval limits, failure handling, retries, timeouts..."
-        v-model="form.rulesAndConstraints"
         :rows="2"
         @voice-transcript="(t) => (form.rulesAndConstraints += t)"
       />
 
       <!-- Systems & AI -->
       <FormField
+        v-model="form.systemsAndAi"
         label="Systems & AI"
         hint="Which external systems are involved? Any AI processing needed? e.g. 'SAP for PO creation, Slack for notifications, no AI needed.'"
         placeholder="Which systems are involved? Slack, SAP, Salesforce? Any AI steps needed?"
-        v-model="form.systemsAndAi"
         :rows="2"
         @voice-transcript="(t) => (form.systemsAndAi += t)"
       />
@@ -69,7 +73,9 @@
       <!-- Existing Context (optional) -->
       <div class="space-y-1">
         <label class="text-xs font-medium text-gray-700">Existing Context <span class="text-gray-400">(optional)</span></label>
-        <p class="text-sm text-gray-500 mb-2">Optional. Paste a related email, ticket, or document excerpt to give the AI more context.</p>
+        <p class="text-sm text-gray-500 mb-2">
+          Optional. Paste a related email, ticket, or document excerpt to give the AI more context.
+        </p>
         <textarea
           v-model="form.existingContext"
           placeholder="Paste any existing conversation, ticket, or document extract..."
@@ -80,12 +86,18 @@
     </div>
 
     <!-- Error -->
-    <div v-if="error" class="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+    <div
+      v-if="error"
+      class="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
+    >
       {{ error }}
     </div>
 
     <!-- Progress while generating -->
-    <div v-if="generating" class="p-3 bg-gray-50 border border-gray-200 rounded text-sm text-teal-600">
+    <div
+      v-if="generating"
+      class="p-3 bg-gray-50 border border-gray-200 rounded text-sm text-teal-600"
+    >
       Generating your workflow with AI... (10–15 seconds)
     </div>
 

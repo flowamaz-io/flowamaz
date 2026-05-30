@@ -160,20 +160,36 @@ onMounted(load);
     <template v-else-if="summary">
       <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
         <div class="rounded-xl border border-slate-200 bg-white p-5">
-          <p class="text-sm text-slate-400">Time saved</p>
-          <p class="mt-1 text-2xl font-semibold text-slate-900">{{ timeSaved(summary.totalTimeSavedMinutes) }}</p>
+          <p class="text-sm text-slate-400">
+            Time saved
+          </p>
+          <p class="mt-1 text-2xl font-semibold text-slate-900">
+            {{ timeSaved(summary.totalTimeSavedMinutes) }}
+          </p>
         </div>
         <div class="rounded-xl border border-slate-200 bg-white p-5">
-          <p class="text-sm text-slate-400">Cost avoided</p>
-          <p class="mt-1 text-2xl font-semibold text-emerald-600">{{ money(summary.totalCostAvoided) }}</p>
+          <p class="text-sm text-slate-400">
+            Cost avoided
+          </p>
+          <p class="mt-1 text-2xl font-semibold text-emerald-600">
+            {{ money(summary.totalCostAvoided) }}
+          </p>
         </div>
         <div class="rounded-xl border border-slate-200 bg-white p-5">
-          <p class="text-sm text-slate-400">ROI</p>
-          <p class="mt-1 text-2xl font-semibold text-slate-900">{{ summary.roiPercentage }}%</p>
+          <p class="text-sm text-slate-400">
+            ROI
+          </p>
+          <p class="mt-1 text-2xl font-semibold text-slate-900">
+            {{ summary.roiPercentage }}%
+          </p>
         </div>
         <div class="rounded-xl border border-slate-200 bg-white p-5">
-          <p class="text-sm text-slate-400">Successful runs</p>
-          <p class="mt-1 text-2xl font-semibold text-slate-900">{{ summary.successfulRuns }}</p>
+          <p class="text-sm text-slate-400">
+            Successful runs
+          </p>
+          <p class="mt-1 text-2xl font-semibold text-slate-900">
+            {{ summary.successfulRuns }}
+          </p>
         </div>
       </div>
 
@@ -181,7 +197,9 @@ onMounted(load);
         v-if="chartRows.length > 0"
         class="rounded-xl border border-slate-200 bg-white p-5"
       >
-        <h2 class="mb-4 text-sm font-semibold text-slate-700">Cost avoided by workflow</h2>
+        <h2 class="mb-4 text-sm font-semibold text-slate-700">
+          Cost avoided by workflow
+        </h2>
         <div class="space-y-3">
           <div
             v-for="row in chartRows"
@@ -205,11 +223,21 @@ onMounted(load);
         <table class="min-w-full divide-y divide-slate-200 text-sm">
           <thead class="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
             <tr>
-              <th class="px-4 py-3">Workflow</th>
-              <th class="px-4 py-3">Runs</th>
-              <th class="px-4 py-3">Time saved</th>
-              <th class="px-4 py-3">Cost avoided</th>
-              <th class="px-4 py-3">ROI %</th>
+              <th class="px-4 py-3">
+                Workflow
+              </th>
+              <th class="px-4 py-3">
+                Runs
+              </th>
+              <th class="px-4 py-3">
+                Time saved
+              </th>
+              <th class="px-4 py-3">
+                Cost avoided
+              </th>
+              <th class="px-4 py-3">
+                ROI %
+              </th>
               <th class="px-4 py-3" />
             </tr>
           </thead>
@@ -219,19 +247,32 @@ onMounted(load);
               :key="row.workflowDefinitionId"
               class="hover:bg-slate-50"
             >
-              <td class="px-4 py-3 font-medium text-slate-800">{{ row.workflowName }}</td>
-              <td class="px-4 py-3 text-slate-600">{{ row.successfulRuns }}/{{ row.runs }}</td>
+              <td class="px-4 py-3 font-medium text-slate-800">
+                {{ row.workflowName }}
+              </td>
+              <td class="px-4 py-3 text-slate-600">
+                {{ row.successfulRuns }}/{{ row.runs }}
+              </td>
               <td class="px-4 py-3 text-slate-600">
                 <span v-if="row.configured">{{ timeSaved(row.timeSavedMinutes) }}</span>
-                <span v-else class="text-slate-300">—</span>
+                <span
+                  v-else
+                  class="text-slate-300"
+                >—</span>
               </td>
               <td class="px-4 py-3 text-slate-600">
                 <span v-if="row.configured">{{ money(row.costAvoided) }}</span>
-                <span v-else class="text-slate-300">—</span>
+                <span
+                  v-else
+                  class="text-slate-300"
+                >—</span>
               </td>
               <td class="px-4 py-3 text-slate-600">
                 <span v-if="row.configured">{{ row.roiPercentage }}%</span>
-                <span v-else class="text-slate-300">—</span>
+                <span
+                  v-else
+                  class="text-slate-300"
+                >—</span>
               </td>
               <td class="px-4 py-3 text-right">
                 <button

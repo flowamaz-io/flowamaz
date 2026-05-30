@@ -99,7 +99,9 @@ function applyMappings(): void {
       <div class="w-full max-w-xl rounded-xl bg-white shadow-2xl flex flex-col max-h-[90vh]">
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <h2 class="text-base font-semibold text-slate-800">Paste a Sample Payload</h2>
+          <h2 class="text-base font-semibold text-slate-800">
+            Paste a Sample Payload
+          </h2>
           <button
             type="button"
             class="text-slate-400 hover:text-slate-600 text-xl leading-none"
@@ -119,7 +121,7 @@ function applyMappings(): void {
             <textarea
               v-model="sampleJson"
               rows="6"
-              placeholder='{"contact_id": "C001", "amount": 150}'
+              placeholder="{&quot;contact_id&quot;: &quot;C001&quot;, &quot;amount&quot;: 150}"
               class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200 resize-y"
             />
           </div>
@@ -144,9 +146,15 @@ function applyMappings(): void {
               <table class="w-full text-sm">
                 <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
                   <tr>
-                    <th class="px-3 py-2 text-left font-medium">Field</th>
-                    <th class="px-3 py-2 text-left font-medium">Expression</th>
-                    <th class="px-3 py-2 text-right font-medium">Confidence</th>
+                    <th class="px-3 py-2 text-left font-medium">
+                      Field
+                    </th>
+                    <th class="px-3 py-2 text-left font-medium">
+                      Expression
+                    </th>
+                    <th class="px-3 py-2 text-right font-medium">
+                      Confidence
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -155,7 +163,9 @@ function applyMappings(): void {
                     :key="mapping.fieldName"
                     class="hover:bg-slate-50"
                   >
-                    <td class="px-3 py-2 font-mono text-slate-700">{{ mapping.fieldName }}</td>
+                    <td class="px-3 py-2 font-mono text-slate-700">
+                      {{ mapping.fieldName }}
+                    </td>
                     <td class="px-3 py-2">
                       <input
                         :value="expressionFor(mapping)"

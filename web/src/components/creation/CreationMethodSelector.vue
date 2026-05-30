@@ -26,8 +26,12 @@ const methods = [
       @click="$emit('update:modelValue', method.id)"
     >
       <span class="text-2xl mb-3 block">{{ method.icon }}</span>
-      <p class="font-semibold text-neutral-800 text-sm">{{ method.label }}</p>
-      <p class="text-xs text-neutral-500 mt-1 leading-relaxed">{{ method.description }}</p>
+      <p class="font-semibold text-neutral-800 text-sm">
+        {{ method.label }}
+      </p>
+      <p class="text-xs text-neutral-500 mt-1 leading-relaxed">
+        {{ method.description }}
+      </p>
     </button>
   </div>
 </template>

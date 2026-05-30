@@ -86,16 +86,35 @@ defineExpose({ retrigger: () => { if (lastFile) handleFile(lastFile); } });
       @drop="onDrop"
       @click="($refs.fileInput as HTMLInputElement)?.click()"
     >
-      <input ref="fileInput" type="file" accept=".pdf,.docx,.txt" class="hidden" @change="onFileInput" />
-      <p v-if="!loading" class="text-sm text-neutral-500">
-        Drag a <strong>PDF</strong>, <strong>DOCX</strong>, or <strong>TXT</strong> file here,<br />or click to browse — up to 20MB
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".pdf,.docx,.txt"
+        class="hidden"
+        @change="onFileInput"
+      >
+      <p
+        v-if="!loading"
+        class="text-sm text-neutral-500"
+      >
+        Drag a <strong>PDF</strong>, <strong>DOCX</strong>, or <strong>TXT</strong> file here,<br>or click to browse — up to 20MB
       </p>
-      <div v-else class="space-y-2">
+      <div
+        v-else
+        class="space-y-2"
+      >
         <div class="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p class="text-sm text-violet-600">Parsing document... (20–30 seconds)</p>
+        <p class="text-sm text-violet-600">
+          Parsing document... (20–30 seconds)
+        </p>
       </div>
     </div>
 
-    <p v-if="error" class="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{{ error }}</p>
+    <p
+      v-if="error"
+      class="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2"
+    >
+      {{ error }}
+    </p>
   </div>
 </template>

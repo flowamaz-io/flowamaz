@@ -1129,3 +1129,25 @@ Closed the open Phase-5 CI/coverage items. CI jobs were failing on two real issu
 - [x] UserMenu shows the live edition label; WorkspaceResponse carries `edition`
 - [x] docs/DEVELOPMENT.md: CI badge + branch-protection (UI + gh CLI) instructions
 - [~] Live CI run / branch-protection toggle are repo-admin actions verified/applied on GitHub, not from this environment
+
+---
+
+## 06-01 — Webhook Triggers  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+Real per-workflow inbound webhook endpoints with HMAC-SHA256 verification, idempotent triggering, rate limiting, and sync/async response modes.
+
+- **Entity** `WebhookEndpoint` (`Core/Entities/Webhooks`) — workspace-scoped; stores the HMAC secret AES-256-GCM encrypted at rest (`EncryptedSecret`), optional `AllowedIps` (jsonb), soft-delete. Migration `AddWebhookEndpoints`.
+- **`ISecretProtector` / `AesGcmSecretProtector`** (Infrastructure) — reusable AES-256-GCM protector for re-readable secrets, same per-workspace key derivation as the credential vault (`HMAC-SHA256(CREDENTIAL_MASTER_KEY, workspaceId)`). Protected form is base64(nonce‖ciphertext‖tag).
+- **`WebhookService`** (Application) — create (secret returned once), get/list/list-for-workflow, delete (soft), rotate, `ValidateSignatureAsync` (constant-time `CryptographicOperations.FixedTimeEquals`, accepts `X-Flowamaz-Signature` and GitHub `sha256=` style), `TriggerFromWebhookAsync` (verifies sig → orchestrator trigger with `InstanceTriggerType.Webhook`; idempotency dedup handled by the orchestrator; optional 30s sync poll).
+- **Controllers** — `WebhooksController` (`/api/v1/workspaces/{id}/webhooks`, Admin create/delete/rotate, Viewer list) and public `WebhookReceiveController` (`/webhooks/{endpointId}`, `[AllowAnonymous]`, raw-body via `EnableBuffering`, 100/min per-endpoint rate limit via `IRateLimitService`, 202/200/401/408/409/429). Added `/webhooks` to `JwtAuthMiddleware` exempt prefixes.
+- **Frontend** — `webhook.service.ts`, `WebhookSettingsView.vue` (table + create/rotate/delete + one-time secret alert + copy), `CreateWebhookModal.vue` (published-workflow picker), route `settings/webhooks`, and a "Trigger via webhook" section on `WorkflowDetailView` (URL + curl example + copy + Manage webhooks link).
+
+**DoD**
+- [x] Backend build 0 warnings / 0 errors; unit **467/467** (+12 webhook: service 8, receive controller 4)
+- [x] Web typecheck 0; lint 0 errors (1 pre-existing `vue/no-v-html` warning, slated for 06-07); web tests 44/44
+- [x] Secret encrypted at rest, shown once, never logged; constant-time HMAC compare
+- [x] Idempotency dedup via orchestrator; rate limit 100/min/endpoint; `/webhooks/*` excluded from JWT
+- [x] Loading / empty / error states + actionable messages on the settings view
+- [~] Sidebar SETTINGS nav entry for Webhooks deferred to 06-06 (dedicated app-shell nav prompt); route reachable now

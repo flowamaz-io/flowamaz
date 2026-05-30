@@ -1,8 +1,12 @@
 <template>
   <div class="space-y-6">
     <div>
-      <h2 class="text-lg font-semibold text-gray-100 mb-1">Create from Diagram or Whiteboard</h2>
-      <p class="text-sm text-gray-400">Upload a photo of a whiteboard, sketch, or process diagram.</p>
+      <h2 class="text-lg font-semibold text-gray-100 mb-1">
+        Create from Diagram or Whiteboard
+      </h2>
+      <p class="text-sm text-gray-400">
+        Upload a photo of a whiteboard, sketch, or process diagram.
+      </p>
     </div>
 
     <!-- Drop zone -->
@@ -16,19 +20,37 @@
       @click="fileInput?.click()"
     >
       <Camera class="w-10 h-10 mx-auto mb-3 text-gray-600" />
-      <div class="text-sm text-gray-300 font-medium">Drop image here or click to upload</div>
-      <div class="text-xs text-gray-500 mt-1">JPG, PNG, HEIC, PDF · Max 10MB</div>
-      <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/heic,application/pdf" class="hidden" @change="onFileSelect" />
+      <div class="text-sm text-gray-300 font-medium">
+        Drop image here or click to upload
+      </div>
+      <div class="text-xs text-gray-500 mt-1">
+        JPG, PNG, HEIC, PDF · Max 10MB
+      </div>
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/jpeg,image/png,image/heic,application/pdf"
+        class="hidden"
+        @change="onFileSelect"
+      >
     </div>
 
     <!-- Processing -->
-    <div v-if="processing" class="text-center py-10">
+    <div
+      v-if="processing"
+      class="text-center py-10"
+    >
       <div class="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-      <div class="text-sm text-indigo-400">Analysing your diagram... (15–20 seconds)</div>
+      <div class="text-sm text-indigo-400">
+        Analysing your diagram... (15–20 seconds)
+      </div>
     </div>
 
     <!-- Error -->
-    <div v-if="error" class="p-3 bg-red-950 border border-red-700 rounded text-sm text-red-400">
+    <div
+      v-if="error"
+      class="p-3 bg-red-950 border border-red-700 rounded text-sm text-red-400"
+    >
       {{ error }}
     </div>
   </div>
