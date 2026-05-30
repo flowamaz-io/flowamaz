@@ -127,7 +127,9 @@ public sealed class AuditController : ControllerBase
         Response.Headers.ContentDisposition =
             $"attachment; filename=\"audit-{workspaceId}-{from:yyyyMMdd}-{to:yyyyMMdd}.csv\"";
 
-        await using var writer = new StreamWriter(Response.Body, new UTF8Encoding(false));
+        // leaveOpen: true — disposing the writer must NOT close the underlying response stream, which
+        // the ResponseWrapperMiddleware owns (it buffers the body and copies it out after the action).
+        await using var writer = new StreamWriter(Response.Body, new UTF8Encoding(false), leaveOpen: true);
         await writer.WriteLineAsync(
             "timestamp,event_type,actor_type,actor,action,resource_type,resource,ip_address");
 

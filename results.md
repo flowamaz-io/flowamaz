@@ -1402,3 +1402,24 @@ DB index audit, rich health checks, response caching, skeletons, startup env val
 - [x] /health 5 deps with response times; external 3rd-parties never 503 the endpoint
 
 **Deviations:** `GET /help/articles` endpoint doesn't exist → its cache attribute couldn't be applied; `common/` not `shared/` for FmSkeleton; `HealthCheckService` name aliased to avoid collision with the framework type.
+
+---
+
+## 07-07 — Phase 7 Integration + PHASE_COMPLETE  (2026-05-30)
+
+**Status:** Complete · pushed to `develop` · **PHASE 07 COMPLETE**
+
+- **Integration tests** (`Phase7/`, real Postgres+Redis Testcontainers) — `Phase7BillingTests` (webhook: valid Stripe signature `t=,v1=HMACSHA256` → org plan updated; subscription.deleted → Community; invalid sig → 400; live checkout asserts not-configured actionable error), `Phase7AuditTests` (workflow.created recorded, export CSV, non-admin → 403, fire-and-forget poll-retry), `Phase7TemplateTests` (10 official seeded, install → WorkflowDefinition + install_count++, publish validation), `Phase7MonitoringTests` (replay terminal → test instance w/ ParentInstanceId, running → 409, snapshots captured, sensitive stripped). **Phase7: 14 pass + 1 skipped.**
+- **Bug fixed (surfaced by integration test):** audit CSV export `StreamWriter` now `leaveOpen: true` — it was disposing the response buffer stream → `ObjectDisposedException`/500 on every export.
+- **E2E** — authored S61–S72 (`billing/audit/templates/monitoring/onboarding/performance.spec.ts`); total S1–S72. Each new spec lists cleanly via Playwright.
+- **Coverage** (Coverlet) — StripeService 86.0%, AuditService 88.7%, TemplateService 100%, ReplayService 93.1%, HealthCheckService 100% — all ≥80%. +9 StripeService unit tests (62→86%).
+- **Security** — webhook HMAC signature verified + idempotent (Redis); audit append-only (no UPDATE/DELETE API path; retention-job only); template install via YamlDotNet/validator (no injection); replay isTest enforced; breakpoints Dev-env-gated. **Trivy `fs ./backend` 0 Critical/High** (incl. Stripe.net 51.2.0).
+- `FmInterpreterPanel` v-html already resolved (06-07 eslint-disable + security comment).
+
+**DoD**
+- [x] Backend build 0/0; unit **532/532** (≥530); integration **110/110** (+1 skipped) (≥110)
+- [x] Web typecheck 0; lint 0; vitest 58/58; E2E S61–S72 authored
+- [x] Phase 7 coverage areas ≥80%; Trivy 0 Critical/High
+- [x] checkpoint → PHASE_COMPLETE
+
+**Skipped/deviations:** live Stripe checkout integration test skipped (network — not runnable in CI; not-configured path asserted + unit-tested). fix-07 candidates logged in checkpoint: template-publish vs workflow-publish YAML-format incompatibility (+ non-actionable publish exception); orchestrator instance.started audit lacks actor_user_id; breakpoint auto-pause scaffolded but not wired into the orchestrator step loop.

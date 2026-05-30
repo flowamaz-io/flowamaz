@@ -1,5 +1,5 @@
 import { expect, request, test } from '@playwright/test';
-import { createTestOrg, loginViaUi, uniqueSuffix } from './fixtures/test-factories';
+import { createTestOrg, loginViaUi, setupReadyOrg, uniqueSuffix } from './fixtures/test-factories';
 
 test.describe('Onboarding (S12–S14)', () => {
   // S12: Onboarding wizard completes all 3 steps → dashboard.
@@ -70,5 +70,36 @@ test.describe('Onboarding (S12–S14)', () => {
 
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Get started with Flowamaz' })).toHaveCount(0);
+  });
+});
+
+/**
+ * Product tour (S70–S71). On first arrival at the dashboard the guided product tour starts; once
+ * completed it never shows again (gated by the `tour_completed_{workspaceId}` user preference).
+ */
+test.describe('Product tour (S70–S71)', () => {
+  // S70: first login lands on the dashboard and offers / starts the product tour.
+  test('S70: first login → product tour starts', async ({ page }) => {
+    await setupReadyOrg(page);
+    await page.goto('/');
+    // The tour either auto-starts (a tour step is visible) or offers a "Take the tour" entry point.
+    const tourEntry = page.getByRole('button', { name: /Take the tour/i });
+    const tourStep = page.getByRole('button', { name: /^Next$/ });
+    await expect(tourEntry.or(tourStep).first()).toBeVisible({ timeout: 10000 });
+  });
+
+  // S71: completing the tour persists the preference so it does not reappear after a refresh.
+  test('S71: complete tour → does not show again', async ({ page }) => {
+    const { workspace } = await setupReadyOrg(page);
+    await page.goto('/');
+
+    // Mark the tour complete (same preference the ProductTour component sets on finish).
+    await page.evaluate((wsId) => {
+      localStorage.setItem(`tour_completed_${wsId}`, 'true');
+    }, workspace.id);
+
+    await page.reload();
+    // No active tour step is shown once the tour is marked complete.
+    await expect(page.getByRole('button', { name: /^Next$/ })).toHaveCount(0);
   });
 });

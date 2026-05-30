@@ -36,6 +36,14 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
     /// <summary>Fixed signing key used for gate HMAC in integration tests. Known value so tests can reproduce signatures.</summary>
     public const string GateSigningKey = "integration-test-gate-signing-key-32!!";
 
+    /// <summary>
+    /// Known Stripe webhook signing secret used in integration tests so a test can compute a valid
+    /// Stripe-Signature header (t=&lt;ts&gt;,v1=&lt;HMACSHA256&gt;) and exercise the real
+    /// EventUtility.ConstructEvent verification path. Globally safe: it only affects webhook
+    /// signature verification, which is never reached by any other test.
+    /// </summary>
+    public const string StripeWebhookSecret = "whsec_integration_test_secret_phase7";
+
     public IServiceProvider Services => _factory.Services;
 
     public async Task InitializeAsync()
@@ -62,6 +70,10 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable("SLACK_CLIENT_SECRET", "test-slack-client-secret");
         // Master key the credential vault derives per-workspace keys from (OAuth callback stores a token).
         Environment.SetEnvironmentVariable("CREDENTIAL_MASTER_KEY", "integration-test-credential-master-key-32!!");
+        // Known Stripe webhook secret so the billing webhook test can compute a valid signature and
+        // drive the real EventUtility.ConstructEvent verification. No SecretKey is set, so no Stripe
+        // network call is ever made (CreateCheckoutSession degrades to BillingException.NotConfigured).
+        Environment.SetEnvironmentVariable("STRIPE_WEBHOOK_SECRET", StripeWebhookSecret);
 
         await _postgres.StartAsync();
         await _redis.StartAsync();

@@ -136,6 +136,130 @@ public class StripeServiceTests
     }
 
     [Fact]
+    public async Task SubscriptionUpdated_maps_stripe_status_to_domain_status()
+    {
+        var orgId = Guid.NewGuid();
+        var sub = new DomainSubscription { OrgId = orgId, PlanId = ProPlanId, StripeSubscriptionId = "sub_upd", Status = SubscriptionStatus.Active };
+        _subs.Setup(s => s.GetByStripeSubscriptionIdAsync("sub_upd", It.IsAny<CancellationToken>())).ReturnsAsync(sub);
+
+        StubEvent(EventTypes.CustomerSubscriptionUpdated, new Stripe.Subscription { Id = "sub_upd", Status = "past_due" });
+
+        await Build().HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        sub.Status.Should().Be(SubscriptionStatus.PastDue);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SubscriptionUpdated_with_no_local_subscription_is_a_noop()
+    {
+        _subs.Setup(s => s.GetByStripeSubscriptionIdAsync("sub_unknown", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((DomainSubscription?)null);
+
+        StubEvent(EventTypes.CustomerSubscriptionUpdated, new Stripe.Subscription { Id = "sub_unknown", Status = "active" });
+
+        await Build().HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task InvoicePaymentSucceeded_clears_past_due_state()
+    {
+        var orgId = Guid.NewGuid();
+        var org = new Organisation { Id = orgId, StripeCustomerId = "cus_ps", Status = OrgStatus.Suspended };
+        var sub = new DomainSubscription { OrgId = orgId, Status = SubscriptionStatus.PastDue, PaymentFailed = true };
+        _orgs.Setup(o => o.GetByStripeCustomerIdAsync("cus_ps", It.IsAny<CancellationToken>())).ReturnsAsync(org);
+        _subs.Setup(s => s.GetByOrgIdAsync(orgId, It.IsAny<CancellationToken>())).ReturnsAsync(sub);
+
+        StubEvent(EventTypes.InvoicePaymentSucceeded, new Invoice { CustomerId = "cus_ps" });
+
+        await Build().HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        sub.PaymentFailed.Should().BeFalse();
+        sub.Status.Should().Be(SubscriptionStatus.Active);
+        org.Status.Should().Be(OrgStatus.Active);
+    }
+
+    [Fact]
+    public async Task Duplicate_event_is_skipped_idempotently()
+    {
+        // The event id is already in the Redis processed set → handler returns early, no writes.
+        _db.Setup(d => d.KeyExistsAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).ReturnsAsync(true);
+        StubEvent(EventTypes.CheckoutSessionCompleted, new Session { Metadata = new Dictionary<string, string>() });
+
+        await Build().HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _orgs.Verify(o => o.GetForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Checkout_session_with_missing_metadata_is_ignored()
+    {
+        StubEvent(EventTypes.CheckoutSessionCompleted, new Session { Metadata = new Dictionary<string, string>() });
+
+        await Build().HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        // No org lookup / no write when orgId/planId metadata is absent.
+        _orgs.Verify(o => o.GetForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Unhandled_event_type_is_marked_processed_without_writes()
+    {
+        StubEvent("customer.created", new Stripe.Customer { Id = "cus_x" });
+
+        await Build().HandleWebhookAsync("{}", "sig", CancellationToken.None);
+
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _db.Verify(d => d.StringSetAsync(
+            It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(),
+            It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateCheckoutSession_when_not_configured_throws_not_configured()
+    {
+        var act = async () => await Build(configured: false).CreateCheckoutSessionAsync(
+            Guid.NewGuid(), ProPlanId, annual: false, "https://ok", "https://cancel", CancellationToken.None);
+
+        await act.Should().ThrowAsync<BillingException>()
+            .Where(e => e.ErrorCode == "BILLING_NOT_CONFIGURED");
+    }
+
+    [Fact]
+    public async Task CreateCheckoutSession_for_unpurchasable_plan_throws_before_any_network_call()
+    {
+        var orgId = Guid.NewGuid();
+        // Community plan has no Stripe price id (and no env fallback) → PlanNotPurchasable is thrown by
+        // ResolvePriceId before the SessionService network call is reached.
+        var org = new Organisation { Id = orgId, BillingEmail = "o@e.test" };
+        var community = new Flowamaz.Core.Entities.Platform.Plan { Id = PlatformSeedData.CommunityPlanId, Name = "Community", Slug = "community" };
+        _orgs.Setup(o => o.GetForUpdateAsync(orgId, It.IsAny<CancellationToken>())).ReturnsAsync(org);
+        _plans.Setup(p => p.GetByIdAsync(PlatformSeedData.CommunityPlanId, It.IsAny<CancellationToken>())).ReturnsAsync(community);
+
+        var act = async () => await Build().CreateCheckoutSessionAsync(
+            orgId, PlatformSeedData.CommunityPlanId, annual: false, "https://ok", "https://cancel", CancellationToken.None);
+
+        await act.Should().ThrowAsync<BillingException>()
+            .Where(e => e.ErrorCode == "BILLING_PLAN_NOT_PURCHASABLE");
+    }
+
+    [Fact]
+    public async Task CreateCustomerPortalSession_without_customer_throws_no_customer()
+    {
+        var orgId = Guid.NewGuid();
+        _orgs.Setup(o => o.GetForUpdateAsync(orgId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Organisation { Id = orgId, StripeCustomerId = null });
+
+        var act = async () => await Build().CreateCustomerPortalSessionAsync(orgId, "https://return", CancellationToken.None);
+
+        await act.Should().ThrowAsync<BillingException>();
+    }
+
+    [Fact]
     public async Task InvoicePaymentFailed_sets_payment_failed_flag()
     {
         var orgId = Guid.NewGuid();
