@@ -24,6 +24,7 @@ public sealed class WebhooksController : ControllerBase
         _createValidator = createValidator;
     }
 
+    /// <summary>Lists the workspace's webhook endpoints, optionally filtered to a single workflow. Requires Viewer role; HMAC secrets are never returned.</summary>
     [HttpGet]
     [RequireWorkspaceRole(WorkspaceRole.Viewer)]
     public async Task<ActionResult<IReadOnlyList<WebhookEndpointDto>>> List(
@@ -35,6 +36,7 @@ public sealed class WebhooksController : ControllerBase
         return Ok(endpoints);
     }
 
+    /// <summary>Creates an HMAC-signed inbound webhook endpoint that triggers the given workflow. Requires Admin role; the signing secret is returned exactly once in this response.</summary>
     [HttpPost]
     [RequireWorkspaceRole(WorkspaceRole.Admin)]
     public async Task<ActionResult<CreatedWebhookResult>> Create(
@@ -46,6 +48,7 @@ public sealed class WebhooksController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Deletes a webhook endpoint so it no longer accepts inbound calls. Requires Admin role.</summary>
     [HttpDelete("{endpointId:guid}")]
     [RequireWorkspaceRole(WorkspaceRole.Admin)]
     public async Task<IActionResult> Delete(Guid workspaceId, Guid endpointId, CancellationToken cancellationToken)
@@ -54,6 +57,7 @@ public sealed class WebhooksController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Rotates the endpoint's HMAC signing secret, invalidating the previous one. Requires Admin role; the new secret is returned exactly once in this response.</summary>
     [HttpPost("{endpointId:guid}/rotate")]
     [RequireWorkspaceRole(WorkspaceRole.Admin)]
     public async Task<ActionResult<CreatedWebhookResult>> Rotate(

@@ -7,6 +7,14 @@ export const articleMap: Record<string, string> = {
   '/settings': 'workspaces/what-is-a-workspace',
   '/settings/members': 'workspaces/invite-team-members',
   '/settings/api-keys': 'workspaces/api-keys',
+  // Phase 8 settings + feature routes (prompt 08-03)
+  '/settings/webhooks': 'settings/webhooks',
+  '/settings/sso': 'settings/sso',
+  '/settings/audit': 'settings/audit-log',
+  '/settings/billing': 'settings/billing',
+  '/gates': 'gates/what-are-gates',
+  '/instances': 'instances/monitoring-instances',
+  '/library/templates/:id': 'workflows/publishing-workflows',
   // Phase 3 editor routes (prompt 03-06)
   '/workflows/:id/edit': 'node-types/using-the-canvas',
   '/workflows/:id/edit#node:trigger': 'node-types/trigger-nodes',

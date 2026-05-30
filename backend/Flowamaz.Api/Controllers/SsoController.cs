@@ -27,11 +27,13 @@ public sealed class SsoController : ControllerBase
 
     private string AppBaseUrl => _configuration["Platform:BaseUrl"]?.TrimEnd('/') ?? "https://app.flowamaz.io";
 
+    /// <summary>Returns whether SSO is enabled for the given organisation slug so the login page can offer the SSO option. Anonymous.</summary>
     [HttpGet("/api/v1/auth/sso/{orgSlug}")]
     [AllowAnonymous]
     public async Task<ActionResult<SsoStatus>> Status(string orgSlug, CancellationToken ct) =>
         Ok(await _sso.GetStatusAsync(orgSlug, ct));
 
+    /// <summary>Returns the SP (service provider) SAML metadata XML for the organisation, for configuring the IdP. Anonymous.</summary>
     [HttpGet("/api/v1/saml/{orgSlug}/metadata")]
     [AllowAnonymous]
     public async Task<IActionResult> Metadata(string orgSlug, CancellationToken ct)
@@ -40,11 +42,13 @@ public sealed class SsoController : ControllerBase
         return Content(xml, "application/xml");
     }
 
+    /// <summary>Begins a SAML login by redirecting the browser to the organisation's identity provider. Anonymous.</summary>
     [HttpGet("/api/v1/saml/{orgSlug}/login")]
     [AllowAnonymous]
     public async Task<IActionResult> SamlLogin(string orgSlug, [FromQuery] string? returnUrl, CancellationToken ct) =>
         Redirect(await _sso.InitiateSamlLoginAsync(orgSlug, returnUrl, ct));
 
+    /// <summary>SAML assertion consumer service: validates the IdP response, JIT-provisions the user, and redirects to the app with a short-lived token. Anonymous.</summary>
     [HttpPost("/api/v1/saml/{orgSlug}/acs")]
     [AllowAnonymous]
     public async Task<IActionResult> Acs(string orgSlug, [FromForm(Name = "SAMLResponse")] string samlResponse, CancellationToken ct)
@@ -55,11 +59,13 @@ public sealed class SsoController : ControllerBase
 
     // ── Org-owner configuration ──────────────────────────────────────────────
 
+    /// <summary>Returns the organisation's SSO (SAML/OIDC) configuration, or null if not configured. Org-owner only; secrets are never returned.</summary>
     [HttpGet("/api/v1/organisations/{id:guid}/sso")]
     [RequireOrgOwner]
     public async Task<ActionResult<SsoConfigDto?>> GetConfig(Guid id, CancellationToken ct) =>
         Ok(await _sso.GetConfigAsync(id, ct));
 
+    /// <summary>Creates or updates the organisation's SSO (SAML/OIDC) configuration. Org-owner only.</summary>
     [HttpPut("/api/v1/organisations/{id:guid}/sso")]
     [RequireOrgOwner]
     public async Task<ActionResult<SsoConfigDto>> Configure(Guid id, [FromBody] ConfigureSsoRequest request, CancellationToken ct)
@@ -69,6 +75,7 @@ public sealed class SsoController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Validates that the organisation's saved SSO configuration is complete and ready to activate. Org-owner only.</summary>
     [HttpPost("/api/v1/organisations/{id:guid}/sso/test")]
     [RequireOrgOwner]
     public async Task<IActionResult> Test(Guid id, CancellationToken ct)
@@ -90,6 +97,7 @@ public sealed class SsoController : ControllerBase
         });
     }
 
+    /// <summary>Disables SSO for the organisation, reverting members to password login. Org-owner only.</summary>
     [HttpDelete("/api/v1/organisations/{id:guid}/sso")]
     [RequireOrgOwner]
     public async Task<IActionResult> Disable(Guid id, CancellationToken ct)

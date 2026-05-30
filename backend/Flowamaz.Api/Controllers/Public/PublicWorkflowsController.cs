@@ -27,6 +27,7 @@ public sealed class PublicWorkflowsController : PublicApiController
         _orchestrator = orchestrator;
     }
 
+    /// <summary>Public API: lists the workspace's published workflows, paginated. Authenticated by workspace API key and rate limited.</summary>
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int? page, [FromQuery(Name = "per_page")] int? perPage, CancellationToken ct)
     {
@@ -43,6 +44,7 @@ public sealed class PublicWorkflowsController : PublicApiController
         return Data(items, PageMeta(p, size, published.Count));
     }
 
+    /// <summary>Public API: retrieves a single published workflow by slug. Authenticated by workspace API key and rate limited.</summary>
     [HttpGet("{slug}")]
     public async Task<IActionResult> Get(string slug, CancellationToken ct)
     {
@@ -56,6 +58,7 @@ public sealed class PublicWorkflowsController : PublicApiController
         return Data(PublicWorkflow.From(definition));
     }
 
+    /// <summary>Public API: triggers a new run of the published workflow with the raw request body as input, honouring an optional X-Idempotency-Key header. Authenticated by workspace API key and rate limited.</summary>
     [HttpPost("{slug}/trigger")]
     public async Task<IActionResult> Trigger(string slug, CancellationToken ct)
     {
@@ -76,6 +79,7 @@ public sealed class PublicWorkflowsController : PublicApiController
         return Data(new { InstanceId = instance.Id, Status = "accepted" }, statusCode: StatusCodes.Status202Accepted);
     }
 
+    /// <summary>Public API: lists runs of the given workflow, paginated. Authenticated by workspace API key and rate limited.</summary>
     [HttpGet("{slug}/instances")]
     public async Task<IActionResult> Instances(
         string slug, [FromQuery] int? page, [FromQuery(Name = "per_page")] int? perPage, CancellationToken ct)

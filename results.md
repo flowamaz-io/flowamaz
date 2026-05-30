@@ -1467,3 +1467,22 @@ New standalone Vue 3 SPA in `marketing/` (separate from `web/`, served on flowam
 - [x] `marketing/dist` + `.vite` gitignored
 
 **Deviations:** Changelog entries are static (not parsed from git tags at build time) — the prompt's "extracted from git tags" rendered as a curated static list updated per release. Blog/legal pages are placeholders per the prompt.
+
+---
+
+## 08-03 — Documentation: Help Articles, API Descriptions, Developer Guide  (2026-05-30)
+
+**Status:** Complete · pushed to `develop`
+
+- **19 new in-app help articles** under `web/src/help/articles/` (auto-loaded by the existing `import.meta.glob` raw loader): `workflows/` (creation-methods, yaml-format, publishing-workflows, workflow-versioning), `instances/` (triggering, monitoring, test-runs, replaying), `gates/` (what-are/configuring/approving), `connectors/http-rest-connector`, `ai/` (copilot, nl-workflow-creation, empathy-view), `settings/` (webhooks, sso, billing, audit-log). Each 200–450 words, matching the existing frontmatter (`title`/`plans`/`readingTime`) + H1 format. Reused existing articles for getting-started/canvas/team topics rather than duplicating.
+- **Help routing** — `articleMap.ts` adds `/settings/webhooks|sso|audit|billing`, `/gates`, `/instances`, `/library/templates/:id`. `articleLoader.ts` gains section labels + ordering for the new folders so the help tree groups them (Workflows, Instances, Human Gates, Connectors, Canvas & Nodes, AI Features, Settings, Analytics).
+- **API descriptions** — added `/// <summary>` XML doc comments to **23 controller actions** that lacked them (Webhooks 4, Notifications 4, Sso 8, PublicWorkflows 4, PublicInstances 3); Scalar surfaces them. No code/signatures changed.
+- **`docs/DEVELOPER.md`** — architecture + dependency rule, run-locally, test commands, branch/commit/PR process, add-a-connector, add-a-node-type, full env-var reference table, troubleshooting (CORS/cookie/docker/ports/migrations/health).
+- **`docs/SECURITY.md`** — vuln reporting (security@flowamaz.io + PGP), security features (HMAC webhooks, JWT/API keys, SSO, RBAC+workspace isolation, credential vault, audit log, rate limiting, signed gate links, dev-only surfaces), data handling (storage/encryption/retention/metering/secrets).
+
+**DoD**
+- [x] Backend build 0 errors / 0 warnings (XML docs); web build 0 errors; web vitest 58/58
+- [x] Help articles load via glob; routing covers the previously-unmapped settings routes
+- [x] DEVELOPER.md + SECURITY.md at `docs/`
+
+**Deviations:** Articles live in the existing categorised folder taxonomy (not the flat `web/src/help/articles/*.md` layout the prompt sketched) to fit the established loader and avoid slug duplication with Phase-1 articles. Getting-started/your-first-workflow/understanding-the-canvas/inviting-your-team map to existing articles instead of new duplicates.

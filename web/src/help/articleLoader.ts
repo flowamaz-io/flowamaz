@@ -47,6 +47,14 @@ function titleFromMarkdown(md: string, fallback: string): string {
 const SECTION_LABELS: Record<string, string> = {
   'getting-started': 'Getting Started',
   workspaces: 'Organisations & Workspaces',
+  workflows: 'Workflows',
+  instances: 'Instances',
+  gates: 'Human Gates',
+  connectors: 'Connectors',
+  'node-types': 'Canvas & Nodes',
+  ai: 'AI Features',
+  settings: 'Settings',
+  analytics: 'Analytics',
   billing: 'Plans & Billing',
 };
 
@@ -86,7 +94,11 @@ export interface HelpTreeSection {
 }
 
 export function helpTree(): HelpTreeSection[] {
-  const order = ['Getting Started', 'Organisations & Workspaces', 'Plans & Billing'];
+  const order = [
+    'Getting Started', 'Organisations & Workspaces', 'Workflows', 'Instances',
+    'Human Gates', 'Connectors', 'Canvas & Nodes', 'AI Features', 'Settings',
+    'Analytics', 'Plans & Billing',
+  ];
   const grouped = new Map<string, HelpArticle[]>();
   for (const a of allArticles()) {
     const list = grouped.get(a.section) ?? [];

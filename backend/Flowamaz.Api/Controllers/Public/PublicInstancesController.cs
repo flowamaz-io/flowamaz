@@ -27,6 +27,7 @@ public sealed class PublicInstancesController : PublicApiController
         _orchestrator = orchestrator;
     }
 
+    /// <summary>Public API: returns the status and result of a single workflow instance in the workspace. Authenticated by workspace API key and rate limited.</summary>
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
@@ -37,6 +38,7 @@ public sealed class PublicInstancesController : PublicApiController
         return instance is null ? NotFoundInstance(id) : Data(PublicInstance.From(instance));
     }
 
+    /// <summary>Public API: streams the instance's execution events as Server-Sent Events. Authenticated by workspace API key and rate limited.</summary>
     [HttpGet("{id:guid}/events")]
     public async Task<IActionResult> Events(Guid id, CancellationToken ct)
     {
@@ -58,6 +60,7 @@ public sealed class PublicInstancesController : PublicApiController
         return new EmptyResult();
     }
 
+    /// <summary>Public API: cancels a running workflow instance in the workspace. Authenticated by workspace API key and rate limited.</summary>
     [HttpPost("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
     {
