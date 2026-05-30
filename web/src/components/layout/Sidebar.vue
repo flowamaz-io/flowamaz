@@ -151,7 +151,7 @@ function closeMobile(): void {
     <!-- Header: logo + collapse toggle -->
     <div
       :class="[
-        'flex h-14 items-center border-b border-sidebar-border px-3',
+        'flex h-14 shrink-0 items-center border-b border-sidebar-border px-3',
         sidebarMinimized ? 'md:justify-center' : 'justify-between',
       ]"
     >
@@ -179,13 +179,13 @@ function closeMobile(): void {
     </div>
 
     <!-- Workspace switcher -->
-    <div class="border-b border-sidebar-border px-2 py-2">
+    <div class="shrink-0 border-b border-sidebar-border px-2 py-2">
       <WorkspaceSwitcher :collapsed="sidebarMinimized" />
     </div>
-    <EditionBanner :collapsed="sidebarMinimized" />
+    <EditionBanner class="shrink-0" :collapsed="sidebarMinimized" />
 
     <!-- Nav -->
-    <nav class="flex-1 space-y-4 overflow-y-auto px-2 py-3">
+    <nav class="sidebar-nav min-h-0 flex-1 space-y-4 overflow-y-auto px-2 py-3">
       <div
         v-for="section in visibleSections"
         :key="section.label"
@@ -264,7 +264,7 @@ function closeMobile(): void {
     </nav>
 
     <!-- Bottom: Notifications, Settings, Help, expand toggle, user -->
-    <div class="border-t border-sidebar-border px-2 py-2 space-y-1">
+    <div class="shrink-0 border-t border-sidebar-border px-2 py-2 space-y-1">
       <NotificationBell :collapsed="sidebarMinimized" />
       <div class="group relative">
         <RouterLink
