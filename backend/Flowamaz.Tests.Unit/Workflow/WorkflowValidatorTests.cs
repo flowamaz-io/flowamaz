@@ -288,4 +288,53 @@ public sealed class WorkflowValidatorTests
         var result = await validator.ValidateAsync(yaml);
         result.Warnings.Should().Contain(w => w.Code == "BPR-002" && w.NodeId == "action");
     }
+
+    [Fact]
+    public async Task ActionNodeWithEmptyConfig_Returns_BPR010_Warning()
+    {
+        // "approve" action node in ValidYaml has no config → unconfigured connector
+        var validator = Create();
+        var result = await validator.ValidateAsync(ValidYaml);
+        result.IsValid.Should().BeTrue();
+        result.Warnings.Should().Contain(w => w.Code == "BPR-010" && w.NodeId == "approve");
+    }
+
+    [Fact]
+    public async Task ActionNodeWithConnector_NoBPR010_Warning()
+    {
+        var yaml = """
+            apiVersion: flowamaz/v1
+            kind: Workflow
+            metadata:
+              id: configured-action
+              name: "Configured Action"
+              description: "Test"
+            spec:
+              trigger:
+                type: webhook
+              nodes:
+                - id: start
+                  type: trigger
+                  label: "Start"
+                - id: approve
+                  type: action
+                  label: "Approve"
+                  config:
+                    connector_id: "slack-default"
+                    action: "send_message"
+                - id: done
+                  type: end
+                  label: "Done"
+              edges:
+                - id: e1
+                  from: start
+                  to: approve
+                - id: e2
+                  from: approve
+                  to: done
+            """;
+        var validator = Create();
+        var result = await validator.ValidateAsync(yaml);
+        result.Warnings.Should().NotContain(w => w.Code == "BPR-010");
+    }
 }

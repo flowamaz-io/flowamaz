@@ -319,6 +319,24 @@ public sealed class WorkflowValidator : IWorkflowValidator
             info.Add(new ValidationIssue(6, "BPR-004",
                 "No SLA threshold configured. Set spec.sla_threshold_ms to enable SLA monitoring.",
                 null, null, null));
+
+        // BPR-010 — runtime-readiness: action/AI nodes without a connector configured
+        foreach (var node in doc.Spec?.Nodes ?? [])
+        {
+            var isAction = node.Type?.Equals("action", StringComparison.OrdinalIgnoreCase) == true;
+            var isAi = node.Type?.Equals("ai", StringComparison.OrdinalIgnoreCase) == true;
+            if (!isAction && !isAi) continue;
+
+            var hasConfig = node.Config is { Count: > 0 };
+            var hasConnector = node.Config?.ContainsKey("connector_id") == true;
+            if (hasConfig && hasConnector) continue;
+
+            var label = string.IsNullOrWhiteSpace(node.Label) ? node.Id : node.Label;
+            warnings.Add(new ValidationIssue(6, "BPR-010",
+                $"Action node '{node.Id}' ({label}) has no connector configured. " +
+                "It will fail at runtime. Open the node config to select a connector and action.",
+                node.Id, null, null));
+        }
     }
 
     // ─── DTOs (System.Text.Json deserialization from JSON) ──────────────────
