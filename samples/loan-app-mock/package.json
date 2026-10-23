@@ -1,0 +1,11 @@
+{
+  "name": "flowamaz-loan-app-mock",
+  "private": true,
+  "type": "module",
+  "description": "API-only mock of the loan application that drives the Flowamaz Loan Approval workflow.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "server": "node server.mjs",
+    "scenarios": "node run-scenarios.mjs"
+  }
+}

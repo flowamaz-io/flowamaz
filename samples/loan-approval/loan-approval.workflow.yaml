@@ -1,0 +1,198 @@
+apiVersion: flowamaz/v1
+kind: Workflow
+metadata:
+  id: loan-approval
+  name: "Loan Approval"
+  description: "Loan application: credit review, tiered approvals (≤50K: L1; ≤250K: L1+L2; >250K: L1+L2+L3), Letter of Offer and customer acceptance."
+  version: "1.0.0"
+spec:
+  trigger:
+    type: form
+  variables:
+    application_id:
+      type: string
+      required: true
+    applicant_name:
+      type: string
+      required: true
+    applicant_email:
+      type: string
+      required: true
+    loan_amount:
+      type: number
+      required: true
+    tenure_months:
+      type: number
+      required: true
+    purpose:
+      type: string
+      required: false
+    monthly_income:
+      type: number
+      required: false
+  nodes:
+    # 1. Form filling — the loan application submits the form data as the trigger payload.
+    - id: application-submitted
+      type: trigger
+      label: "Loan application submitted"
+
+    # 2. Review — credit officer checks the application is complete and eligible.
+    - id: credit-review
+      type: human-gate
+      label: "Credit review"
+      config:
+        delivery_channel: Portal
+        gate_label: "Review loan application"
+        timeout_hours: 48
+        on_timeout: fail
+    - id: review-decision
+      type: router
+      label: "Review passed?"
+
+    # 3. Level 1 approval — every application.
+    - id: l1-approval
+      type: human-gate
+      label: "Level 1 approval (Branch Manager)"
+      config:
+        delivery_channel: Portal
+        gate_label: "Approve loan — Level 1"
+        timeout_hours: 24
+        on_timeout: fail
+    - id: l1-decision
+      type: router
+      label: "L1 approved?"
+    - id: l1-limit
+      type: router
+      label: "Within 50K?"
+      config:
+        branches:
+          - { label: "Up to 50K", condition: "{{ loan_amount }} <= 50000" }
+          - { label: "Above 50K", condition: "{{ loan_amount }} > 50000" }
+
+    # Level 2 approval — above 50K.
+    - id: l2-approval
+      type: human-gate
+      label: "Level 2 approval (Credit Manager)"
+      config:
+        delivery_channel: Portal
+        gate_label: "Approve loan — Level 2"
+        timeout_hours: 24
+        on_timeout: fail
+    - id: l2-decision
+      type: router
+      label: "L2 approved?"
+    - id: l2-limit
+      type: router
+      label: "Within 250K?"
+      config:
+        branches:
+          - { label: "Up to 250K", condition: "{{ loan_amount }} <= 250000" }
+          - { label: "Above 250K", condition: "{{ loan_amount }} > 250000" }
+
+    # Level 3 approval — above 250K.
+    - id: l3-approval
+      type: human-gate
+      label: "Level 3 approval (Credit Committee)"
+      config:
+        delivery_channel: Portal
+        gate_label: "Approve loan — Level 3"
+        timeout_hours: 48
+        on_timeout: fail
+    - id: l3-decision
+      type: router
+      label: "L3 approved?"
+
+    # 4. LO creation — the loan application issues the Letter of Offer and returns its number.
+    - id: create-lo
+      type: action
+      label: "Create Letter of Offer"
+      config:
+        connector_id: http-rest
+        operation: POST
+        inputs:
+          url: "http://localhost:4010/letters-of-offer"
+          body: '{"application_id":"{{ application_id }}","applicant_name":"{{ applicant_name }}","amount":{{ loan_amount }},"tenure_months":{{ tenure_months }}}'
+
+    # 5. LO acceptance — the customer accepts or declines the offer (in the loan application).
+    - id: lo-acceptance
+      type: human-gate
+      label: "Customer accepts Letter of Offer"
+      config:
+        delivery_channel: Portal
+        gate_label: "Accept Letter of Offer"
+        assigned_to_variable: applicant_email
+        timeout_hours: 168
+        on_timeout: auto-reject
+    - id: acceptance-decision
+      type: router
+      label: "Offer accepted?"
+
+    # Outcomes — each tells the loan application what happened.
+    - id: notify-accepted
+      type: action
+      label: "Notify: offer accepted"
+      config:
+        connector_id: http-rest
+        operation: POST
+        inputs:
+          url: "http://localhost:4010/events"
+          body: '{"application_id":"{{ application_id }}","event":"offer_accepted"}'
+    - id: notify-declined
+      type: action
+      label: "Notify: offer declined"
+      config:
+        connector_id: http-rest
+        operation: POST
+        inputs:
+          url: "http://localhost:4010/events"
+          body: '{"application_id":"{{ application_id }}","event":"offer_declined"}'
+    - id: notify-rejected
+      type: action
+      label: "Notify: application rejected"
+      config:
+        connector_id: http-rest
+        operation: POST
+        inputs:
+          url: "http://localhost:4010/events"
+          body: '{"application_id":"{{ application_id }}","event":"application_rejected"}'
+
+    - id: end-accepted
+      type: end
+      label: "Loan accepted"
+    - id: end-declined
+      type: end
+      label: "Offer declined"
+    - id: end-rejected
+      type: end
+      label: "Application rejected"
+
+  edges:
+    - { id: e01, from: application-submitted, to: credit-review }
+    - { id: e02, from: credit-review, to: review-decision }
+    - { id: e03, from: review-decision, to: l1-approval, via: approved }
+    - { id: e04, from: review-decision, to: notify-rejected, via: rejected }
+
+    - { id: e05, from: l1-approval, to: l1-decision }
+    - { id: e06, from: l1-decision, to: l1-limit, via: approved }
+    - { id: e07, from: l1-decision, to: notify-rejected, via: rejected }
+    - { id: e08, from: l1-limit, to: create-lo, via: "Up to 50K" }
+    - { id: e09, from: l1-limit, to: l2-approval, via: "Above 50K" }
+
+    - { id: e10, from: l2-approval, to: l2-decision }
+    - { id: e11, from: l2-decision, to: l2-limit, via: approved }
+    - { id: e12, from: l2-decision, to: notify-rejected, via: rejected }
+    - { id: e13, from: l2-limit, to: create-lo, via: "Up to 250K" }
+    - { id: e14, from: l2-limit, to: l3-approval, via: "Above 250K" }
+
+    - { id: e15, from: l3-approval, to: l3-decision }
+    - { id: e16, from: l3-decision, to: create-lo, via: approved }
+    - { id: e17, from: l3-decision, to: notify-rejected, via: rejected }
+
+    - { id: e18, from: create-lo, to: lo-acceptance }
+    - { id: e19, from: lo-acceptance, to: acceptance-decision }
+    - { id: e20, from: acceptance-decision, to: notify-accepted, via: approved }
+    - { id: e21, from: acceptance-decision, to: notify-declined, via: rejected }
+
+    - { id: e22, from: notify-accepted, to: end-accepted }
+    - { id: e23, from: notify-declined, to: end-declined }
+    - { id: e24, from: notify-rejected, to: end-rejected }

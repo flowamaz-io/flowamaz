@@ -14,7 +14,7 @@ never enter card details and never complete a Stripe page.
   Never touch the user's other tabs.
 - Load the browser tools you need in one ToolSearch call: `tabs_context_mcp`, `tabs_create_mcp`,
   `navigate`, `computer`, `read_page`, `find`, `form_input`, `get_page_text`, `file_upload`,
-  `gif_creator`, `read_console_messages`, `resize_window`.
+  `gif_creator`, `read_console_messages`, `resize_window`, `javascript_tool`.
 - Prefer `find` / `read_page` to locate elements by their visible text, then click. Many icon-only
   buttons are identified by their `title` or `aria-label`; this script gives those in quotes.
 - Never trigger browser `alert`/`confirm` dialogs. The app uses in-page modals, so this shouldn't
@@ -23,7 +23,7 @@ never enter card details and never complete a Stripe page.
 - Toasts disappear after about 5 seconds. Read them right after the action.
 
 **Recording**
-- Record a GIF for journeys J4–J7 and J10 with `gif_creator`, named `J<n>-<short-name>.gif`. Capture
+- Record a GIF for journeys J4–J7, J10 and J17 with `gif_creator`, named `J<n>-<short-name>.gif`. Capture
   a few extra frames before and after each action.
 - After each journey, run `read_console_messages` with pattern `error|Error|failed`. Record any
   errors other than the one expected 401 on the register/login page (that's the session check).
@@ -349,7 +349,119 @@ docker exec -i flowamaz-dev-db psql -U flowamaz -d flowamaz < prompts/e2e-chrome
    Instances. **Expect:** the page fits without horizontal scrolling. Take a screenshot.
 3. Restore the window to 1440×900.
 
-## J17 — Wrap-up
+## J17 — Build the Loan Approval workflow in the UI  *(GIF)*
+
+The workflow the loan application will use, built and published through the UI. The design:
+- **Form:** the loan application submits the form data as the run's payload.
+- **Credit review**, then **Level 1** approval.
+- **Above 50K:** also **Level 2**. **Above 250K:** also **Level 3**.
+- **Create Letter of Offer** (calls the loan app), then **customer accepts or declines**.
+- **Any rejection** notifies the loan app and ends the run.
+
+The reference definition is `samples/loan-approval/loan-approval.workflow.yaml`. Read it first
+with the Read tool.
+
+1. Open `/workflows/new`. Set the top "Workflow name" field to `Loan Approval` and choose
+   **"Draw on canvas"**. **Expect:** the editor opens for the new workflow.
+2. Open `/workflows`, click **Loan Approval**, then the **Yaml** tab. **Expect:** "YAML Editor"
+   with "Validate" and "Save changes" buttons.
+3. Replace the editor content with the reference YAML:
+   - Click inside the editor and press Ctrl+A (Cmd+A on Mac) to select everything.
+   - Use `javascript_tool` to paste the file content as a clipboard event (typing 190 lines is too
+     slow). Replace `<YAML>` with the file content as a JavaScript string literal:
+     ```js
+     const el = document.querySelector('.cm-content');
+     const dt = new DataTransfer();
+     dt.setData('text/plain', <YAML>);
+     el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+     ```
+   **Expect:** the editor starts with `apiVersion: flowamaz/v1` and has `name: "Loan Approval"`.
+   If pasting doesn't work, record BLOCKED (tooling) and stop this journey.
+4. Click **"Validate"**. **Expect:** "Workflow is valid — ready to publish" with no warnings.
+   Click **"Save changes"**. **Expect:** toast "YAML saved."
+5. Click **"Edit in Canvas"**. **Expect:**
+   - 21 nodes, connected top to bottom: Loan application submitted → Credit review → … →
+     Create Letter of Offer → Customer accepts Letter of Offer → Offer accepted? → the two notify
+     steps → the three end nodes ("Loan accepted", "Offer declined", "Application rejected").
+   - Every "… approved?" router has a line to **"Notify: application rejected"**.
+   - Lines are drawn between the nodes. If the nodes sit in one row with no lines, that's a
+     **Critical** FAIL (edges lost). Don't save from the canvas in that case.
+   Take a screenshot.
+6. Double-click **"Within 50K?"**. **Expect:** two branches, "Up to 50K" with
+   `{{ loan_amount }} <= 50000` and "Above 50K" with `{{ loan_amount }} > 50000`. Click
+   **"Cancel"**. Do the same for **"Within 250K?"** (limit 250000).
+7. Double-click **"Customer accepts Letter of Offer"**. **Expect:** "On timeout" is
+   **Auto-reject**, so an offer nobody answers in 7 days counts as declined. Click **"Cancel"**.
+8. Double-click **"Create Letter of Offer"**. **Expect:** Connector **HTTP/REST**, Action
+   **HTTP POST**, and `url` `http://localhost:4010/letters-of-offer`. Click **"Cancel"**.
+9. Go back to the workflow page and click **"Publish"**. **Expect:** toast "Workflow published."
+   (Its slug gets a random suffix, e.g. `loan-approval-2d29bd`. You'll read it from the public
+   API in J18.)
+10. **API key for the loan application:** open `/settings/api-keys` and click **"Create key"**.
+    - Name: `Loan app (mock)`
+    - Environment: **Dev**
+    - Scopes: tick **Read workflows**, **Trigger workflows**, **Read instances** and **Write
+      instances**. Leave the others unticked.
+    - Click **"Create key"**. **Expect:** "Copy your new API key now — it won't be shown again."
+    - Copy the key and write it with the shell, **not** into the results file:
+      ```bash
+      printf 'FLOWAMAZ_URL=http://localhost:8307\nFLOWAMAZ_API_KEY=%s\n' '<KEY>' > samples/loan-app-mock/.env.local
+      ```
+      (The file is git-ignored.)
+11. Create a second key, `Read only (scope check)`, with only **Read workflows** and **Read
+    instances** ticked. Keep it in memory for J18.
+
+## J18 — Mock loan application through the API (no UI)
+
+The loan application doesn't exist yet. `samples/loan-app-mock` stands in for it:
+- `server.mjs` receives the workflow's calls: it issues Letter of Offer numbers and records the
+  outcome events.
+- `run-scenarios.mjs` plays the applicants, credit officer, approvers and customer through the
+  Flowamaz **public API**.
+
+1. In a separate shell, start the callback server and leave it running:
+   `node samples/loan-app-mock/server.mjs`. **Expect:**
+   "Mock loan application listening on http://localhost:4010".
+2. Check the key works:
+   `curl -s -H "Authorization: Bearer <KEY>" http://localhost:8307/api/public/v1/workflows`.
+   **Expect:** JSON listing **Loan Approval** with status Published. Note its `slug` for step 4.
+3. Run the scenarios: `node samples/loan-app-mock/run-scenarios.mjs`. If more than one published
+   workflow is called "Loan Approval", set `WORKFLOW_SLUG=<slug>` first.
+   **Expect:** `8/8 scenarios passed`:
+
+   | Scenario | Path | Outcome |
+   |---|---|---|
+   | A 30K | review, L1, customer accepts | Loan accepted |
+   | B 120K | review, L1, L2, customer accepts | Loan accepted |
+   | C 400K | review, L1, L2, L3, customer accepts | Loan accepted |
+   | D 90K | review rejects | Application rejected, no LO |
+   | E 180K | review, L1, L2 rejects | Application rejected, no LO |
+   | F 75K | review, L1, L2, customer declines | Offer declined |
+   | G 50K exactly | review, L1 only | Loan accepted |
+   | H 250K exactly | review, L1, L2 only | Loan accepted |
+
+   Paste the script's summary lines into the results file, with one row per scenario. For a FAIL,
+   include the `✗` lines it prints and the scenario's entry from
+   `samples/loan-app-mock/data/results-*.json`.
+4. **Scope check** with the read-only key from J17:
+   - `curl -s -X POST -H "Authorization: Bearer <READ_ONLY_KEY>" -H "Content-Type: application/json" -d '{}' http://localhost:8307/api/public/v1/workflows/<slug>/trigger`
+     **Expect:** HTTP 403, code `insufficient_scope`, naming `workflows:trigger`.
+   - The same key on `GET /api/public/v1/workflows`. **Expect:** 200.
+   - Any 2xx on the trigger call is a **Critical** FAIL: a read-only key could start loans.
+5. Check the runs in the UI:
+   - `/instances`: 8 new runs of Loan Approval, all **Completed**.
+   - Open scenario C (the 400K run, with application id ending `-C` in its variables). **Expect:**
+     the timeline passes Credit review, all three approval levels, Create Letter of Offer and
+     Customer accepts, then ends at "Loan accepted". The **variables** tab shows `loan_amount`
+     400000 and the `create-lo.output` with an `lo_number`.
+   - Open scenario D. **Expect:** it goes straight from Credit review to "Notify: application
+     rejected" and **no** approval levels ran.
+   - `/gates` Pending tab: **Expect:** no leftover Loan Approval approvals.
+   - `/settings/audit`: **Expect:** the gate approvals and rejections from these runs are listed.
+     Record which actor is shown for them (observation, not FAIL).
+6. Stop the callback server (Ctrl+C in its shell).
+
+## J19 — Wrap-up
 
 1. Log out. **Expect:** `/login`.
 2. Finish the results file:

@@ -1,11 +1,14 @@
 # Chrome end-to-end test (Claude Code + Claude in Chrome)
 
-A guided, human-like test of Flowamaz in your real Chrome browser: 17 journeys covering sign-up,
+A guided, human-like test of Flowamaz in your real Chrome browser: 19 journeys covering sign-up,
 onboarding, workspaces, templates, the canvas, approvals, webhooks, credentials, publishing and
-settings. **Stripe payments are skipped.** The paid-template lock is still checked without paying.
+settings. It ends by **building the Loan Approval workflow in the UI (J17)** and driving it through
+the public API with a mock loan application, without any UI (J18). **Stripe payments are skipped.** The
+paid-template lock is still checked without paying.
 
 ## What you need
-- Docker, the .NET 10 SDK and Node 22 on this machine (the same as for development).
+- Docker, the .NET 10 SDK and Node 22 on this machine (the same as for development). Port 4010 must be free
+  for the mock loan application in J18.
 - Chrome with the **Claude in Chrome** extension installed and signed in.
 - Claude Code.
 - *Optional:* an Anthropic API key. Without one, the AI creation journeys (J11–J13) are recorded as
@@ -38,7 +41,7 @@ settings. **Stripe payments are skipped.** The paid-template lock is still check
    Follow it exactly, write the results file as you go, and don't change any application code.
    ```
 
-4. Expect the run to take about 45–75 minutes. You can watch it in the Chrome tab it opens. Results
+4. Expect the run to take about 60–90 minutes. You can watch it in the Chrome tab it opens. Results
    are saved to `prompts/e2e-chrome/results/e2e-run-<date>.md`, with GIFs of the key journeys.
 
 5. **Stop the app** afterwards: `./prompts/e2e-chrome/start-local.sh stop` (or `… .ps1 stop`).
