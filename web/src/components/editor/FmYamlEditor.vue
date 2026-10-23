@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue';
-import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers, hoverTooltip } from '@codemirror/view';
+import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { EditorView, Decoration, keymap, lineNumbers, hoverTooltip, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { yaml } from '@codemirror/lang-yaml';
 import { linter, lintGutter, type Diagnostic } from '@codemirror/lint';
@@ -105,9 +105,28 @@ function buildLinter() {
   });
 }
 
+// Highlight for a line revealed from the canvas ("Show in YAML"). Set with a line start
+// position, cleared with null; the decoration maps through edits so it stays on its line.
+const setRevealedLine = StateEffect.define<number | null>();
+const revealedLineDeco = Decoration.line({ class: 'cm-fmz-revealed-line' });
+const revealedLineField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    let next = deco.map(tr.changes);
+    for (const e of tr.effects) {
+      if (e.is(setRevealedLine)) {
+        next = e.value === null ? Decoration.none : Decoration.set([revealedLineDeco.range(e.value)]);
+      }
+    }
+    return next;
+  },
+  provide: f => EditorView.decorations.from(f),
+});
+
 function initEditor() {
   if (!containerRef.value) return;
   const extensions = [
+    revealedLineField,
     lineNumbers(),
     history(),
     yaml(),
@@ -123,6 +142,7 @@ function initEditor() {
     EditorView.theme({
       '&': { height: '100%', fontSize: '13px' },
       '.cm-scroller': { overflow: 'auto', fontFamily: '"Fira Code", "JetBrains Mono", monospace' },
+      '.cm-fmz-revealed-line': { backgroundColor: 'rgba(250, 204, 21, 0.28)', boxShadow: 'inset 3px 0 0 #EAB308' },
       '.cm-field-tooltip': { background: '#ffffff', color: '#111827', border: '1px solid #e5e7eb', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', maxWidth: '320px', lineHeight: '1.5', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' },
     }),
   ];
@@ -156,7 +176,31 @@ function setCursor(pos: number) {
   view?.focus();
 }
 
-defineExpose({ setCursor });
+/**
+ * Scroll a 1-based line into view (centred), place the cursor at its start and highlight it.
+ * Returns false when the editor isn't ready or the line is out of range.
+ */
+function revealLine(lineNumber: number, options: { focus?: boolean } = {}): boolean {
+  if (!view) return false;
+  const doc = view.state.doc;
+  if (!Number.isInteger(lineNumber) || lineNumber < 1 || lineNumber > doc.lines) return false;
+  const line = doc.line(lineNumber);
+  view.dispatch({
+    selection: { anchor: line.from },
+    effects: [
+      setRevealedLine.of(line.from),
+      EditorView.scrollIntoView(line.from, { y: 'center' }),
+    ],
+  });
+  if (options.focus) view.focus();
+  return true;
+}
+
+function clearRevealedLine() {
+  view?.dispatch({ effects: setRevealedLine.of(null) });
+}
+
+defineExpose({ setCursor, revealLine, clearRevealedLine });
 </script>
 
 <template>

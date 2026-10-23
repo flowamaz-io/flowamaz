@@ -72,6 +72,14 @@
     >
       <Map class="w-4 h-4" />
     </button>
+    <button
+      :class="['toolbar-btn', snapToGrid ? 'text-primary-600 bg-primary-50' : '']"
+      :title="snapToGrid ? 'Snap to grid: on (20px)' : 'Snap to grid: off'"
+      :aria-pressed="snapToGrid"
+      @click="$emit('toggleSnap')"
+    >
+      <Grid3x3 class="w-4 h-4" />
+    </button>
 
     <!-- Save state indicator -->
     <div class="w-px h-5 bg-gray-200 mx-1" />
@@ -90,7 +98,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Undo2, Redo2, LayoutDashboard, Group, ZoomIn, ZoomOut, Maximize2, Map, Save } from 'lucide-vue-next';
+import { Undo2, Redo2, LayoutDashboard, Group, ZoomIn, ZoomOut, Maximize2, Map, Save, Grid3x3 } from 'lucide-vue-next';
 
 const props = defineProps<{
   workflowName: string;
@@ -99,6 +107,7 @@ const props = defineProps<{
   undoCount: number;
   isDirty: boolean;
   showMinimap: boolean;
+  snapToGrid?: boolean;
   saving?: boolean;
 }>();
 
@@ -111,6 +120,7 @@ const emit = defineEmits<{
   zoomOut: [];
   fit: [];
   toggleMinimap: [];
+  toggleSnap: [];
   save: [];
   rename: [name: string];
 }>();

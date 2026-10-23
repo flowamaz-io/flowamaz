@@ -8,6 +8,7 @@
       :undo-count="canvasStore.undoCount"
       :is-dirty="canvasStore.isDirty"
       :show-minimap="showMinimap"
+      :snap-to-grid="snapToGridEnabled"
       :saving="props.saving ?? false"
       @undo="handleUndo"
       @redo="handleRedo"
@@ -17,6 +18,7 @@
       @zoom-out="canvas.zoomOut"
       @fit="canvas.fitView"
       @toggle-minimap="showMinimap = !showMinimap"
+      @toggle-snap="toggleSnap"
       @save="$emit('save')"
       @rename="workflowName = $event"
     />
@@ -29,7 +31,8 @@
       <div class="flex-1 relative">
         <div
           ref="containerRef"
-          class="w-full h-full"
+          class="w-full h-full outline-none"
+          :style="gridBackgroundStyle"
           tabindex="0"
           @dragover.prevent
           @drop="onDrop"
@@ -37,24 +40,24 @@
           @keydown="onKeydown"
         />
 
-        <!-- Minimap -->
+        <!-- Box-selection hint / multi-selection count -->
         <div
-          v-show="showMinimap"
-          class="absolute bottom-4 right-4 w-36 h-28 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-lg pointer-events-none opacity-80"
+          class="absolute top-3 left-3 text-[11px] text-gray-500 bg-white/90 border border-gray-200 rounded-md px-2 py-1 shadow-sm pointer-events-none"
         >
-          <img
-            v-if="minimapDataUrl"
-            :src="minimapDataUrl"
-            class="w-full h-full object-contain"
-            alt=""
-          >
-          <div
-            v-else
-            class="w-full h-full flex items-center justify-center"
-          >
-            <span class="text-gray-300 text-xs">Canvas</span>
-          </div>
+          <template v-if="canvas.selectedNodeCount.value > 1">
+            {{ canvas.selectedNodeCount.value }} nodes selected — Delete removes, Ctrl+D duplicates
+          </template>
+          <template v-else>
+            Shift + drag to box-select
+          </template>
         </div>
+
+        <!-- Minimap -->
+        <CanvasMinimap
+          v-show="showMinimap"
+          :cy="canvas.cy.value"
+          :visible="showMinimap"
+        />
       </div>
 
       <!-- Node Inspector -->
@@ -103,6 +106,7 @@
       @preview-gate="onCtxPreviewGate"
       @edit-conditions="onCtxEditConditions"
       @set-default-branch="onCtxSetDefaultBranch"
+      @show-in-yaml="onCtxShowInYaml"
     />
 
     <!-- Node config panel (prompt 06-02) -->
@@ -118,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import * as jsYaml from 'js-yaml';
 import { useRoute } from 'vue-router';
 import { useCytoscapeCanvas } from '@/composables/useCytoscapeCanvas';
@@ -134,6 +138,8 @@ import CanvasToolbar from './CanvasToolbar.vue';
 import NodeInspector from './NodeInspector.vue';
 import NodeContextMenu from './NodeContextMenu.vue';
 import NodeConfigPanel, { type ConfigNode } from './NodeConfigPanel.vue';
+import CanvasMinimap from './CanvasMinimap.vue';
+import { GRID_SIZE, gridDotSpacing, loadSnapPreference, renderedToModel, saveSnapPreference } from '@/utils/canvas.util';
 import type { WorkflowVariable } from './shared/VariableAutocomplete.vue';
 import { Clipboard } from 'lucide-vue-next';
 import type { NodeType, CanvasNode } from '@/types/canvas.types';
@@ -152,9 +158,30 @@ const workflowName = ref('Untitled Workflow');
 const showMinimap = ref(true);
 const yamlContent = ref('');
 const yamlCopied = ref(false);
-const minimapDataUrl = ref('');
+const snapToGridEnabled = ref(loadSnapPreference());
 
-const canvas = useCytoscapeCanvas(containerRef);
+const canvas = useCytoscapeCanvas(containerRef, { snapToGrid: snapToGridEnabled });
+
+// Dot grid that follows pan/zoom. Spacing is a multiple of the 20px snap grid, so with
+// snapping on, node centres always land on a dot.
+const gridBackgroundStyle = computed(() => {
+  const { zoom, pan } = canvas.viewport.value;
+  const step = gridDotSpacing(zoom, GRID_SIZE);
+  const color = snapToGridEnabled.value ? '#94A3B8' : '#CBD5E1';
+  return {
+    backgroundImage: `radial-gradient(circle, ${color} 1px, transparent 1.5px)`,
+    backgroundSize: `${step}px ${step}px`,
+    // Dots are drawn at the centre of each tile; shift by half a tile so they sit on model multiples.
+    backgroundPosition: `${pan.x - step / 2}px ${pan.y - step / 2}px`,
+  };
+});
+
+function toggleSnap() {
+  snapToGridEnabled.value = !snapToGridEnabled.value;
+  saveSnapPreference(snapToGridEnabled.value);
+  // Positions are not stored in the YAML, so snapping existing nodes needs no history entry.
+  if (snapToGridEnabled.value) canvas.snapAllNodes();
+}
 const { syncYamlToCanvas } = useYamlCanvasSync(() => canvas.cy.value);
 const workflowStore = useWorkflowStore();
 
@@ -241,7 +268,8 @@ async function loadWorkflow() {
       await nextTick();
       syncYamlToCanvas(wf.yamlContent);
       // Wait for sync debounce to settle, then tidy the layout, then update minimap
-      setTimeout(() => { canvas.runLayout(); setTimeout(updateMinimap, 400); }, 350);
+      // (the minimap re-renders itself on layoutstop)
+      setTimeout(() => { canvas.runLayout(); }, 350);
     }
     canvasStore.setDirty(false);
   } catch {
@@ -270,8 +298,8 @@ function onKeydown(e: KeyboardEvent) {
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
-    canvas.deleteSelected();
-    snapshotYaml();
+    // A whole box selection is removed in one go and recorded as a single undo step.
+    if (canvas.deleteSelected() > 0) snapshotYaml();
   }
   if (e.key === 'Escape') {
     canvasStore.setSelectedNode(null);
@@ -302,8 +330,13 @@ function onDrop(e: DragEvent) {
   const type = e.dataTransfer?.getData('node-type') as NodeType;
   if (!type || !canvas.cy.value) return;
   const rect = containerRef.value!.getBoundingClientRect();
-  // Use screen offset as approximate canvas position
-  const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  // Convert the drop point to model coordinates so it is correct at any pan/zoom
+  // (addNodeToCanvas applies grid snap when enabled).
+  const pos = renderedToModel(
+    { x: e.clientX - rect.left, y: e.clientY - rect.top },
+    canvas.cy.value.pan(),
+    canvas.cy.value.zoom(),
+  );
   canvas.addNodeToCanvas(type, pos);
   snapshotYaml();
 }
@@ -322,8 +355,9 @@ async function loadWorkflowName(): Promise<void> {
 
 function onContextMenu(e: MouseEvent) {
   if (!canvas.cy.value) return;
-  // Find the selected node or the one under cursor
-  const selected = canvasStore.selectedNodeId;
+  // Find the selected node; with a multi-selection, act on the first selected node
+  // (Delete / Duplicate then apply to the whole selection).
+  const selected = canvasStore.selectedNodeId ?? selectedNodeIds()[0];
   if (!selected) return;
   const nodeType = canvas.cy.value?.getElementById(selected).data('nodeType') as string ?? '';
   ctxMenu.value = { visible: true, x: e.clientX, y: e.clientY, nodeId: selected, nodeType };
@@ -344,8 +378,6 @@ onMounted(async () => {
   } else {
     await loadWorkflow();
   }
-  // Render initial minimap thumbnail after canvas is ready
-  setTimeout(updateMinimap, 500);
   // Double-click a node to open its configuration panel (prompt 06-02).
   canvas.cy.value?.on('dbltap', 'node', (evt) => {
     const id = evt.target.id();
@@ -377,19 +409,40 @@ function onCtxEdit() {
   openConfigPanel(ctxMenu.value.nodeId || canvasStore.selectedNodeId || '');
 }
 
-function onCtxDuplicate() {
-  const id = ctxMenu.value.nodeId || canvasStore.selectedNodeId;
-  if (!id) return;
-  const node = canvasStore.nodes.find(n => n.id === id);
-  if (!node) return;
-  const newId = `${node.type}-${Date.now()}`;
-  const newNode: CanvasNode = { ...node, id: newId, position: { x: (node.position?.x ?? 100) + 30, y: (node.position?.y ?? 100) + 30 } };
-  canvas.addNodeToCanvas(node.type, newNode.position!);
-  canvasStore.updateNode(newId, { label: node.label + ' (copy)' });
-  canvas.cy.value?.getElementById(newId).data('label', node.label + ' (copy)');
-  snapshotYaml();
-  ctxMenu.value.visible = false;
+function selectedNodeIds(): string[] {
+  const cy = canvas.cy.value;
+  if (!cy) return [];
+  return cy.nodes(':selected').filter(n => !n.data('isGroup')).map(n => n.id());
 }
+
+/** Ids the context-menu / shortcut action applies to: the whole selection if the target is in it. */
+function actionTargetIds(): string[] {
+  const target = ctxMenu.value.visible ? ctxMenu.value.nodeId : '';
+  const selection = selectedNodeIds();
+  if (target && !selection.includes(target)) return [target];
+  if (selection.length > 0) return selection;
+  return canvasStore.selectedNodeId ? [canvasStore.selectedNodeId] : [];
+}
+
+function onCtxDuplicate() {
+  const ids = actionTargetIds();
+  ctxMenu.value.visible = false;
+  if (ids.length === 0) return;
+  const created = canvas.duplicateNodes(ids);
+  // One snapshot for the whole batch → one undo step.
+  if (created.length > 0) snapshotYaml();
+}
+
+function onCtxShowInYaml() {
+  const id = ctxMenu.value.nodeId || canvasStore.selectedNodeId;
+  ctxMenu.value.visible = false;
+  if (id) canvasStore.requestYamlReveal(id, true);
+}
+
+// Selecting a single node scrolls the YAML editor to its definition (passive: no focus steal).
+watch(() => canvasStore.selectedNodeId, (id) => {
+  if (id) canvasStore.requestYamlReveal(id, false);
+});
 
 function onCtxAddConnected() { ctxMenu.value.visible = false; }
 
@@ -401,12 +454,15 @@ function onCtxHelp() {
 }
 
 function onCtxDelete() {
-  const id = ctxMenu.value.nodeId || canvasStore.selectedNodeId;
-  if (!id) return;
-  canvas.cy.value?.getElementById(id).remove();
-  canvasStore.removeNode(id);
-  snapshotYaml();
+  const ids = actionTargetIds();
   ctxMenu.value.visible = false;
+  const cy = canvas.cy.value;
+  if (!cy || ids.length === 0) return;
+  // Route through deleteSelected so connected edges are dropped from the store too,
+  // and the whole batch lands as a single undo step.
+  cy.elements().unselect();
+  ids.forEach(id => cy.getElementById(id).select());
+  if (canvas.deleteSelected() > 0) snapshotYaml();
 }
 
 function onCtxConfigure(_action: string) { openConfigPanel(ctxMenu.value.nodeId || canvasStore.selectedNodeId || ''); }
@@ -421,20 +477,12 @@ function handleAddGroup() {
   snapshotYaml();
 }
 
-function updateMinimap() {
-  if (!canvas.cy.value) return;
-  try {
-    minimapDataUrl.value = canvas.cy.value.png({ output: 'base64uri', full: true, scale: 0.15 }) as string;
-  } catch { /* ignore if cy not ready */ }
-}
-
 function snapshotYaml() {
   const newYaml = buildYamlFromState();
   yamlContent.value = newYaml;
   snapshot(newYaml);
   canvasStore.setDirty(true);
   emit('yamlChange', newYaml);
-  updateMinimap();
 }
 
 function buildYamlFromState(): string {
@@ -468,7 +516,8 @@ function buildYamlFromState(): string {
   if (cy) {
     // Use Cytoscape as source of truth — includes pre-loaded nodes and newly-added nodes
     spec.nodes = cy.nodes().filter(n => !n.data('isGroup') && n.id() !== '').map(n => ({
-      ...(existingNodeMap.get(n.id()) ?? {}),
+      // Duplicates inherit the source node's YAML (config etc.) until they have their own.
+      ...(existingNodeMap.get(n.id()) ?? existingNodeMap.get(n.data('copiedFrom') as string) ?? {}),
       id: n.id(),
       type: n.data('nodeType') || 'action',
       label: n.data('label') || n.id(),

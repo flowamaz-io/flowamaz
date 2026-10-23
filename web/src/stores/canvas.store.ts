@@ -104,7 +104,19 @@ export const useCanvasStore = defineStore('canvas', () => {
     isDirty.value = true;
   }
 
+  /**
+   * Canvas → YAML editor "reveal node" request. `seq` increments on every request so
+   * asking for the same node twice still triggers watchers.
+   */
+  const yamlRevealRequest = ref<{ nodeId: string; seq: number; explicit: boolean } | null>(null);
+
+  /** `explicit` = user asked directly (context menu) — the editor should take focus and report misses. */
+  function requestYamlReveal(nodeId: string, explicit = false) {
+    yamlRevealRequest.value = { nodeId, explicit, seq: (yamlRevealRequest.value?.seq ?? 0) + 1 };
+  }
+
   function reset() {
+    yamlRevealRequest.value = null;
     nodes.value = [];
     edges.value = [];
     groups.value = [];
@@ -123,5 +135,6 @@ export const useCanvasStore = defineStore('canvas', () => {
     pushHistory, undo, redo,
     setNodes, setEdges, setGroups, setSelectedNode, setYaml, setDirty, setSyncing,
     addNode, updateNode, removeNode, addEdge, removeEdge, reset,
+    yamlRevealRequest, requestYamlReveal,
   };
 });
