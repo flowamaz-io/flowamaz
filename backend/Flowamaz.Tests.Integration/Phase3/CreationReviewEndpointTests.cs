@@ -231,7 +231,7 @@ public class CreationReviewEndpointTests : ApiTestBase
         // StepsDescription is non-nullable, so MVC's implicit [Required] rejects a blank value before the
         // action runs (the FluentValidation NotEmpty rule is the backstop for direct service callers).
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await response.Content.ReadAsStringAsync()).Should().ContainEquivalentOf("StepsDescription");
+        (await response.Content.ReadAsStringAsync()).Should().Contain("VALIDATION_ERROR").And.Contain("Describe the steps");
     }
 
     [Fact]
