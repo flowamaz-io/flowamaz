@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
 import CreationMethodSelector from '../../components/creation/CreationMethodSelector.vue';
 import NlTemplateForm from '../../components/creation/NlTemplateForm.vue';
-import VoiceInputButton from '../../components/creation/VoiceInputButton.vue';
 import VisualInputPanel from '../../components/creation/VisualInputPanel.vue';
 import ConversationImportPanel from '../../components/creation/ConversationImportPanel.vue';
 import DocumentUploadPanel from '../../components/creation/DocumentUploadPanel.vue';
@@ -12,11 +11,14 @@ import CloneSuggestion from '../../components/workflow/CloneSuggestion.vue';
 import { workflowService } from '../../services/workflow.service';
 import { createWorkflow } from '../../services/creation.service';
 import { useWorkspace } from '../../composables/useWorkspace';
+import { useVoiceInput } from '../../composables/useVoiceInput';
+import { toUserFacingError } from '../../utils/error.util';
 
 const route = useRoute();
 const router = useRouter();
 const ws = useWorkspace();
 const workspaceId = ws.currentWorkspaceId;
+const { isSupported: voiceSupported } = useVoiceInput();
 
 const selectedMethod = ref<string | null>(null);
 const loading = ref(false);
@@ -37,7 +39,7 @@ async function cloneWorkflow() {
     const cloned = await workflowService.clone(workspaceId.value, cloneSuggestion.value.id);
     await router.push({ name: 'workflow-editor', params: { id: cloned.id }, query: { workspaceId: workspaceId.value ?? '' } });
   } catch (e: unknown) {
-    error.value = `Clone failed. ${e instanceof Error ? e.message : 'Please try again.'}`;
+    error.value = `Clone failed. ${toUserFacingError(e).message}`;
     loading.value = false;
   }
 }
@@ -54,7 +56,7 @@ watch(selectedMethod, async (method) => {
     });
     await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: workspaceId.value ?? '' } });
   } catch (e: unknown) {
-    error.value = `Failed to create canvas workflow. ${e instanceof Error ? e.message : 'Please try again.'}`;
+    error.value = `Failed to create canvas workflow. ${toUserFacingError(e).message}`;
     selectedMethod.value = null;
     loading.value = false;
   }
@@ -141,10 +143,23 @@ onMounted(() => {
           v-else-if="selectedMethod === 'voice'"
           class="space-y-4"
         >
-          <p class="text-sm text-neutral-600">
-            Speak your workflow description. Then switch to the form to refine it.
+          <p
+            v-if="voiceSupported"
+            class="text-sm text-neutral-600"
+          >
+            Tap the microphone beside each field and describe that part of your workflow out loud.
+            You can edit the text before generating.
           </p>
-          <VoiceInputButton />
+          <p
+            v-else
+            class="text-sm text-amber-700 bg-amber-50 rounded-md px-3 py-2"
+          >
+            Voice input isn't supported in this browser. Use Chrome or Edge to dictate, or type into the fields below.
+          </p>
+          <NlTemplateForm
+            :workspace-id="workspaceId ?? ''"
+            method="voice"
+          />
         </div>
 
         <VisualInputPanel

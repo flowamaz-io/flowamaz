@@ -9,6 +9,7 @@ using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
 using Flowamaz.Core.Workflow;
 using Microsoft.AspNetCore.Mvc;
+using YamlDotNet.Serialization;
 
 namespace Flowamaz.Api.Controllers;
 
@@ -21,6 +22,7 @@ public sealed class WorkflowCreationController : ControllerBase
     private readonly IVisualInputService _visualInput;
     private readonly IConversationImportService _conversationImport;
     private readonly ISopParsingService _sopParsing;
+    private readonly IWorkflowValidator _validator;
     private readonly WorkflowService _workflows;
     private readonly ICurrentUserService _currentUser;
     private readonly ILogger<WorkflowCreationController> _log;
@@ -43,6 +45,7 @@ public sealed class WorkflowCreationController : ControllerBase
         IVisualInputService visualInput,
         IConversationImportService conversationImport,
         ISopParsingService sopParsing,
+        IWorkflowValidator validator,
         WorkflowService workflows,
         ICurrentUserService currentUser,
         ILogger<WorkflowCreationController> log)
@@ -52,6 +55,7 @@ public sealed class WorkflowCreationController : ControllerBase
         _visualInput = visualInput;
         _conversationImport = conversationImport;
         _sopParsing = sopParsing;
+        _validator = validator;
         _workflows = workflows;
         _currentUser = currentUser;
         _log = log;
@@ -159,25 +163,34 @@ public sealed class WorkflowCreationController : ControllerBase
                 }
 
                 default: // "canvas"
-                    yamlContent = $"""
-                                  apiVersion: flowamaz/v1
-                                  kind: Workflow
-                                  metadata:
-                                    id: {slug}
-                                    name: "{request.Name}"
-                                  spec:
-                                    trigger:
-                                      type: manual
-                                    nodes: []
-                                    edges: []
-                                  """;
+                    yamlContent = BuildCanvasSkeleton(slug, request.Name);
                     break;
             }
         }
-        catch (Exception ex) when (ex is not WorkflowSlugExistsException)
+        catch (Exception ex) when (ex is not WorkflowSlugExistsException and not AppException and not OperationCanceledException)
         {
             _log.LogError(ex, "WorkflowCreationController.CreateWorkflow AI service error method={Method}", method);
             return StatusCode(502, new { error = $"AI processing failed. {ex.Message} Please try again." });
+        }
+
+        // Never persist a generated definition that does not validate. Saving invalid YAML produced
+        // drafts that could not be opened, published or run, and hid AI misconfiguration.
+        if (method != "canvas")
+        {
+            validationResult ??= await _validator.ValidateAsync(yamlContent, workspaceId, cancellationToken);
+            if (!validationResult.IsValid)
+            {
+                var first = validationResult.Errors.FirstOrDefault()?.Message ?? "The generated definition could not be parsed.";
+                _log.LogWarning("WorkflowCreationController.CreateWorkflow rejected invalid generated YAML method={Method} errors={Count}",
+                    method, validationResult.Errors.Count);
+                return UnprocessableEntity(new
+                {
+                    error = $"We couldn't build a valid workflow from that input ({validationResult.Errors.Count} problem(s); first: {first}). " +
+                            "Add more detail about the steps and who does them, then try again — or start from the canvas.",
+                    code = "WORKFLOW_GENERATION_INVALID",
+                    validation = validationResult,
+                });
+            }
         }
 
         var createdByMethod = method switch
@@ -332,6 +345,27 @@ public sealed class WorkflowCreationController : ControllerBase
 
         _log.LogInformation("WorkflowCreationController.FromConversation exit confidence={Confidence}", result.ConfidenceScore);
         return Ok(result);
+    }
+
+    private static readonly ISerializer YamlWriter = new SerializerBuilder().Build();
+
+    /// <summary>Empty canvas definition, serialised via YamlDotNet (CLAUDE.md rule 5) so the
+    /// user-supplied name can never break or inject into the YAML document.</summary>
+    internal static string BuildCanvasSkeleton(string slug, string name)
+    {
+        var doc = new Dictionary<string, object>
+        {
+            ["apiVersion"] = "flowamaz/v1",
+            ["kind"] = "Workflow",
+            ["metadata"] = new Dictionary<string, object> { ["id"] = slug, ["name"] = name },
+            ["spec"] = new Dictionary<string, object>
+            {
+                ["trigger"] = new Dictionary<string, object> { ["type"] = "manual" },
+                ["nodes"] = Array.Empty<object>(),
+                ["edges"] = Array.Empty<object>(),
+            },
+        };
+        return YamlWriter.Serialize(doc);
     }
 
     private static string UniqueSlug(string name)

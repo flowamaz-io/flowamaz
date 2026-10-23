@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toUserFacingError } from '@/utils/error.util';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { createWorkflow } from '@/services/creation.service';
@@ -65,8 +66,7 @@ async function handleFile(file: File) {
     });
     await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    error.value = `Document parsing failed. ${msg}. Try re-uploading or use a different file.`;
+    error.value = toUserFacingError(e).message;
     loading.value = false;
   }
 }

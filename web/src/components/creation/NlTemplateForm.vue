@@ -116,11 +116,12 @@
 </template>
 
 <script setup lang="ts">
+import { toUserFacingError } from '@/utils/error.util';
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { createWorkflow, type NlWorkflowRequest } from '@/services/creation.service';
 
-const props = defineProps<{ workspaceId: string }>();
+const props = withDefaults(defineProps<{ workspaceId: string; method?: 'nl' | 'voice' }>(), { method: 'nl' });
 
 const router = useRouter();
 
@@ -151,12 +152,12 @@ async function submit() {
   try {
     const result = await createWorkflow(props.workspaceId, {
       name: form.value.workflowName,
-      method: 'nl',
+      method: props.method,
       nlRequest: form.value,
     });
     await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e) {
-    error.value = (e as Error).message ?? 'Generation failed. Please try again.';
+    error.value = toUserFacingError(e).message;
     generating.value = false;
   }
 }

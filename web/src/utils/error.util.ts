@@ -16,9 +16,15 @@ const codeToArticle: Record<string, string> = {
 export function toUserFacingError(error: unknown): UserFacingError {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as Partial<ApiErrorEnvelope> | undefined;
-    if (data && typeof data.message === 'string' && data.message.length > 0) {
+    // Controllers that return BadRequest/UnprocessableEntity({ error, code }) bypass the global
+    // exception envelope, so accept `error` as well as `message`.
+    const serverMessage =
+      (data && typeof data.message === 'string' && data.message) ||
+      (data && typeof (data as { error?: unknown }).error === 'string' && (data as { error: string }).error) ||
+      '';
+    if (data && serverMessage.length > 0) {
       return {
-        message: data.message,
+        message: serverMessage,
         code: data.code,
         helpArticle: data.code ? codeToArticle[data.code] : undefined,
         correlationId: data.correlationId,

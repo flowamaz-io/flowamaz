@@ -22,8 +22,8 @@ public class AiCompletionServiceTests
     private static ModelConfig Config(string? apiKey) =>
         new("claude-haiku-4-5", "anthropic", AiKeySource.Platform, apiKey, false, 200_000, true, true);
 
-    private static IOptions<AiOptions> Options(bool useStub = false) =>
-        Microsoft.Extensions.Options.Options.Create(new AiOptions { UseStubCompletion = useStub });
+    private static IOptions<AiOptions> Options(bool useStub = false, bool allowStubWithoutKey = false) =>
+        Microsoft.Extensions.Options.Options.Create(new AiOptions { UseStubCompletion = useStub, AllowStubWithoutKey = allowStubWithoutKey });
 
     private static (Mock<IHttpClientFactory> factory, RecordingHandler handler) FactoryReturning(
         HttpStatusCode status, string body)
@@ -35,11 +35,11 @@ public class AiCompletionServiceTests
     }
 
     [Fact]
-    public async Task NoPlatformKey_ReturnsStubAndLogsWarning()
+    public async Task NoPlatformKey_StubAllowed_ReturnsStubAndLogsWarning()
     {
         var factory = new Mock<IHttpClientFactory>();
         var logger = new Mock<ILogger<AiCompletionService>>();
-        var service = new AiCompletionService(factory.Object, Options(), logger.Object);
+        var service = new AiCompletionService(factory.Object, Options(allowStubWithoutKey: true), logger.Object);
 
         var result = await service.CompleteAsync(Config(apiKey: ""), "system", "Order total is 47500.");
 
@@ -49,6 +49,23 @@ public class AiCompletionServiceTests
             l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception>(),
                 (Func<It.IsAnyType, Exception?, string>)It.IsAny<object>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task NoPlatformKey_StubNotAllowed_ThrowsAiNotConfigured_AndCallsNoProvider()
+    {
+        var factory = new Mock<IHttpClientFactory>();
+        var service = new AiCompletionService(factory.Object, Options(), NullLogger());
+
+        var complete = () => service.CompleteAsync(Config(apiKey: ""), "system", "prompt");
+        var image = () => service.CompleteWithImageAsync(Config(apiKey: ""), "system", "aGk=", "image/png", "");
+        var batch = () => service.SubmitBatchAsync(Config(apiKey: ""), "system", "prompt");
+
+        (await complete.Should().ThrowAsync<Flowamaz.Core.Exceptions.AiNotConfiguredException>())
+            .Which.HttpStatusCode.Should().Be(503);
+        await image.Should().ThrowAsync<Flowamaz.Core.Exceptions.AiNotConfiguredException>();
+        await batch.Should().ThrowAsync<Flowamaz.Core.Exceptions.AiNotConfiguredException>();
+        factory.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]

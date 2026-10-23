@@ -57,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import { toUserFacingError } from '@/utils/error.util';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Camera } from 'lucide-vue-next';
@@ -93,8 +94,7 @@ async function processFile(file: File) {
     });
     await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e) {
-    const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
-    error.value = msg ?? 'Image processing failed. Please try again with a clearer photo.';
+    error.value = toUserFacingError(e).message;
     processing.value = false;
   }
 }

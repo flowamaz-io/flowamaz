@@ -74,6 +74,7 @@
 </template>
 
 <script setup lang="ts">
+import { toUserFacingError } from '@/utils/error.util';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { createWorkflow } from '@/services/creation.service';
@@ -108,8 +109,7 @@ async function submit() {
     });
     await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e) {
-    const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
-    error.value = msg ?? 'Extraction failed. Please check your input and try again.';
+    error.value = toUserFacingError(e).message;
     importing.value = false;
   }
 }

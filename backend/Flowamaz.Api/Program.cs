@@ -275,6 +275,16 @@ builder.Services
 
 var app = builder.Build();
 
+// Make AI stub mode impossible to miss: stub output looks plausible and must never be mistaken for
+// real provider responses in a demo or in production.
+{
+    var aiOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Flowamaz.Core.Configuration.AiOptions>>().Value;
+    if (aiOptions.UseStubCompletion)
+        app.Logger.LogWarning("AI STUB MODE (Ai:UseStubCompletion=true) — all AI responses are canned, no provider is called.");
+    else if (aiOptions.AllowStubWithoutKey && string.IsNullOrEmpty(aiOptions.AnthropicPlatformKey))
+        app.Logger.LogWarning("AI STUB MODE (no platform key, Ai:AllowStubWithoutKey=true) — AI responses without a workspace key are canned.");
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // 14. Pipeline: Serilog → CorrelationId → CORS → Exception → ResponseWrapper → Auth → Endpoints.
 // ──────────────────────────────────────────────────────────────────────────────

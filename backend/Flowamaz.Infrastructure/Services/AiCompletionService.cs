@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Flowamaz.Core.Configuration;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -44,7 +45,7 @@ public sealed class AiCompletionService : IAiCompletionService
         _logger.LogDebug("AiCompletionService.CompleteAsync enter model={ModelId} provider={Provider} maxTokens={MaxTokens}",
             config.ModelId, config.Provider, maxTokens);
 
-        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        if (ShouldUseStub(config))
         {
             _logger.LogWarning(
                 "AiCompletionService: returning local stub completion for {Provider}/{Model} (stubMode={Stub}, hasKey={HasKey})",
@@ -122,7 +123,7 @@ public sealed class AiCompletionService : IAiCompletionService
     {
         _logger.LogDebug("AiCompletionService.CompleteWithImageAsync enter model={ModelId}", config.ModelId);
 
-        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        if (ShouldUseStub(config))
         {
             _logger.LogWarning("AiCompletionService.CompleteWithImageAsync: stub mode");
             const string stubJson = """{"nodes":[{"id":"n1","label":"Start","type":"trigger","x":100,"y":100,"confidence":0.99,"annotations":[]},{"id":"n2","label":"Process","type":"action","x":100,"y":200,"confidence":0.95,"annotations":[]},{"id":"n3","label":"End","type":"end","x":100,"y":300,"confidence":0.99,"annotations":[]}],"edges":[{"from":"n1","to":"n2","label":null},{"from":"n2","to":"n3","label":null}],"low_confidence":[]}""";
@@ -183,7 +184,7 @@ public sealed class AiCompletionService : IAiCompletionService
     {
         _logger.LogDebug("AiCompletionService.SubmitBatchAsync enter model={ModelId}", config.ModelId);
 
-        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        if (ShouldUseStub(config))
         {
             var stubId = $"stub-batch-{Guid.NewGuid():N}";
             _logger.LogWarning("AiCompletionService.SubmitBatchAsync: stub mode → {BatchId}", stubId);
@@ -235,7 +236,7 @@ public sealed class AiCompletionService : IAiCompletionService
     {
         _logger.LogDebug("AiCompletionService.PollBatchResultAsync enter batchId={BatchId}", batchId);
 
-        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        if (ShouldUseStub(config))
         {
             _logger.LogDebug("AiCompletionService.PollBatchResultAsync: stub mode — returning immediate result");
             return StubResult("batch-system", batchId);
@@ -286,6 +287,20 @@ public sealed class AiCompletionService : IAiCompletionService
             _logger.LogError(ex, "AiCompletionService.PollBatchResultAsync error batchId={BatchId}", batchId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Stub only when explicitly enabled. With no key and stub not allowed, throw instead of returning
+    /// canned text that would be shown to users as real AI output.
+    /// </summary>
+    private bool ShouldUseStub(ModelConfig config)
+    {
+        if (_options.UseStubCompletion) return true;
+        if (!string.IsNullOrEmpty(config.ApiKey)) return false;
+        if (_options.AllowStubWithoutKey) return true;
+
+        _logger.LogError("AiCompletionService: no API key for {Provider}/{Model} and stub not allowed", config.Provider, config.ModelId);
+        throw new AiNotConfiguredException(config.Provider.ToString(), config.ModelId);
     }
 
     // Deterministic local completion: lead sentence + the supplied facts so instance-specific values
