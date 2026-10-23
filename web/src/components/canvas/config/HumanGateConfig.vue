@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { credentialService, type CredentialAlias } from '@/services/credential.service';
 import { Plus, Trash2 } from 'lucide-vue-next';
 
 type Config = Record<string, unknown>;
@@ -9,7 +10,7 @@ interface GateOption {
   value: string;
 }
 
-const props = defineProps<{ config: Config }>();
+const props = defineProps<{ config: Config; workspaceId?: string }>();
 const emit = defineEmits<{ update: [config: Config] }>();
 
 const ASSIGNEE_TYPES = ['role', 'user', 'variable'] as const;
@@ -33,7 +34,27 @@ const channels = computed<Record<string, boolean>>(
 );
 const timeoutValue = computed<number>(() => (props.config.timeoutValue as number) ?? 24);
 const timeoutUnit = computed<string>(() => (props.config.timeoutUnit as string) ?? 'hours');
-const onTimeout = computed<string>(() => (props.config.onTimeout as string) ?? 'escalate');
+const onTimeout = computed<string>(() => (props.config.onTimeout as string) ?? 'fail');
+const escalateTo = computed<string>(() => (props.config.escalateTo as string) ?? '');
+const slackChannel = computed<string>(() => (props.config.slackChannel as string) ?? '');
+const slackCredential = computed<string>(() => (props.config.slackCredential as string) ?? '');
+const teamsWebhookUrl = computed<string>(() => (props.config.teamsWebhookUrl as string) ?? '');
+
+const slackCredentials = ref<CredentialAlias[]>([]);
+async function loadSlackCredentials(): Promise<void> {
+  if (!props.workspaceId || !channels.value.slack) return;
+  try {
+    slackCredentials.value = (await credentialService.list(props.workspaceId, 'slack')).filter((c) => c.isActive);
+  } catch {
+    slackCredentials.value = [];
+  }
+}
+onMounted(loadSlackCredentials);
+watch(() => channels.value.slack, loadSlackCredentials);
+
+const escalateToInvalid = computed(
+  () => onTimeout.value === 'escalate' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(escalateTo.value.trim()),
+);
 
 function patch(updates: Config): void {
   emit('update', { ...props.config, ...updates });
@@ -170,6 +191,69 @@ function toggleChannel(key: string): void {
           Portal (always on)
         </span>
       </div>
+
+      <div
+        v-if="channels.slack"
+        class="mt-3 space-y-2"
+      >
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-300">Slack channel</label>
+          <input
+            :value="slackChannel"
+            placeholder="#approvals"
+            class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 focus:border-indigo-400 focus:outline-none"
+            @input="patch({ slackChannel: ($event.target as HTMLInputElement).value })"
+          >
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-300">Slack account</label>
+          <select
+            :value="slackCredential"
+            class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 focus:border-indigo-400 focus:outline-none"
+            @change="patch({ slackCredential: ($event.target as HTMLSelectElement).value || undefined })"
+          >
+            <option value="">
+              {{ slackCredentials.length === 1 ? `Workspace default (${slackCredentials[0]!.name})` : 'Workspace default' }}
+            </option>
+            <option
+              v-for="c in slackCredentials"
+              :key="c.id"
+              :value="c.name"
+            >
+              {{ c.name }}
+            </option>
+          </select>
+          <p
+            v-if="workspaceId && slackCredentials.length === 0"
+            class="mt-1 text-xs text-amber-400"
+          >
+            Slack isn't connected —
+            <RouterLink
+              to="/settings/credentials"
+              class="underline hover:text-amber-300"
+            >
+              connect it in Settings → Credentials
+            </RouterLink>; until then this approval only appears in the portal.
+          </p>
+        </div>
+      </div>
+
+      <div
+        v-if="channels.teams"
+        class="mt-3"
+      >
+        <label class="mb-1 block text-xs font-medium text-gray-300">Teams incoming webhook URL</label>
+        <input
+          :value="teamsWebhookUrl"
+          type="url"
+          placeholder="https://…/workflows/…"
+          class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 focus:border-indigo-400 focus:outline-none"
+          @input="patch({ teamsWebhookUrl: ($event.target as HTMLInputElement).value })"
+        >
+        <p class="mt-1 text-xs text-gray-500">
+          Create one in the Teams channel (Workflows → "Post to a channel when a webhook request is received").
+        </p>
+      </div>
     </div>
 
     <div>
@@ -201,8 +285,11 @@ function toggleChannel(key: string): void {
         class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 focus:border-indigo-400 focus:outline-none"
         @change="patch({ onTimeout: ($event.target as HTMLSelectElement).value })"
       >
+        <option value="fail">
+          Fail the run
+        </option>
         <option value="escalate">
-          Escalate to admin
+          Escalate to someone else
         </option>
         <option value="auto-approve">
           Auto-approve
@@ -211,6 +298,31 @@ function toggleChannel(key: string): void {
           Auto-reject
         </option>
       </select>
+      <div
+        v-if="onTimeout === 'escalate'"
+        class="mt-2"
+      >
+        <label class="mb-1 block text-xs font-medium text-gray-300">Escalate to (email)</label>
+        <input
+          :value="escalateTo"
+          type="email"
+          placeholder="director@example.com"
+          class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 focus:border-indigo-400 focus:outline-none"
+          @input="patch({ escalateTo: ($event.target as HTMLInputElement).value })"
+        >
+        <p
+          v-if="escalateToInvalid"
+          class="mt-1 text-xs text-amber-400"
+        >
+          Enter who should get the approval if nobody decides in time — without it, the run fails at the deadline.
+        </p>
+        <p
+          v-else
+          class="mt-1 text-xs text-gray-500"
+        >
+          They get a new window of the same length. If they don't decide either, the run fails.
+        </p>
+      </div>
     </div>
   </div>
 </template>

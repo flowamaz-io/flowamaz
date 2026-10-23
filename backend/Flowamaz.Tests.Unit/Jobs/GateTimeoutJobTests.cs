@@ -57,25 +57,74 @@ public class GateTimeoutJobTests
     }
 
     [Fact]
-    public async Task Execute_ExpiredGateWithEscalationTarget_SetsEscalatedAndDoesNotFailNode()
+    public async Task Escalate_ReassignsOnce_KeepsGatePendingAndDecidable_WithFreshWindow()
     {
-        var gate = Gate(escalatedTo: Guid.NewGuid());
-        _gates.Setup(r => r.GetExpiredAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([gate]);
+        // Regression: escalation used to set Decision=Escalated, which DecideAsync rejects — the run hung.
+        var gate = Gate(escalatedTo: null);
+        gate.OnTimeout = GateTimeoutActions.Escalate;
+        gate.EscalateToEmail = "director@example.com";
+        gate.TimeoutHours = 24;
+        _gates.Setup(r => r.GetExpiredAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([gate]);
 
         await NewJob().Execute(Context());
 
-        gate.Decision.Should().Be(GateDecisionStatus.Escalated);
-        _gates.Verify(r => r.Update(gate), Times.Once);
-        _events.Verify(e => e.AppendAsync(It.Is<WorkflowEvent>(w => w.EventType == "GateDecided"), It.IsAny<CancellationToken>()), Times.Once);
-        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        gate.Decision.Should().Be(GateDecisionStatus.Pending);
+        gate.AssignedToEmail.Should().Be("director@example.com");
+        gate.EscalationCount.Should().Be(1);
+        gate.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddHours(24), TimeSpan.FromMinutes(1));
+        _events.Verify(e => e.AppendAsync(It.Is<WorkflowEvent>(w => w.EventType == "GateEscalated"), It.IsAny<CancellationToken>()), Times.Once);
         _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Escalate_SecondTimeout_FailsTheGate()
+    {
+        var gate = Gate(escalatedTo: null);
+        gate.OnTimeout = GateTimeoutActions.Escalate;
+        gate.EscalateToEmail = "director@example.com";
+        gate.EscalationCount = 1;
+        _gates.Setup(r => r.GetExpiredAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([gate]);
+
+        await NewJob().Execute(Context());
+
+        _orchestrator.Verify(o => o.FailNodeAsync(gate.InstanceId, gate.NodeId, It.Is<string>(m => m.Contains("after escalation")),
+            It.IsAny<string>(), It.IsAny<CancellationToken>(), false), Times.Once);
+    }
+
+    [Fact]
+    public async Task AutoApprove_RecordsApproval_AndCompletesTheNode()
+    {
+        var gate = Gate(escalatedTo: null);
+        gate.OnTimeout = GateTimeoutActions.AutoApprove;
+        _gates.Setup(r => r.GetExpiredAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([gate]);
+
+        await NewJob().Execute(Context());
+
+        gate.Decision.Should().Be(GateDecisionStatus.Approved);
+        gate.DecisionNote.Should().Contain("Auto-approved");
+        _orchestrator.Verify(o => o.CompleteNodeAsync(gate.InstanceId, gate.NodeId, It.Is<string>(j => j.Contains("approved")), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AutoReject_RecordsRejection_AndFailsWithoutRetry()
+    {
+        var gate = Gate(escalatedTo: null);
+        gate.OnTimeout = GateTimeoutActions.AutoReject;
+        _gates.Setup(r => r.GetExpiredAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([gate]);
+
+        await NewJob().Execute(Context());
+
+        gate.Decision.Should().Be(GateDecisionStatus.Rejected);
+        _orchestrator.Verify(o => o.FailNodeAsync(gate.InstanceId, gate.NodeId, It.Is<string>(m => m.Contains("auto-rejected")),
+            It.IsAny<string>(), It.IsAny<CancellationToken>(), false), Times.Once);
     }
 
     [Fact]
     public async Task Execute_ExpiredGateNoEscalationTarget_FailsGateNode()
     {
         var gate = Gate(escalatedTo: null);
+        gate.OnTimeout = GateTimeoutActions.Escalate; // escalate requested but no target → fail
         _gates.Setup(r => r.GetExpiredAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([gate]);
 
@@ -85,6 +134,15 @@ public class GateTimeoutJobTests
         // A timed-out gate must not be retried (that would open a new approval).
         _orchestrator.Verify(o => o.FailNodeAsync(gate.InstanceId, gate.NodeId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), false), Times.Once);
     }
+
+    [Theory]
+    [InlineData("auto_approve", GateTimeoutActions.AutoApprove)]
+    [InlineData("Auto-Reject", GateTimeoutActions.AutoReject)]
+    [InlineData("escalate", GateTimeoutActions.Escalate)]
+    [InlineData(null, GateTimeoutActions.Fail)]
+    [InlineData("whatever", GateTimeoutActions.Fail)]
+    public void TimeoutAction_IsNormalised(string? input, string expected) =>
+        GateTimeoutActions.Normalize(input).Should().Be(expected);
 
     [Fact]
     public async Task Execute_AppendThrows_LogsAndDoesNotPropagate()

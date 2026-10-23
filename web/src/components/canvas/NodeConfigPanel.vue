@@ -175,6 +175,7 @@ function onKeydown(event: KeyboardEvent): void {
           <HumanGateConfig
             v-else-if="nodeType === 'human-gate'"
             :config="workingConfig"
+            :workspace-id="workspaceId"
             @update="updateConfig"
           />
           <RouterConditionBuilder

@@ -311,7 +311,7 @@ public class HumanGateNodeWorkerTests
             .Callback<GateDecision, CancellationToken>((g, _) => created = g).Returns(Task.CompletedTask);
         var config = JsonDocument.Parse("""
             {"assigneeType":"user","assignee":"cfo@example.com","channels":{"email":true,"slack":true},
-             "timeoutValue":2,"timeoutUnit":"days"}
+             "timeoutValue":2,"timeoutUnit":"days","onTimeout":"escalate","escalateTo":"ceo@example.com"}
             """);
         var ctx = new NodeExecutionContext(Guid.NewGuid(), Guid.NewGuid(),
             new SfgNode("approval", NodeType.HumanGate, "CFO approval", config, null, null, null),
@@ -324,6 +324,9 @@ public class HumanGateNodeWorkerTests
         created!.AssignedToEmail.Should().Be("cfo@example.com");
         created.DeliveryChannel.Should().Be(GateDeliveryChannel.Slack);
         created.ExpiresAt.Should().BeCloseTo(before.AddHours(48), TimeSpan.FromMinutes(1));
+        created.OnTimeout.Should().Be(GateTimeoutActions.Escalate);
+        created.EscalateToEmail.Should().Be("ceo@example.com");
+        created.TimeoutHours.Should().Be(48);
     }
 
     [Theory]

@@ -491,4 +491,29 @@ public class ConnectorWiringTests
     [InlineData("abc", "10", ">", false)]       // non-numeric ordering is never true
     public void ConditionComparison_SupportsNumericOperators(string left, string right, string op, bool expected) =>
         VariableEvaluationService.Compare(left, right, op).Should().Be(expected);
+
+    [Fact]
+    public async Task Email_PerWorkspaceLimits_HourlyRetryable_DailyFatal()
+    {
+        var email = new Mock<IEmailService>();
+        email.Setup(e => e.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var limits = new Mock<IRateLimitService>();
+        var ws = Guid.NewGuid();
+        var handler = new EmailSendHandler(email.Object, NullLogger<EmailSendHandler>.Instance, limits.Object,
+            new ConnectorCallContext { WorkspaceId = ws }, Config(("Connectors:Email:MaxPerHour", "2")));
+        var input = JsonDocument.Parse("""{"to":"a@b.co","subject":"Hi","body":"x"}""");
+
+        limits.Setup(l => l.CheckAndIncrementAsync(It.Is<string>(k => k.Contains(":day:")), 500, 86_400, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        limits.Setup(l => l.CheckAndIncrementAsync(It.Is<string>(k => k.Contains(":hour:") && k.Contains(ws.ToString("N"))), 2, 3_600, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        var hourly = () => handler.ExecuteAsync(input, null, default);
+        (await hourly.Should().ThrowAsync<ConnectorOperationException>()).Which.Retryable.Should().BeTrue();
+
+        limits.Setup(l => l.CheckAndIncrementAsync(It.Is<string>(k => k.Contains(":day:")), 500, 86_400, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        var daily = () => handler.ExecuteAsync(input, null, default);
+        var ex = (await daily.Should().ThrowAsync<ConnectorOperationException>()).Which;
+        ex.Retryable.Should().BeFalse();
+        ex.Message.Should().Contain("Microsoft 365");
+        email.Verify(e => e.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

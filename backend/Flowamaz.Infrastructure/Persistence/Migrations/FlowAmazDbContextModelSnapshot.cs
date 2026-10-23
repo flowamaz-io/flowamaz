@@ -2849,9 +2849,18 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("delivery_status");
 
+                    b.Property<string>("EscalateToEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("escalate_to_email");
+
                     b.Property<Guid?>("EscalatedTo")
                         .HasColumnType("uuid")
                         .HasColumnName("escalated_to");
+
+                    b.Property<int>("EscalationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("escalation_count");
 
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
@@ -2870,6 +2879,18 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("node_id");
+
+                    b.Property<string>("OnTimeout")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("fail")
+                        .HasColumnName("on_timeout");
+
+                    b.Property<int?>("TimeoutHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("timeout_hours");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

@@ -80,9 +80,11 @@ public sealed class HumanGateNodeWorker : INodeWorker
             var gateLabel = GetString(config, "gate_label") ?? (string.IsNullOrWhiteSpace(context.Node.Label) ? "Approval Required" : context.Node.Label);
             var gateSummary = GetString(config, "gate_summary") ?? string.Empty;
             var timeoutHours = GetInt(config, "timeout_hours") ?? TimeoutFromCanvas(config) ?? DefaultTimeoutHours;
-            var slackChannel = GetString(config, "slack_channel");
-            var slackCredentialRef = GetString(config, "slack_credential");
-            var teamsWebhookUrl = GetString(config, "teams_webhook_url");
+            var slackChannel = GetString(config, "slack_channel") ?? GetString(config, "slackChannel");
+            var slackCredentialRef = GetString(config, "slack_credential") ?? GetString(config, "slackCredential");
+            var teamsWebhookUrl = GetString(config, "teams_webhook_url") ?? GetString(config, "teamsWebhookUrl");
+            var onTimeout = GateTimeoutActions.Normalize(GetString(config, "on_timeout") ?? GetString(config, "onTimeout"));
+            var escalateTo = GetString(config, "escalate_to") ?? GetString(config, "escalateTo");
             var workflowName = GetString(config, "workflow_name") ?? "Workflow";
 
             // ── Resolve assignee email ────────────────────────────────────────
@@ -113,6 +115,9 @@ public sealed class HumanGateNodeWorker : INodeWorker
                 DeliveryChannel = deliveryChannel,
                 DeliveryStatus = GateDeliveryStatus.Pending,
                 ExpiresAt = expiresAt,
+                OnTimeout = onTimeout,
+                EscalateToEmail = string.IsNullOrWhiteSpace(escalateTo) ? null : escalateTo.Trim(),
+                TimeoutHours = timeoutHours,
             };
 
             await _gateRepo.AddAsync(gate, cancellationToken);
