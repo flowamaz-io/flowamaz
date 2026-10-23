@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { onClickOutside } from '@vueuse/core';
 import { ChevronUp, CreditCard, LayoutGrid, LogOut, Store, User } from 'lucide-vue-next';
@@ -22,8 +22,21 @@ const PLAN_LABELS: Record<string, string> = {
   pro: 'Pro Plan',
   enterprise: 'Enterprise',
 };
-const planLabel = computed(
-  () => PLAN_LABELS[workspaceStore.currentWorkspace?.edition ?? 'community'] ?? 'Community',
+// While the edition is unknown show nothing rather than a misleading "Community".
+const planLabel = computed(() => {
+  const edition = workspaceStore.currentWorkspace?.edition;
+  return edition ? (PLAN_LABELS[edition] ?? 'Community') : '';
+});
+
+// The workspace list has no edition; load the current workspace's details (once per switch).
+watch(
+  () => workspaceStore.currentWorkspaceId,
+  (id) => {
+    if (id && workspaceStore.currentWorkspace?.id !== id) {
+      workspaceStore.loadCurrentWorkspace().catch(() => { /* label stays hidden; nothing else depends on it */ });
+    }
+  },
+  { immediate: true },
 );
 
 // Publisher settings are org-owner only; workspace Admin is the closest client-side signal.
@@ -98,7 +111,10 @@ async function logout(): Promise<void> {
         <span class="block truncate text-sm font-medium text-sidebar-text-primary">
           {{ user?.name ?? 'Account' }}
         </span>
-        <span class="inline-flex items-center rounded-full bg-sidebar-hover px-1.5 py-0.5 text-[10px] font-medium text-sidebar-text-secondary">
+        <span
+          v-if="planLabel"
+          class="inline-flex items-center rounded-full bg-sidebar-hover px-1.5 py-0.5 text-[10px] font-medium text-sidebar-text-secondary"
+        >
           {{ planLabel }}
         </span>
       </span>

@@ -3,6 +3,7 @@ import type { Core } from 'cytoscape';
 import { useDebounceFn } from '@vueuse/core';
 import { useCanvasStore } from '@/stores/canvas.store';
 import type { CanvasNode, CanvasEdge } from '@/types/canvas.types';
+import { parseWorkflowGraph } from '@/utils/workflowGraph.util';
 
 const YAML_PARSE_DEBOUNCE = 300;
 
@@ -10,70 +11,11 @@ export function useYamlCanvasSync(getCyInstance: () => Core | null) {
   const store = useCanvasStore();
   const lastSyncedYaml = ref('');
 
-  // Parse a minimal workflow YAML to extract nodes, edges
+  // Parse workflow YAML into canvas nodes/edges with a real YAML parser. The previous line-by-line
+  // regex missed valid YAML styles (e.g. flow mappings `- { id: e1, from: a, to: b }`), which
+  // dropped edges from the canvas — and a later canvas save then rewrote spec.edges without them.
   function parseYamlToGraph(yaml: string): { nodes: CanvasNode[]; edges: CanvasEdge[] } | null {
-    try {
-      // Simple line-by-line YAML extraction for canvas display
-      // Full parsing happens on the backend via the validator
-      const nodes: CanvasNode[] = [];
-      const edges: CanvasEdge[] = [];
-
-      // Use regex to extract node and edge blocks from YAML
-      const typeLine = /^\s+type:\s*(.+)$/;
-      const labelLine = /^\s+label:\s*["']?(.+?)["']?$/;
-      const fromLine = /^\s+from:\s*(.+)$/;
-      const toLine = /^\s+to:\s*(.+)$/;
-      const viaLine = /^\s+via:\s*(.+)$/;
-
-      const lines = yaml.split('\n');
-      let inNodes = false;
-      let inEdges = false;
-      let current: Partial<CanvasNode & CanvasEdge> | null = null;
-      let isEdge = false;
-
-      for (const line of lines) {
-        if (line.match(/^\s*nodes:/)) { inNodes = true; inEdges = false; continue; }
-        if (line.match(/^\s*edges:/)) { inEdges = true; inNodes = false; continue; }
-        if (line.match(/^\s*(groups|variables|trigger|metadata|spec):/) || line.match(/^[a-zA-Z]/)) {
-          if (line.match(/^[a-zA-Z]/) && !line.startsWith('  ')) {
-            inNodes = false; inEdges = false;
-          }
-        }
-
-        if ((inNodes || inEdges) && line.match(/^\s+-\s+id:/)) {
-          if (current) {
-            if (isEdge) edges.push({ id: current.id!, from: current.from!, to: current.to!, via: current.via });
-            else nodes.push(current as CanvasNode);
-          }
-          const idMatch = line.match(/^\s+-\s+id:\s*(.+)$/);
-          current = { id: idMatch?.[1]?.trim() ?? '', config: {} };
-          isEdge = inEdges;
-          continue;
-        }
-
-        if (current) {
-          const tMatch = line.match(typeLine);
-          if (tMatch) { current.type = tMatch[1].trim() as CanvasNode['type']; continue; }
-          const lMatch = line.match(labelLine);
-          if (lMatch && !isEdge) { current.label = lMatch[1].trim(); continue; }
-          const fMatch = line.match(fromLine);
-          if (fMatch && isEdge) { (current as CanvasEdge).from = fMatch[1].trim(); continue; }
-          const toMatch = line.match(toLine);
-          if (toMatch && isEdge) { (current as CanvasEdge).to = toMatch[1].trim(); continue; }
-          const vMatch = line.match(viaLine);
-          if (vMatch && isEdge) { (current as CanvasEdge).via = vMatch[1].trim(); continue; }
-        }
-      }
-
-      if (current) {
-        if (isEdge) edges.push({ id: current.id!, from: (current as CanvasEdge).from!, to: (current as CanvasEdge).to!, via: (current as CanvasEdge).via });
-        else if ((current as CanvasNode).type) nodes.push(current as CanvasNode);
-      }
-
-      return nodes.length > 0 ? { nodes, edges } : null;
-    } catch {
-      return null;
-    }
+    return parseWorkflowGraph(yaml);
   }
 
   const syncYamlToCanvas = useDebounceFn((yaml: string) => {
