@@ -78,3 +78,36 @@ Still open (scope decisions, not bugs):
   snap), Visual input asking about low-confidence nodes, NL clarifying questions, gate onTimeout
   auto-approve/auto-reject, a Slack channel field and Teams webhook field in the gate panel.
 - Rate limiting / abuse controls for the platform Email connector (sends from the platform domain).
+
+## Status after feat/audit-open-items (2026-10-23)
+
+All items listed as "still open" above are built:
+- **Connector sandbox (§9.5):** `connector-runner` container (HMAC-signed requests, per-connector
+  domain allowlist, read-only, non-root, cap_drop ALL, internal network only) + `egress-proxy`
+  (refuses private/loopback/metadata/CGNAT/ULA destinations and non-443/80 ports). Third-party
+  connectors and Script/Shell run there when `Connectors__Sandbox__Url` is set; Script/Shell is
+  enabled only inside the runner. See docs/DEPLOYMENT.md §1b.
+- **Workflow Economy (§8.9), Stripe test mode:** Connect Express publisher onboarding, listing
+  prices (one-time / monthly), Checkout destination charges with a 20% application fee, entitlements
+  gating install (402), renewals/past-due/cancel/refund webhooks, idempotent earnings ledger,
+  Settings → Publisher and Settings → Purchases. Paid YAML is never served publicly.
+- **Canvas:** Shift-drag box select (bulk delete/duplicate), clickable/draggable minimap,
+  node → YAML line jump, 20px grid snap.
+- **Creation:** visual-input review of low-confidence nodes before generation; NL clarifying
+  questions (heuristics first, one metered AI call at most).
+- **Gates:** onTimeout fail / escalate / auto-approve / auto-reject; Slack channel + account and
+  Teams webhook fields in the gate panel.
+- **Email connector:** per-workspace caps (100/hour retryable, 500/day fatal; configurable).
+
+Found and fixed along the way: template node summaries were always empty (YAML naming convention).
+
+Verification: backend build 0/0; unit 766/766; integration 119 pass against Postgres 16 + Redis,
+18 not runnable here (they start their own Testcontainers and need Docker — CI has it); web
+vue-tsc 0 errors, eslint 0 errors, vitest 135/135, build OK.
+
+Needs a human with real accounts before production:
+- Stripe test-mode walk-through: enable Connect, set STRIPE_SECRET_KEY (sk_test_…),
+  STRIPE_WEBHOOK_SECRET and STRIPE_CONNECT_WEBHOOK_SECRET, then publish → onboard → buy with
+  4242 4242 4242 4242 → confirm the ledger row. Refunds assume refund_application_fee + reverse_transfer.
+- `docker compose up` of the sandbox (images not built here — no Docker in this environment).
+- Browser check of canvas box select / minimap drag (unit-tested only).
