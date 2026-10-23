@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import { onClickOutside } from '@vueuse/core';
 import { XCircle, AlertTriangle, CheckCircle2 } from 'lucide-vue-next';
@@ -12,6 +12,8 @@ import { useHelp } from '../../composables/useHelp';
 import { useWorkspace } from '../../composables/useWorkspace';
 import { useWorkflowStore } from '../../stores/workflow.store';
 import { useToast } from '../../composables/useToast';
+import { useCanvasStore } from '../../stores/canvas.store';
+import { findNodeIdLine } from '../../utils/canvas.util';
 
 const route = useRoute();
 const ws = useWorkspace();
@@ -116,6 +118,30 @@ function healthColour(score: number | null) {
   if (score >= 50) return 'text-amber-400';
   return 'text-red-400';
 }
+
+// ── Canvas → YAML jump ("Show in YAML" / node selection) ─────────────────────
+const canvasStore = useCanvasStore();
+const yamlEditorRef = ref<InstanceType<typeof FmYamlEditor> | null>(null);
+
+watch(() => canvasStore.yamlRevealRequest, async (req) => {
+  if (!req) return;
+  if (empathyMode.value) {
+    // Passive selection shouldn't yank the user out of Empathy mode; an explicit request does.
+    if (!req.explicit) return;
+    empathyMode.value = false;
+  }
+  // Let the latest canvas edit flow into the editor document before locating the line.
+  await nextTick();
+  const line = findNodeIdLine(yaml.value, req.nodeId);
+  if (line === null) {
+    yamlEditorRef.value?.clearRevealedLine();
+    if (req.explicit) {
+      toast.warning(`Node "${req.nodeId}" isn't in the YAML yet. Make a change on the canvas or save, then try "Show in YAML" again.`);
+    }
+    return;
+  }
+  yamlEditorRef.value?.revealLine(line, { focus: req.explicit });
+});
 
 watch(yaml, () => validateDebounced());
 watch(saveState, (next, prev) => {
