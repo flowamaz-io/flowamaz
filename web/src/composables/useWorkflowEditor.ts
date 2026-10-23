@@ -24,39 +24,60 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
     healthScore.value = wf.healthScore ?? null;
   }
 
-  const validateDebounced = useDebounceFn(async () => {
-    if (!yaml.value.trim()) { validationErrors.value = []; return; }
-    validationErrors.value = [];
-    try {
-      const result = await workflowService.validate(workspaceId, yaml.value);
-      validationErrors.value = [
-        ...result.errors.map((e: { message: string; line?: number }) => ({
-          from: lineToOffset(yaml.value, (e.line ?? 1) - 1),
-          to: lineToOffset(yaml.value, e.line ?? 1),
-          message: e.message,
-          severity: 'error' as const,
-        })),
-        ...result.warnings.map((w: { message: string; line?: number }) => ({
-          from: lineToOffset(yaml.value, (w.line ?? 1) - 1),
-          to: lineToOffset(yaml.value, w.line ?? 1),
-          message: w.message,
-          severity: 'warning' as const,
-        })),
-      ];
-    } catch {
-      validationErrors.value = [];
-    }
-  }, 800);
+  type Issue = { message: string; line?: number };
 
-  async function save() {
-    if (!isDirty.value) return;
-    saveState.value = 'saving';
+  /** Turn a validation result for `text` into editor markers (line → character offsets). */
+  function toMarkers(text: string, result: { errors: Issue[]; warnings: Issue[] }) {
+    return [
+      ...result.errors.map((e) => ({
+        from: lineToOffset(text, (e.line ?? 1) - 1),
+        to: lineToOffset(text, e.line ?? 1),
+        message: e.message,
+        severity: 'error' as const,
+      })),
+      ...result.warnings.map((w) => ({
+        from: lineToOffset(text, (w.line ?? 1) - 1),
+        to: lineToOffset(text, w.line ?? 1),
+        message: w.message,
+        severity: 'warning' as const,
+      })),
+    ];
+  }
+
+  /**
+   * Validate the current document. A response for a document that has since changed (e.g.
+   * nodes deleted on the canvas while the request was in flight) is dropped instead of
+   * painting markers at stale positions; the newer document has its own validation queued.
+   */
+  async function runValidation(): Promise<{ errors: Issue[]; warnings: Issue[] } | null> {
+    const text = yaml.value;
+    if (!text.trim()) { validationErrors.value = []; return null; }
     try {
-      await workflowService.update(workspaceId, workflowId, { yamlContent: yaml.value });
-      originalYaml.value = yaml.value;
+      const result = await workflowService.validate(workspaceId, text);
+      if (yaml.value !== text) return null;
+      validationErrors.value = toMarkers(text, result);
+      return result;
+    } catch {
+      if (yaml.value === text) validationErrors.value = [];
+      return null;
+    }
+  }
+
+  const validateDebounced = useDebounceFn(async () => { await runValidation(); }, 800);
+
+  /** Save the document. Resolves true when it was saved (or there was nothing to save). */
+  async function save(): Promise<boolean> {
+    if (!isDirty.value) return true;
+    saveState.value = 'saving';
+    const text = yaml.value;
+    try {
+      await workflowService.update(workspaceId, workflowId, { yamlContent: text });
+      originalYaml.value = text;
       saveState.value = 'saved';
+      return true;
     } catch {
       saveState.value = 'unsaved';
+      return false;
     }
   }
 
@@ -66,30 +87,8 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
     return { patch: result.yamlPatch, pattern: result.matchedPattern };
   }
 
-  async function validate(): Promise<{ errors: Array<{ message: string; line?: number }>; warnings: Array<{ message: string; line?: number }> } | null> {
-    if (!yaml.value.trim()) { validationErrors.value = []; return null; }
-    validationErrors.value = [];
-    try {
-      const result = await workflowService.validate(workspaceId, yaml.value);
-      validationErrors.value = [
-        ...result.errors.map((e: { message: string; line?: number }) => ({
-          from: lineToOffset(yaml.value, (e.line ?? 1) - 1),
-          to: lineToOffset(yaml.value, e.line ?? 1),
-          message: e.message,
-          severity: 'error' as const,
-        })),
-        ...result.warnings.map((w: { message: string; line?: number }) => ({
-          from: lineToOffset(yaml.value, (w.line ?? 1) - 1),
-          to: lineToOffset(yaml.value, w.line ?? 1),
-          message: w.message,
-          severity: 'warning' as const,
-        })),
-      ];
-      return result;
-    } catch {
-      validationErrors.value = [];
-      return null;
-    }
+  async function validate(): Promise<{ errors: Issue[]; warnings: Issue[] } | null> {
+    return runValidation();
   }
 
   function applyPatch(patch: string): string | null {

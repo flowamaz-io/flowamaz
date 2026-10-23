@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import VariableAutocomplete, { type WorkflowVariable } from '../shared/VariableAutocomplete.vue';
 
-type Config = Record<string, unknown>;
+import { type Config, readNumber, readString, writeAlias } from './configKeys';
 
 const props = defineProps<{ config: Config; variables: WorkflowVariable[] }>();
 const emit = defineEmits<{ update: [config: Config] }>();
@@ -14,18 +14,42 @@ const MODELS: Record<string, string[]> = {
   BYOM: ['custom'],
 };
 
-const provider = computed<string>(() => (props.config.provider as string) ?? 'Anthropic');
-const model = computed<string>(() => (props.config.model as string) ?? '');
-const systemPrompt = computed<string>(() => (props.config.systemPrompt as string) ?? '');
-const userPrompt = computed<string>(() => (props.config.userPrompt as string) ?? '');
-const maxTokens = computed<number>(() => (props.config.maxTokens as number) ?? 1024);
+// Key aliases in AiNodeWorker's precedence order (spec snake_case first, canvas camelCase second).
+const KEYS = {
+  systemPrompt: ['system_prompt', 'systemPrompt'],
+  userPrompt: ['prompt_template', 'userPrompt', 'prompt'],
+  maxTokens: ['max_tokens', 'maxTokens'],
+} as const;
+
+const rawProvider = computed<string>(() => readString(props.config, ['provider']) ?? '');
+// The engine compares providers case-insensitively; show the matching entry, or the raw value.
+const provider = computed<string>(() => {
+  if (!rawProvider.value) return 'Anthropic';
+  return PROVIDERS.find((p) => p.toLowerCase() === rawProvider.value.toLowerCase()) ?? rawProvider.value;
+});
+const providerOptions = computed<string[]>(() =>
+  (PROVIDERS as readonly string[]).includes(provider.value) ? [...PROVIDERS] : [...PROVIDERS, provider.value],
+);
+const model = computed<string>(() => readString(props.config, ['model']) ?? '');
+const systemPrompt = computed<string>(() => readString(props.config, KEYS.systemPrompt) ?? '');
+const userPrompt = computed<string>(() => readString(props.config, KEYS.userPrompt) ?? '');
+const maxTokens = computed<number>(() => readNumber(props.config, KEYS.maxTokens) ?? 1024);
 const outputVariable = computed<string>(() => (props.config.outputVariable as string) ?? '');
 
 function patch(updates: Config): void {
   emit('update', { ...props.config, ...updates });
 }
 
-const models = computed(() => MODELS[provider.value] ?? []);
+/** Store a setting under the alias already in use, so a YAML-authored key is edited in place. */
+function patchAlias(keys: readonly string[], fallbackKey: string, value: unknown): void {
+  emit('update', writeAlias(props.config, keys, fallbackKey, value));
+}
+
+// A model set in YAML that isn't in the curated list stays selectable instead of showing blank.
+const models = computed(() => {
+  const list = MODELS[provider.value] ?? [];
+  return model.value && !list.includes(model.value) ? [...list, model.value] : list;
+});
 </script>
 
 <template>
@@ -38,7 +62,7 @@ const models = computed(() => MODELS[provider.value] ?? []);
         @change="patch({ provider: ($event.target as HTMLSelectElement).value, model: '' })"
       >
         <option
-          v-for="p in PROVIDERS"
+          v-for="p in providerOptions"
           :key="p"
           :value="p"
         >
@@ -74,7 +98,7 @@ const models = computed(() => MODELS[provider.value] ?? []);
         rows="3"
         placeholder="You are a helpful assistant…"
         class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 focus:border-indigo-400 focus:outline-none"
-        @input="patch({ systemPrompt: ($event.target as HTMLTextAreaElement).value })"
+        @input="patchAlias(KEYS.systemPrompt, 'systemPrompt', ($event.target as HTMLTextAreaElement).value)"
       />
     </div>
 
@@ -85,7 +109,7 @@ const models = computed(() => MODELS[provider.value] ?? []);
         :variables="variables"
         multiline
         placeholder="Summarise {{ invoice_data }}…"
-        @update:model-value="patch({ userPrompt: $event })"
+        @update:model-value="patchAlias(KEYS.userPrompt, 'userPrompt', $event)"
       />
     </div>
 
@@ -100,7 +124,7 @@ const models = computed(() => MODELS[provider.value] ?? []);
         max="8192"
         step="256"
         class="w-full accent-indigo-500"
-        @input="patch({ maxTokens: Number(($event.target as HTMLInputElement).value) })"
+        @input="patchAlias(KEYS.maxTokens, 'maxTokens', Number(($event.target as HTMLInputElement).value))"
       >
     </div>
 

@@ -34,6 +34,16 @@ export const useCanvasStore = defineStore('canvas', () => {
     }
   }
 
+  /**
+   * Start a fresh undo history whose first entry is the document as loaded. Without this
+   * baseline the first edit was entry 0 and could never be undone ("0 actions available"),
+   * and history from a previously opened workflow could leak into this one.
+   */
+  function resetHistory(baseline: string) {
+    history.value = [baseline];
+    historyIndex.value = 0;
+  }
+
   function undo(): string | null {
     if (!canUndo.value) return null;
     historyIndex.value--;
@@ -132,7 +142,7 @@ export const useCanvasStore = defineStore('canvas', () => {
     nodes, edges, groups, selectedNodeId, selectedNode,
     history, historyIndex, isDirty, isSyncing, yamlContent,
     canUndo, canRedo, undoCount,
-    pushHistory, undo, redo,
+    pushHistory, resetHistory, undo, redo,
     setNodes, setEdges, setGroups, setSelectedNode, setYaml, setDirty, setSyncing,
     addNode, updateNode, removeNode, addEdge, removeEdge, reset,
     yamlRevealRequest, requestYamlReveal,

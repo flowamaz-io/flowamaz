@@ -115,6 +115,7 @@
       :node="configPanel.node"
       :workspace-id="ws.currentWorkspaceId.value ?? ''"
       :variables="configVariables"
+      :workflow-trigger-type="workflowTriggerType"
       @close="configPanel = { open: false, node: null }"
       @save="applyNodeConfig"
     />
@@ -125,7 +126,8 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import * as jsYaml from 'js-yaml';
 import { useRoute } from 'vue-router';
-import { useCytoscapeCanvas } from '@/composables/useCytoscapeCanvas';
+import { useDebounceFn } from '@vueuse/core';
+import { useCytoscapeCanvas, nodeIdAtRenderedPoint as nodeIdAt } from '@/composables/useCytoscapeCanvas';
 import { useCanvasHistory } from '@/composables/useCanvasHistory';
 import { useYamlCanvasSync } from '@/composables/useYamlCanvasSync';
 import { useCanvasStore } from '@/stores/canvas.store';
@@ -182,7 +184,7 @@ function toggleSnap() {
   // Positions are not stored in the YAML, so snapping existing nodes needs no history entry.
   if (snapToGridEnabled.value) canvas.snapAllNodes();
 }
-const { syncYamlToCanvas } = useYamlCanvasSync(() => canvas.cy.value);
+const { syncYamlToCanvas, rememberPosition } = useYamlCanvasSync(() => canvas.cy.value);
 const workflowStore = useWorkflowStore();
 
 const ctxMenu = ref({ visible: false, x: 0, y: 0, nodeId: '', nodeType: '' });
@@ -212,9 +214,16 @@ function refreshConfigVariables(): void {
   try {
     const parsed = jsYaml.load(yamlContent.value) as Record<string, unknown> | undefined;
     const spec = (parsed?.spec as Record<string, unknown>) ?? {};
-    const declared = (spec.variables as Array<{ name?: string; type?: string }>) ?? [];
-    for (const v of declared) {
-      if (v.name) vars.push({ name: v.name, type: v.type ?? 'string' });
+    // spec.variables is a map in flowamaz/v1 (`name: { type, required }`); older drafts used a list.
+    const declared = spec.variables;
+    if (Array.isArray(declared)) {
+      for (const v of declared as Array<{ name?: string; type?: string }>) {
+        if (v?.name) vars.push({ name: v.name, type: v.type ?? 'string' });
+      }
+    } else if (declared && typeof declared === 'object') {
+      for (const [name, def] of Object.entries(declared as Record<string, { type?: string } | null>)) {
+        vars.push({ name, type: def?.type ?? 'string' });
+      }
     }
     // Node outputs are addressable as variables too.
     const nodes = (spec.nodes as Array<Record<string, unknown>>) ?? [];
@@ -235,6 +244,14 @@ function openConfigPanel(nodeId: string): void {
 }
 
 function applyNodeConfig(payload: { id: string; label: string; config: Record<string, unknown> }): void {
+  const opened = configPanel.value.node;
+  // "Save node" with nothing changed must leave the YAML byte-for-byte as it is (no re-dump,
+  // no dirty flag, no undo step).
+  if (opened && opened.id === payload.id && opened.label === payload.label
+    && JSON.stringify(opened.config) === JSON.stringify(payload.config)) {
+    configPanel.value = { open: false, node: null };
+    return;
+  }
   // Merge the config + label into the YAML, then rebuild so the canvas re-renders.
   try {
     const parsed = (jsYaml.load(yamlContent.value) as Record<string, unknown>) ?? {};
@@ -256,10 +273,14 @@ function applyNodeConfig(payload: { id: string; label: string; config: Record<st
   configPanel.value = { open: false, node: null };
 }
 
-async function loadWorkflow() {
+/** `startHistory` = first load of this canvas: the loaded document becomes the undo baseline. */
+async function loadWorkflow(options: { startHistory?: boolean } = {}) {
   const workspaceId = (route.query.workspaceId as string) || ws.currentWorkspaceId.value;
   const workflowId = route.params.id as string;
-  if (!workspaceId || !workflowId) return;
+  if (!workspaceId || !workflowId) {
+    if (options.startHistory) canvasStore.resetHistory(buildYamlFromState());
+    return;
+  }
   try {
     const wf = await workflowService.get(workspaceId, workflowId);
     if (wf.name) workflowName.value = wf.name;
@@ -271,14 +292,43 @@ async function loadWorkflow() {
       // (the minimap re-renders itself on layoutstop)
       setTimeout(() => { canvas.runLayout(); }, 350);
     }
+    if (options.startHistory) canvasStore.resetHistory(wf.yamlContent || buildYamlFromState());
     canvasStore.setDirty(false);
   } catch {
     // canvas stays empty if load fails
+    if (options.startHistory) canvasStore.resetHistory(buildYamlFromState());
   }
 }
 
 watch(() => workflowStore.yamlVersion, (v) => {
   if (v > 0) loadWorkflow();
+});
+
+// Edits typed in the YAML editor reach the canvas through the parent's v-model. Adopt them as
+// the canvas document (when they parse), so the next canvas edit or "Save node" builds on
+// them instead of silently reverting them to the canvas's older copy.
+// Debounced so a burst of typing becomes one undo step, not one per keystroke.
+const adoptEditorYaml = useDebounceFn((next: string) => {
+  if (next === yamlContent.value) return;
+  let doc: unknown;
+  try { doc = jsYaml.load(next); } catch { return; }
+  if (!doc || typeof doc !== 'object') return;
+  yamlContent.value = next;
+  syncYamlToCanvas(next);
+  snapshot(next);
+}, 500);
+watch(() => props.initialYaml, (next) => {
+  if (next !== undefined && next !== yamlContent.value) void adoptEditorYaml(next);
+});
+
+const workflowTriggerType = computed<string>(() => {
+  try {
+    const parsed = jsYaml.load(yamlContent.value) as Record<string, unknown> | undefined;
+    const trigger = (parsed?.spec as Record<string, unknown> | undefined)?.trigger as Record<string, unknown> | undefined;
+    return typeof trigger?.type === 'string' ? trigger.type : '';
+  } catch {
+    return '';
+  }
 });
 
 function copyYaml() {
@@ -290,11 +340,14 @@ function copyYaml() {
 // Keyboard shortcuts
 function onKeydown(e: KeyboardEvent) {
   if (e.ctrlKey || e.metaKey) {
-    if (e.key === 'z') { e.preventDefault(); handleUndo(); }
-    if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); handleRedo(); }
-    if (e.key === 's') { e.preventDefault(); emit('save'); }
-    if (e.key === 'a') { e.preventDefault(); canvas.cy.value?.elements().select(); }
-    if (e.key === 'd') { e.preventDefault(); onCtxDuplicate(); }
+    // Shift / Caps Lock report upper-case keys ("Z"), so compare case-insensitively.
+    const key = e.key.toLowerCase();
+    if (key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
+    if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); handleRedo(); }
+    // The editor view also listens for Ctrl/Cmd+S on window; handle it once here.
+    if (key === 's') { e.preventDefault(); e.stopPropagation(); emit('save'); }
+    if (key === 'a') { e.preventDefault(); canvas.cy.value?.elements().select(); }
+    if (key === 'd') { e.preventDefault(); onCtxDuplicate(); }
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
@@ -307,22 +360,26 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+/**
+ * Restore a history entry: it becomes the canvas document, the YAML editor follows, and the
+ * canvas is re-synced even when the entry equals the document first loaded.
+ */
+function applyHistoryEntry(entry: string) {
+  yamlContent.value = entry;
+  syncYamlToCanvas(entry, { force: true });
+  canvasStore.setSelectedNode(null);
+  canvasStore.setDirty(true);
+  emit('yamlChange', entry);
+}
+
 function handleUndo() {
   const prev = performUndo();
-  if (prev !== null) {
-    canvasStore.setSyncing(true);
-    syncYamlToCanvas(prev);
-    canvasStore.setSyncing(false);
-  }
+  if (prev !== null) applyHistoryEntry(prev);
 }
 
 function handleRedo() {
   const next = performRedo();
-  if (next !== null) {
-    canvasStore.setSyncing(true);
-    syncYamlToCanvas(next);
-    canvasStore.setSyncing(false);
-  }
+  if (next !== null) applyHistoryEntry(next);
 }
 
 // Drag-and-drop from palette
@@ -354,13 +411,25 @@ async function loadWorkflowName(): Promise<void> {
 }
 
 function onContextMenu(e: MouseEvent) {
-  if (!canvas.cy.value) return;
-  // Find the selected node; with a multi-selection, act on the first selected node
-  // (Delete / Duplicate then apply to the whole selection).
-  const selected = canvasStore.selectedNodeId ?? selectedNodeIds()[0];
-  if (!selected) return;
-  const nodeType = canvas.cy.value?.getElementById(selected).data('nodeType') as string ?? '';
-  ctxMenu.value = { visible: true, x: e.clientX, y: e.clientY, nodeId: selected, nodeType };
+  const cy = canvas.cy.value;
+  if (!cy || !containerRef.value) return;
+  const rect = containerRef.value.getBoundingClientRect();
+  const targetId = nodeIdAt(cy, e.clientX - rect.left, e.clientY - rect.top);
+  if (!targetId) {
+    // Right-click on empty canvas: nothing to act on.
+    ctxMenu.value.visible = false;
+    return;
+  }
+  // Right-clicking a node selects it, like a left click — unless it's part of a multi-selection,
+  // which is kept so Delete / Duplicate apply to the whole selection.
+  const selection = selectedNodeIds();
+  if (!(selection.length > 1 && selection.includes(targetId))) {
+    cy.elements().unselect();
+    cy.getElementById(targetId).select();
+    canvasStore.setSelectedNode(targetId);
+  }
+  const nodeType = (cy.getElementById(targetId).data('nodeType') as string | undefined) ?? '';
+  ctxMenu.value = { visible: true, x: e.clientX, y: e.clientY, nodeId: targetId, nodeType };
 }
 
 onMounted(async () => {
@@ -370,14 +439,20 @@ onMounted(async () => {
   if (storedYaml) {
     localStorage.removeItem('fmz_canvas_yaml');
     yamlContent.value = storedYaml;
+    canvasStore.resetHistory(storedYaml);
     await nextTick();
     syncYamlToCanvas(storedYaml);
     // The NL-generation path skips loadWorkflow(); still resolve the real title from the API
     // so the toolbar shows the workflow name, not "Untitled Workflow".
     void loadWorkflowName();
   } else {
-    await loadWorkflow();
+    await loadWorkflow({ startHistory: true });
   }
+  // Clicking or box-selecting on the canvas gives it keyboard focus, so Ctrl/Cmd+Z, Delete and
+  // Ctrl/Cmd+D reach onKeydown even when Cytoscape swallows the mousedown.
+  canvas.cy.value?.on('tapstart', () => { containerRef.value?.focus({ preventScroll: true }); });
+  // Remember where removed nodes sat, so undoing a delete restores them in place.
+  canvas.cy.value?.on('remove', 'node', (evt) => { rememberPosition(evt.target.id(), evt.target.position()); });
   // Double-click a node to open its configuration panel (prompt 06-02).
   canvas.cy.value?.on('dbltap', 'node', (evt) => {
     const id = evt.target.id();

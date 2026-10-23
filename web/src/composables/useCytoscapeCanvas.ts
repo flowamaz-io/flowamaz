@@ -135,6 +135,20 @@ function buildStylesheet(): CytoscapeOptions['style'] {
   return styles;
 }
 
+/**
+ * Id of the node drawn at a point in rendered (container-relative) coordinates, or null.
+ * Group boxes are ignored (they have no node actions); the topmost (last drawn) node wins.
+ */
+export function nodeIdAtRenderedPoint(cy: Core, x: number, y: number): string | null {
+  let hit: string | null = null;
+  cy.nodes().forEach((node) => {
+    if (node.id() === '' || node.data('isGroup') || node.isParent()) return;
+    const bb = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+    if (x >= bb.x1 && x <= bb.x2 && y >= bb.y1 && y <= bb.y2) hit = node.id();
+  });
+  return hit;
+}
+
 export interface CytoscapeCanvasOptions {
   /** When true, node positions snap to the grid on drag end and when nodes are added. */
   snapToGrid?: Ref<boolean>;

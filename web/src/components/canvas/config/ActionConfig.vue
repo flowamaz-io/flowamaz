@@ -38,6 +38,8 @@ function patch(updates: Config): void {
 }
 
 const selectedConnector = computed(() => connectors.value.find((c) => c.connectorId === connectorId.value));
+/** A connector named in the YAML that this workspace can't load — shown as-is, never cleared. */
+const unknownConnector = computed(() => !loading.value && !!connectorId.value && !selectedConnector.value);
 const manifest = computed(() => parseManifest(selectedConnector.value));
 const operations = computed(() => (manifest.value.operations ?? []).filter((o) => !o.internal));
 const selectedOperation = computed(() => operations.value.find((o) => o.id === operationId.value));
@@ -114,7 +116,21 @@ onMounted(async () => {
         >
           {{ c.displayName }}
         </option>
+        <option
+          v-if="unknownConnector"
+          :value="connectorId"
+        >
+          {{ connectorId }} (not available in this workspace)
+        </option>
       </select>
+      <p
+        v-if="unknownConnector && !loadError"
+        data-test="action-unknown-connector"
+        class="mt-1 text-xs text-amber-400"
+      >
+        The connector "{{ connectorId }}" isn't installed in this workspace, so its fields can't be edited here.
+        Its settings are kept exactly as they are in the YAML — install it from the Library to edit them in this panel.
+      </p>
       <p
         v-if="loadError"
         class="mt-1 text-xs text-red-400"
@@ -139,6 +155,12 @@ onMounted(async () => {
           :value="op.id"
         >
           {{ op.name ?? op.id }}
+        </option>
+        <option
+          v-if="operationId && !selectedOperation"
+          :value="operationId"
+        >
+          {{ operationId }} (unknown action)
         </option>
       </select>
       <p

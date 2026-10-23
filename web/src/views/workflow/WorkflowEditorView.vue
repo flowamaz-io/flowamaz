@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, onBeforeRouteLeave } from 'vue-router';
 import { onClickOutside } from '@vueuse/core';
 import { XCircle, AlertTriangle, CheckCircle2 } from 'lucide-vue-next';
+import FmModal from '../../components/common/FmModal.vue';
 import SfgCanvas from '../../components/canvas/SfgCanvas.vue';
 import FmYamlEditor from '../../components/editor/FmYamlEditor.vue';
 import CopilotPanel from '../../components/editor/CopilotPanel.vue';
@@ -24,10 +25,65 @@ const workflowStore = useWorkflowStore();
 const {
   yaml, healthScore, saveState, isDirty, validationErrors,
   copilotHistory, splitRatio,
-  loadWorkflow, validateDebounced, validate, save, sendCopilotCommand, applyPatch, updateSplitRatio,
+  loadWorkflow, validateDebounced, validate, save: saveWorkflow, sendCopilotCommand, applyPatch, updateSplitRatio,
 } = useWorkflowEditor(workspaceId, workflowId);
 
 const toast = useToast();
+
+/** Save, telling the user what to do when it fails (the composable only reports success). */
+async function save(): Promise<boolean> {
+  const ok = await saveWorkflow();
+  if (!ok) {
+    toast.error("Couldn't save the workflow — your changes are still here. Check your connection and press Save again.");
+  }
+  return ok;
+}
+
+// ── Unsaved-changes guard ────────────────────────────────────────────────────
+// Leaving the editor (in-app navigation) asks first; closing/reloading the tab gets the
+// browser's own prompt, which is the only thing browsers allow during unload.
+const leaveDialogOpen = ref(false);
+const leaveSaving = ref(false);
+let resolveLeave: ((proceed: boolean) => void) | null = null;
+
+function askToLeave(): Promise<boolean> {
+  leaveDialogOpen.value = true;
+  return new Promise((resolve) => { resolveLeave = resolve; });
+}
+
+function finishLeave(proceed: boolean): void {
+  leaveDialogOpen.value = false;
+  const resolve = resolveLeave;
+  resolveLeave = null;
+  resolve?.(proceed);
+}
+
+async function saveAndLeave(): Promise<void> {
+  leaveSaving.value = true;
+  try {
+    // On failure stay on the page: the error toast explains what to do and nothing is lost.
+    finishLeave(await save());
+  } finally {
+    leaveSaving.value = false;
+  }
+}
+
+function onLeaveDialogToggle(open: boolean): void {
+  // Closing the dialog (Esc, ×, backdrop) means "Stay".
+  if (!open) finishLeave(false);
+}
+
+onBeforeRouteLeave(async () => {
+  if (!isDirty.value) return true;
+  return askToLeave();
+});
+
+function onBeforeUnload(e: BeforeUnloadEvent): void {
+  if (!isDirty.value) return;
+  e.preventDefault();
+  // Legacy browsers need returnValue set to show the prompt.
+  e.returnValue = '';
+}
 
 const { openArticle } = useHelp();
 
@@ -152,6 +208,7 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
   window.addEventListener('mousemove', onMousemove);
   window.addEventListener('mouseup', onMouseup);
+  window.addEventListener('beforeunload', onBeforeUnload);
   try {
     await loadWorkflow();
   } catch (e: unknown) {
@@ -165,6 +222,9 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
   window.removeEventListener('mousemove', onMousemove);
   window.removeEventListener('mouseup', onMouseup);
+  window.removeEventListener('beforeunload', onBeforeUnload);
+  // A pending leave prompt must not keep the navigation hanging.
+  finishLeave(false);
 });
 </script>
 
@@ -369,5 +429,55 @@ onUnmounted(() => {
         @command="onCopilotCommand"
       />
     </template>
+
+    <!-- Unsaved-changes prompt when leaving the editor -->
+    <FmModal
+      :model-value="leaveDialogOpen"
+      size="sm"
+      title="Unsaved changes"
+      @update:model-value="onLeaveDialogToggle"
+    >
+      <div
+        class="flex gap-3"
+        data-test="unsaved-changes-dialog"
+      >
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+          <AlertTriangle class="h-5 w-5" />
+        </span>
+        <p class="text-sm text-slate-700">
+          This workflow has changes that haven't been saved. Save them before you leave, or discard
+          them — discarded changes can't be recovered.
+        </p>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          data-test="leave-stay"
+          :disabled="leaveSaving"
+          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          @click="finishLeave(false)"
+        >
+          Stay
+        </button>
+        <button
+          type="button"
+          data-test="leave-discard"
+          :disabled="leaveSaving"
+          class="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+          @click="finishLeave(true)"
+        >
+          Discard changes
+        </button>
+        <button
+          type="button"
+          data-test="leave-save"
+          :disabled="leaveSaving"
+          class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+          @click="saveAndLeave"
+        >
+          {{ leaveSaving ? 'Saving…' : 'Save and leave' }}
+        </button>
+      </template>
+    </FmModal>
   </div>
 </template>

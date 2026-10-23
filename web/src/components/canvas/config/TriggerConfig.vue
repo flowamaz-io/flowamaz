@@ -1,14 +1,28 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-type Config = Record<string, unknown>;
+import { type Config, readString } from './configKeys';
 
-const props = defineProps<{ config: Config; webhookUrl?: string }>();
+const props = defineProps<{
+  config: Config;
+  webhookUrl?: string;
+  /** spec.trigger.type — what starts the workflow when the node itself doesn't say. */
+  workflowTriggerType?: string;
+}>();
 const emit = defineEmits<{ update: [config: Config] }>();
 
 const TRIGGER_TYPES = ['manual', 'webhook', 'schedule', 'event'] as const;
 
-const triggerType = computed<string>(() => (props.config.triggerType as string) ?? 'manual');
+const triggerType = computed<string>(
+  () => readString(props.config, ['triggerType', 'trigger_type'])
+    ?? (props.workflowTriggerType || undefined)
+    ?? 'manual',
+);
+// A type set in YAML that the panel doesn't offer (e.g. "form") is still shown, not replaced.
+const triggerOptions = computed<string[]>(() =>
+  (TRIGGER_TYPES as readonly string[]).includes(triggerType.value) ? [...TRIGGER_TYPES] : [...TRIGGER_TYPES, triggerType.value],
+);
+const isKnownType = computed(() => (TRIGGER_TYPES as readonly string[]).includes(triggerType.value));
 const cron = computed<string>(() => (props.config.cron as string) ?? '');
 const eventName = computed<string>(() => (props.config.event as string) ?? '');
 
@@ -41,7 +55,7 @@ const cronPreview = computed<string>(() => {
         @change="patch({ triggerType: ($event.target as HTMLSelectElement).value })"
       >
         <option
-          v-for="t in TRIGGER_TYPES"
+          v-for="t in triggerOptions"
           :key="t"
           :value="t"
         >
@@ -90,6 +104,13 @@ const cronPreview = computed<string>(() => {
         @input="patch({ event: ($event.target as HTMLInputElement).value })"
       >
     </div>
+
+    <p
+      v-else-if="!isKnownType"
+      class="text-xs text-gray-500"
+    >
+      This workflow starts from a "{{ triggerType }}" trigger set in the YAML; it has no extra settings here.
+    </p>
 
     <p
       v-else

@@ -18,8 +18,21 @@ export function useYamlCanvasSync(getCyInstance: () => Core | null) {
     return parseWorkflowGraph(yaml);
   }
 
-  const syncYamlToCanvas = useDebounceFn((yaml: string) => {
-    if (yaml === lastSyncedYaml.value) return;
+  // YAML carries no positions: remember where removed nodes were so undoing a delete puts
+  // them back in place instead of at a random spot.
+  const removedPositions = new Map<string, { x: number; y: number }>();
+
+  /** Record where a node sat before it was removed (also called for canvas deletes). */
+  function rememberPosition(id: string, pos: { x: number; y: number }) {
+    removedPositions.set(id, { x: pos.x, y: pos.y });
+  }
+
+  /**
+   * `force` re-applies a document even if it was the last one synced — undo/redo return to
+   * earlier documents (often the one loaded first) while the canvas has moved on since.
+   */
+  const syncYamlToCanvas = useDebounceFn((yaml: string, options: { force?: boolean } = {}) => {
+    if (!options.force && yaml === lastSyncedYaml.value) return;
     lastSyncedYaml.value = yaml;
 
     const cy = getCyInstance();
@@ -38,6 +51,7 @@ export function useYamlCanvasSync(getCyInstance: () => Core | null) {
     const newNodeIds = new Set(graph.nodes.map(n => n.id));
     cy.nodes('[id != ""]').forEach(node => {
       if (!node.data('isGroup') && !newNodeIds.has(node.id())) {
+        rememberPosition(node.id(), node.position());
         node.remove();
       }
     });
@@ -52,7 +66,7 @@ export function useYamlCanvasSync(getCyInstance: () => Core | null) {
         cy.add({
           group: 'nodes',
           data: { id: node.id, label: node.label || node.id, nodeType: node.type || 'action' },
-          position: node.position || { x: Math.random() * 400, y: Math.random() * 300 },
+          position: node.position || removedPositions.get(node.id) || { x: Math.random() * 400, y: Math.random() * 300 },
         });
       }
     }
@@ -85,5 +99,5 @@ export function useYamlCanvasSync(getCyInstance: () => Core | null) {
     if (!store.isSyncing) syncYamlToCanvas(yaml);
   });
 
-  return { syncYamlToCanvas, parseYamlToGraph };
+  return { syncYamlToCanvas, parseYamlToGraph, rememberPosition };
 }

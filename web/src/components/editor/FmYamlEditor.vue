@@ -4,7 +4,7 @@ import { EditorState, StateEffect, StateField } from '@codemirror/state';
 import { EditorView, Decoration, keymap, lineNumbers, hoverTooltip, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { yaml } from '@codemirror/lang-yaml';
-import { linter, lintGutter, type Diagnostic } from '@codemirror/lint';
+import { diagnosticCount, lintGutter, setDiagnostics, type Diagnostic } from '@codemirror/lint';
 import {
   autocompletion,
   completionKeymap,
@@ -94,15 +94,19 @@ function buildCompletion() {
   });
 }
 
-function buildLinter() {
-  return linter(() => {
-    return (props.diagnostics ?? []).map(d => ({
-      from: d.from,
-      to: d.to,
-      message: d.message,
-      severity: d.severity,
-    } as Diagnostic));
+/**
+ * Push the `diagnostics` prop into the editor. Validation runs on the server after the document
+ * changes, so markers are pushed whenever the prop changes — a CodeMirror `linter()` source only
+ * re-reads it on its own timer after an edit, which left markers for deleted nodes in the gutter.
+ */
+function applyDiagnostics(): void {
+  if (!view) return;
+  const length = view.state.doc.length;
+  const diagnostics: Diagnostic[] = (props.diagnostics ?? []).map((d) => {
+    const from = Math.max(0, Math.min(d.from, length));
+    return { from, to: Math.max(from, Math.min(d.to, length)), message: d.message, severity: d.severity };
   });
+  view.dispatch(setDiagnostics(view.state, diagnostics));
 }
 
 // Highlight for a line revealed from the canvas ("Show in YAML"). Set with a line start
@@ -133,7 +137,6 @@ function initEditor() {
     buildHoverTooltip(),
     buildCompletion(),
     keymap.of(completionKeymap),
-    buildLinter(),
     lintGutter(),
     keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
     EditorView.updateListener.of(update => {
@@ -155,6 +158,7 @@ function initEditor() {
     }),
     parent: containerRef.value,
   });
+  applyDiagnostics();
   emit('ready');
 }
 
@@ -166,7 +170,12 @@ watch(() => props.modelValue, (newVal) => {
   view.dispatch({
     changes: { from: 0, to: current.length, insert: newVal },
   });
+  // A whole-document replacement (canvas edit, undo, Co-pilot patch) invalidates every marker
+  // position; drop them until validation of the new document reports back.
+  view.dispatch(setDiagnostics(view.state, []));
 });
+
+watch(() => props.diagnostics, applyDiagnostics, { deep: true });
 
 onMounted(initEditor);
 onUnmounted(() => { view?.destroy(); view = null; });
@@ -200,7 +209,12 @@ function clearRevealedLine() {
   view?.dispatch({ effects: setRevealedLine.of(null) });
 }
 
-defineExpose({ setCursor, revealLine, clearRevealedLine });
+/** Number of lint markers currently shown (used by tests and for diagnostics UI). */
+function shownDiagnosticCount(): number {
+  return view ? diagnosticCount(view.state) : 0;
+}
+
+defineExpose({ setCursor, revealLine, clearRevealedLine, shownDiagnosticCount });
 </script>
 
 <template>
