@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useElementSize, useWindowSize } from '@vueuse/core';
 import { ArrowLeft, ArrowRight, X } from 'lucide-vue-next';
+import { placeTourCard } from '@/utils/tour.util';
 
 // A single product-tour step: the dark backdrop with a cutout spotlight around the
 // target element, a tooltip card positioned relative to the spotlight, progress dots,
@@ -46,20 +48,21 @@ const panels = computed(() => {
   return { top, left, width, height };
 });
 
-// Tooltip card placement: below the spotlight when there is room, otherwise above.
-// When there is no target, centre it.
+const card = ref<HTMLElement | null>(null);
+const { width: cardWidth, height: cardHeight } = useElementSize(card, undefined, { box: 'border-box' });
+const { width: viewportWidth, height: viewportHeight } = useWindowSize();
+
+// Tooltip card placement (below → above → right → left of the spotlight), always clamped
+// inside the viewport; centred when there is no target or nothing fits.
 const cardStyle = computed(() => {
-  const p = panels.value;
-  if (!p) {
-    return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
-  }
-  const below = p.top + p.height + 16;
-  const spaceBelow = window.innerHeight - (p.top + p.height);
-  const left = Math.min(Math.max(p.left, 16), window.innerWidth - 360);
-  if (spaceBelow > 220) {
-    return { top: `${below}px`, left: `${left}px` };
-  }
-  return { top: `${Math.max(p.top - 16, 16)}px`, left: `${left}px`, transform: 'translateY(-100%)' };
+  const pos = placeTourCard(
+    panels.value,
+    // Before the first measurement, assume the card's typical size.
+    { width: cardWidth.value || 352, height: cardHeight.value || 240 },
+    { width: viewportWidth.value, height: viewportHeight.value },
+  );
+  if (pos === null) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
+  return { top: `${pos.top}px`, left: `${pos.left}px` };
 });
 </script>
 
@@ -96,7 +99,8 @@ const cardStyle = computed(() => {
 
     <!-- Tooltip card -->
     <div
-      class="absolute w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
+      ref="card"
+      class="absolute max-h-[calc(100vh-2rem)] w-[22rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
       :style="cardStyle"
       role="dialog"
       aria-modal="true"

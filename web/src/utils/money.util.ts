@@ -21,6 +21,8 @@ export function minorDigits(currency: string): number {
   }
 }
 
+const NARROW_SYMBOL_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'INR']);
+
 /**
  * Formats integer minor units as a localised currency string. Whole amounts drop the
  * decimals ("$49"), fractional amounts keep them ("$19.99").
@@ -30,10 +32,14 @@ export function formatMoney(minor: number, currency: string, locale?: string): s
   const factor = 10 ** digits;
   const major = minor / factor;
   const whole = Number.isInteger(major);
+  const code = currency.toUpperCase();
   try {
     return new Intl.NumberFormat(locale, {
       style: 'currency',
-      currency: currency.toUpperCase(),
+      currency: code,
+      // Locales outside the US render USD as "US$49"; the narrow symbol keeps "$49" everywhere.
+      // Only for currencies whose narrow symbol is unambiguous — SGD would also become "$".
+      currencyDisplay: NARROW_SYMBOL_CURRENCIES.has(code) ? 'narrowSymbol' : 'symbol',
       minimumFractionDigits: whole ? 0 : digits,
       maximumFractionDigits: digits,
     }).format(major);

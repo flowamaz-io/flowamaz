@@ -187,7 +187,8 @@ async function submit(): Promise<void> {
       <FmButton
         :loading="submitting"
         :disabled="!canSubmit"
-        :class="isTestRun ? 'border border-amber-500 bg-white text-amber-700 hover:bg-amber-50' : ''"
+        :variant="isTestRun ? 'warning-outline' : 'primary'"
+        data-testid="trigger-submit"
         @click="submit"
       >
         {{ isTestRun ? 'Start test run' : 'Trigger run' }}

@@ -30,6 +30,17 @@ describe('formatMoney', () => {
     expect(formatMoney(10000, 'sgd', 'en-US')).toContain('100');
   });
 
+  it('renders USD as "$" in non-US locales (no "US$" prefix)', () => {
+    expect(formatMoney(4900, 'usd', 'en-GB')).toBe('$49');
+    expect(formatMoney(4900, 'usd', 'en-MY')).toBe('$49');
+    expect(formatMoney(4900, 'usd', 'en-SG')).toBe('$49');
+    expect(formatPrice('monthly', 1999, 'usd', 'en-AU')).toBe('$19.99/mo');
+  });
+
+  it('keeps SGD distinguishable from USD', () => {
+    expect(formatMoney(4900, 'sgd', 'en-US')).not.toBe('$49');
+  });
+
   it('falls back gracefully for an invalid currency code', () => {
     expect(formatMoney(500, 'not-a-code', 'en-US')).toBe('5 NOT-A-CODE');
   });

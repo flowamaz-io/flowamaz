@@ -4,7 +4,7 @@ import { refDebounced } from '@vueuse/core';
 import { Search } from 'lucide-vue-next';
 import FmEmptyState from '@/components/common/FmEmptyState.vue';
 import { allArticles, type HelpArticle } from '@/help/articleLoader';
-import { escapeHtml } from '@/utils/string.util';
+import { escapeHtml, stripMarkdown } from '@/utils/string.util';
 
 const emit = defineEmits<{ select: [slug: string] }>();
 
@@ -16,7 +16,9 @@ interface SearchHit {
   snippet: string;
 }
 
-function buildSnippet(content: string, term: string): string {
+function buildSnippet(markdown: string, term: string): string {
+  // Snippets are plain text — raw markdown (##, **, `, [](…)) reads as noise in results.
+  const content = stripMarkdown(markdown);
   const lower = content.toLowerCase();
   const idx = lower.indexOf(term.toLowerCase());
   const start = idx >= 0 ? Math.max(0, idx - 30) : 0;

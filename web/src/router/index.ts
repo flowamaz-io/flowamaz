@@ -108,7 +108,8 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresOnboarding && auth.isAuthenticated) {
     const orgId = auth.user?.orgId ?? '';
     if (!isOnboardingComplete(orgId)) {
-      return { path: '/onboarding' };
+      // Carry the original destination through the wizard (OnboardingView validates it).
+      return to.fullPath !== '/' ? { path: '/onboarding', query: { redirect: to.fullPath } } : { path: '/onboarding' };
     }
   }
 

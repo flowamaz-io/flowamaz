@@ -8,7 +8,6 @@ import TemplateCard from '@/components/library/TemplateCard.vue';
 import InstallTemplateModal from '@/components/library/InstallTemplateModal.vue';
 import { templateService, type TemplateListItem } from '@/services/template.service';
 import { useWorkspace } from '@/composables/useWorkspace';
-import { useToast } from '@/composables/useToast';
 import { marketplaceService } from '@/services/marketplace.service';
 import { isPaid } from '@/utils/money.util';
 import { isPurchaseRequiredError } from '@/utils/marketplace.util';
@@ -19,7 +18,6 @@ type SortKey = 'installed' | 'newest' | 'az';
 
 const router = useRouter();
 const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
-const toast = useToast();
 
 const templates = ref<TemplateListItem[]>([]);
 const loading = ref(false);
@@ -72,8 +70,10 @@ watch(searchQuery, () => {
 });
 watch(activeCategory, () => void load());
 
-function openPreview(id: string): void {
-  void router.push({ name: 'template-detail', params: { id } });
+function openPreview(id: string, intent?: 'install'): void {
+  // `intent=install` makes the detail page explain why Install is locked (a toast here
+  // would be lost in the navigation).
+  void router.push({ name: 'template-detail', params: { id }, query: intent ? { intent } : {} });
 }
 
 /** Paid templates the workspace doesn't own go to the detail page to buy. */
@@ -93,7 +93,7 @@ async function openInstall(id: string): Promise<void> {
       }
     }
     if (!owned) {
-      openPreview(id);
+      openPreview(id, 'install');
       return;
     }
   }
@@ -120,8 +120,7 @@ async function confirmInstall(name: string): Promise<void> {
   } catch (err: unknown) {
     if (isPurchaseRequiredError(err)) {
       installModalOpen.value = false;
-      toast.info("This is a paid template — buy it for this workspace to unlock install.");
-      openPreview(template.id);
+      openPreview(template.id, 'install');
       return;
     }
     installModal.value?.fail(

@@ -117,7 +117,7 @@ async function replay(): Promise<void> {
       </FmButton>
       <FmButton
         :loading="submitting"
-        class="border border-amber-500 bg-white text-amber-700 hover:bg-amber-50"
+        variant="warning-outline"
         @click="replay"
       >
         Replay

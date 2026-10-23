@@ -8,11 +8,18 @@ import FmBadge from '@/components/common/FmBadge.vue';
 import { gateService } from '@/services/gate.service';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { formatDate, fromNow } from '@/utils/date.util';
+import { humanizeId } from '@/utils/string.util';
 import type { GateResponse } from '@/types';
 
 type Tab = 'pending' | 'all';
 
 const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
+
+/** Prefer the gate node's label when the API sends one; otherwise humanise the node id. */
+function gateDisplayName(gate: GateResponse): string {
+  const label = (gate.gateLabel ?? gate.label ?? '').trim();
+  return label.length > 0 ? label : humanizeId(gate.nodeId);
+}
 
 function openHumanGatesDocs(): void {
   window.open('https://docs.flowamaz.io/human-gates', '_blank', 'noopener');
@@ -230,11 +237,17 @@ onMounted(load);
           >
             <!-- Gate node info -->
             <td class="px-4 py-3">
-              <div class="font-medium text-slate-800">
-                {{ gate.nodeId }}
+              <div class="flex items-center gap-2 font-medium text-slate-800">
+                {{ gateDisplayName(gate) }}
+                <span
+                  v-if="gate.isTest === true"
+                  class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800"
+                  title="This gate belongs to a test run"
+                  data-testid="gate-test-tag"
+                >TEST</span>
               </div>
-              <div class="text-xs text-slate-400 font-mono">
-                {{ gate.instanceId.slice(0, 8) }}…
+              <div class="font-mono text-xs text-slate-400">
+                {{ gate.nodeId }} · {{ gate.instanceId.slice(0, 8) }}…
               </div>
             </td>
 

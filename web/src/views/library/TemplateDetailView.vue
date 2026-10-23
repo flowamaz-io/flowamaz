@@ -49,6 +49,9 @@ const purchaseError = ref<string | null>(null);
 /** Banner shown after Stripe Checkout redirects back. */
 const checkoutReturn = ref<'success' | 'canceled' | null>(null);
 
+/** Set when the gallery's Install button sent the user here because the template must be bought first. */
+const cameToInstall = computed<boolean>(() => route.query.intent === 'install');
+
 const paid = computed<boolean>(
   () => !!template.value && isPaid(template.value.pricingModel, template.value.priceCents),
 );
@@ -319,12 +322,23 @@ onMounted(async () => {
           </p>
         </div>
 
-        <!-- YAML preview -->
-        <div>
+        <!-- YAML preview (the API withholds it for paid templates the workspace doesn't own) -->
+        <div v-if="template.yamlContent || paid">
           <p class="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
             Workflow definition
           </p>
-          <pre class="max-h-96 overflow-auto rounded-lg border border-slate-200 bg-slate-900 p-4 text-xs leading-relaxed text-slate-100"><code>{{ template.yamlContent }}</code></pre>
+          <pre
+            v-if="template.yamlContent"
+            class="max-h-96 overflow-auto rounded-lg border border-slate-200 bg-slate-900 p-4 text-xs leading-relaxed text-slate-100"
+          ><code>{{ template.yamlContent }}</code></pre>
+          <p
+            v-else
+            class="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+            data-testid="yaml-locked-note"
+          >
+            <Lock class="h-4 w-4 shrink-0 text-slate-400" />
+            The workflow definition is available after purchase.
+          </p>
         </div>
       </div>
 
@@ -373,6 +387,12 @@ onMounted(async () => {
           v-else-if="paid && locked"
           class="space-y-2"
         >
+          <FmAlert
+            :type="cameToInstall ? 'warning' : 'info'"
+            data-testid="paid-locked-notice"
+          >
+            This is a paid template — buy it for this workspace to unlock install.
+          </FmAlert>
           <button
             type="button"
             :disabled="purchasing || polling"

@@ -4,7 +4,7 @@ import FmSpinner from './FmSpinner.vue';
 
 const props = withDefaults(
   defineProps<{
-    variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+    variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'warning-outline';
     size?: 'sm' | 'md' | 'lg';
     type?: 'button' | 'submit' | 'reset';
     loading?: boolean;
@@ -29,6 +29,9 @@ const variantClass = computed(
         'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 focus-visible:ring-slate-400',
       danger: 'bg-danger-600 text-white hover:bg-danger-700 focus-visible:ring-danger-500',
       ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 focus-visible:ring-slate-400',
+      // Used for test runs: amber outline so it reads as "safe / not production".
+      'warning-outline':
+        'bg-white text-amber-700 border border-amber-500 hover:bg-amber-50 focus-visible:ring-amber-400',
     })[props.variant],
 );
 
