@@ -26,6 +26,7 @@ public class PublicWorkflowsControllerTests
     {
         _currentUser.SetupGet(c => c.IsApiKey).Returns(true);
         _currentUser.SetupGet(c => c.ApiKeyWorkspaceId).Returns(Workspace);
+        _currentUser.SetupGet(c => c.ApiKeyScopes).Returns(ApiKeyScope.All);
         _rateLimiter.Setup(r => r.CheckAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PublicApiRateLimit(true, 1000, 999, 1_700_000_000));
     }
@@ -57,6 +58,29 @@ public class PublicWorkflowsControllerTests
         var body = Serialize(json.Value);
         body.Should().Contain("live-flow");
         body.Should().NotContain("draft-flow");
+    }
+
+    [Fact]
+    public async Task Trigger_with_read_only_key_returns_403_insufficient_scope_and_does_not_trigger()
+    {
+        _currentUser.SetupGet(c => c.ApiKeyScopes).Returns([ApiKeyScope.WorkflowsRead, ApiKeyScope.InstancesRead]);
+
+        var result = await CreateController().Trigger("loan-approval", CancellationToken.None);
+
+        var json = result.Should().BeOfType<JsonResult>().Which;
+        json.StatusCode.Should().Be(403);
+        Serialize(json.Value).Should().Contain("insufficient_scope").And.Contain("workflows:trigger");
+        _orchestrator.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task List_without_workflows_read_scope_returns_403()
+    {
+        _currentUser.SetupGet(c => c.ApiKeyScopes).Returns([ApiKeyScope.WorkflowsTrigger]);
+
+        var result = await CreateController().List(null, null, CancellationToken.None);
+
+        result.Should().BeOfType<JsonResult>().Which.StatusCode.Should().Be(403);
     }
 
     [Fact]

@@ -26,6 +26,7 @@ public class PublicInstancesControllerTests
     {
         _currentUser.SetupGet(c => c.IsApiKey).Returns(true);
         _currentUser.SetupGet(c => c.ApiKeyWorkspaceId).Returns(Workspace);
+        _currentUser.SetupGet(c => c.ApiKeyScopes).Returns(ApiKeyScope.All);
         _rateLimiter.Setup(r => r.CheckAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new PublicApiRateLimit(true, 1000, 999, 1_700_000_000));
     }
