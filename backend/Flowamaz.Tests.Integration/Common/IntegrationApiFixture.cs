@@ -23,11 +23,10 @@ namespace Flowamaz.Tests.Integration.Common;
 /// </summary>
 public sealed class IntegrationApiFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine").WithDatabase("flowamaz_api_test")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine").WithDatabase("flowamaz_api_test")
         .WithUsername("flowamaz").WithPassword("flowamaz_test_pw").Build();
 
-    private readonly RedisContainer _redis = new RedisBuilder().WithImage("redis:7-alpine").Build();
+    private readonly RedisContainer _redis = new RedisBuilder("redis:7-alpine").Build();
 
     private WebApplicationFactory<Flowamaz.Api.Program> _factory = null!;
     private ConnectionMultiplexer _redisClient = null!;

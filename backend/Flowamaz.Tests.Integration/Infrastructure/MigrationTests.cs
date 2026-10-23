@@ -13,8 +13,7 @@ namespace Flowamaz.Tests.Integration.Infrastructure;
 /// </summary>
 public class MigrationTests : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
         .WithDatabase("flowamaz_test")
         .WithUsername("flowamaz")
         .WithPassword("flowamaz_test_pw")

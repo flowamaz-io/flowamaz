@@ -13,7 +13,7 @@ namespace Flowamaz.Tests.Integration.Queue;
 /// </summary>
 public class RedisTaskQueueTests : IAsyncLifetime
 {
-    private readonly RedisContainer _redis = new RedisBuilder().WithImage("redis:7-alpine").Build();
+    private readonly RedisContainer _redis = new RedisBuilder("redis:7-alpine").Build();
     private IConnectionMultiplexer _mux = null!;
 
     public async Task InitializeAsync()
