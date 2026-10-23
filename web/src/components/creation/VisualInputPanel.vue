@@ -5,13 +5,13 @@
         Create from Diagram or Whiteboard
       </h2>
       <p class="text-sm text-gray-400">
-        Upload a photo of a whiteboard, sketch, or process diagram.
+        Upload a photo of a whiteboard, sketch, or process diagram. You'll check the detected steps before anything is created.
       </p>
     </div>
 
     <!-- Drop zone -->
     <div
-      v-if="!processing"
+      v-if="stage === 'upload'"
       class="border-2 border-dashed border-gray-600 rounded-xl p-10 text-center cursor-pointer hover:border-indigo-500 transition-colors"
       :class="dragging ? 'border-indigo-400 bg-indigo-950/30' : ''"
       @dragover.prevent="dragging = true"
@@ -35,14 +35,53 @@
       >
     </div>
 
-    <!-- Processing -->
+    <!-- Analysing / creating -->
     <div
-      v-if="processing"
+      v-if="stage === 'analysing' || stage === 'creating'"
       class="text-center py-10"
     >
       <div class="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
       <div class="text-sm text-indigo-400">
-        Analysing your diagram... (15–20 seconds)
+        {{ stage === 'analysing' ? 'Analysing your diagram... (15–20 seconds)' : 'Creating your workflow...' }}
+      </div>
+    </div>
+
+    <!-- Review -->
+    <div
+      v-if="stage === 'review' && review"
+      class="space-y-4"
+    >
+      <VisualReviewList v-model:items="review.items" />
+
+      <ul
+        v-if="problems.length > 0"
+        class="space-y-1 text-sm text-amber-300"
+      >
+        <li
+          v-for="p in problems"
+          :key="p"
+        >
+          {{ p }}
+        </li>
+      </ul>
+
+      <div class="flex gap-3">
+        <button
+          type="button"
+          class="flex-1 py-2 px-4 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
+          :disabled="problems.length > 0"
+          data-test="create-from-review"
+          @click="createFromReview"
+        >
+          Create workflow ({{ keptCount }} step{{ keptCount === 1 ? '' : 's' }})
+        </button>
+        <button
+          type="button"
+          class="py-2 px-4 rounded border border-gray-600 text-sm text-gray-300 hover:border-gray-400"
+          @click="startOver"
+        >
+          Upload a different image
+        </button>
       </div>
     </div>
 
@@ -58,18 +97,26 @@
 
 <script setup lang="ts">
 import { toUserFacingError } from '@/utils/error.util';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Camera } from 'lucide-vue-next';
-import { createWorkflow } from '@/services/creation.service';
+import { createWorkflow, previewVisual } from '@/services/creation.service';
+import { initReview, reviewProblems, toConfirmedGraph, type ReviewState } from '@/utils/visualReview.util';
+import VisualReviewList from './VisualReviewList.vue';
 
 const props = defineProps<{ workspaceId: string; workflowName: string }>();
 
+type Stage = 'upload' | 'analysing' | 'review' | 'creating';
+
 const router = useRouter();
 const dragging = ref(false);
-const processing = ref(false);
+const stage = ref<Stage>('upload');
 const error = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const review = ref<ReviewState | null>(null);
+
+const problems = computed(() => (review.value ? reviewProblems(review.value.items) : []));
+const keptCount = computed(() => review.value?.items.filter((i) => i.keep).length ?? 0);
 
 let lastFile: File | null = null;
 
@@ -80,23 +127,43 @@ async function processFile(file: File) {
   }
 
   lastFile = file;
-  processing.value = true;
+  stage.value = 'analysing';
   error.value = null;
 
   try {
     const resized = await resizeImage(file, 1920);
     const imageBase64 = await fileToBase64(resized);
+    const preview = await previewVisual(props.workspaceId, imageBase64, resized.type || 'image/jpeg');
+    review.value = initReview(preview);
+    stage.value = 'review';
+  } catch (e) {
+    error.value = toUserFacingError(e).message;
+    stage.value = 'upload';
+  }
+}
+
+async function createFromReview() {
+  if (!review.value || problems.value.length > 0) return;
+  stage.value = 'creating';
+  error.value = null;
+  try {
     const result = await createWorkflow(props.workspaceId, {
       name: props.workflowName || 'Untitled Workflow',
       method: 'visual',
-      imageBase64,
-      imageMimeType: 'image/jpeg',
+      visualGraph: toConfirmedGraph(review.value),
     });
     await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e) {
+    // Stay on the review so the user can fix names/removals without re-uploading.
     error.value = toUserFacingError(e).message;
-    processing.value = false;
+    stage.value = 'review';
   }
+}
+
+function startOver() {
+  review.value = null;
+  error.value = null;
+  stage.value = 'upload';
 }
 
 async function resizeImage(file: File, maxPx: number): Promise<File> {
@@ -135,5 +202,10 @@ function onFileSelect(e: Event) {
   if (file) processFile(file);
 }
 
-defineExpose({ retrigger: () => { if (lastFile) processFile(lastFile); } });
+defineExpose({
+  retrigger: () => {
+    if (stage.value === 'review') { void createFromReview(); return; }
+    if (lastFile) void processFile(lastFile);
+  },
+});
 </script>

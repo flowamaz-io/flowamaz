@@ -93,6 +93,8 @@ public static class DependencyInjection
 
         // NL→YAML generation + Co-pilot pattern matcher (prompt 03-03).
         services.AddScoped<INlYamlGenerationService, NlYamlGenerationService>();
+        // NL clarifying questions — heuristics first, metered AI fallback (audit open item).
+        services.AddScoped<INlClarificationService, NlClarificationService>();
         services.AddSingleton<ICopilotPatternMatcher, CopilotPatternMatcher>();
 
         // Visual input + Conversation import (prompt 03-04).

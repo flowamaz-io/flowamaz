@@ -85,6 +85,59 @@
       </div>
     </div>
 
+    <!-- Clarifying questions -->
+    <div
+      v-if="questions && questions.length > 0"
+      class="p-4 bg-teal-50 border border-teal-200 rounded-lg space-y-4"
+      data-test="clarifying-questions"
+    >
+      <div>
+        <h3 class="text-sm font-semibold text-slate-900">
+          A few quick questions before we generate
+        </h3>
+        <p class="text-sm text-slate-600">
+          Answering these makes the workflow more accurate. Leave any blank to skip it.
+        </p>
+      </div>
+      <div
+        v-for="q in questions"
+        :key="q.id"
+        class="space-y-1"
+      >
+        <label
+          :for="`clarify-${q.id}`"
+          class="text-xs font-medium text-gray-700"
+        >{{ q.question }}</label>
+        <input
+          :id="`clarify-${q.id}`"
+          v-model="answers[q.id]"
+          :placeholder="q.hint ?? 'Type your answer'"
+          :data-test="`answer-${q.id}`"
+          class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 placeholder-gray-400"
+        >
+      </div>
+      <div class="flex gap-3">
+        <button
+          type="button"
+          :disabled="generating"
+          data-test="generate-with-answers"
+          class="flex-1 py-2 px-4 rounded bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
+          @click="generate(buildClarifications(questions, answers))"
+        >
+          Generate with answers
+        </button>
+        <button
+          type="button"
+          :disabled="generating"
+          data-test="skip-questions"
+          class="py-2 px-4 rounded border border-gray-300 text-sm text-gray-700 hover:border-gray-400 disabled:opacity-40"
+          @click="generate([])"
+        >
+          Skip and generate
+        </button>
+      </div>
+    </div>
+
     <!-- Error -->
     <div
       v-if="error"
@@ -93,18 +146,22 @@
       {{ error }}
     </div>
 
-    <!-- Progress while generating -->
+    <!-- Progress -->
     <div
-      v-if="generating"
+      v-if="checking || generating"
       class="p-3 bg-gray-50 border border-gray-200 rounded text-sm text-teal-600"
     >
-      Generating your workflow with AI... (10–15 seconds)
+      {{ checking ? 'Checking your description for missing details...' : 'Generating your workflow with AI... (10–15 seconds)' }}
     </div>
 
     <!-- Actions -->
-    <div class="flex gap-3">
+    <div
+      v-if="!questions || questions.length === 0"
+      class="flex gap-3"
+    >
       <button
-        :disabled="!canSubmit || generating"
+        :disabled="!canSubmit || generating || checking"
+        data-test="generate"
         class="flex-1 py-2 px-4 rounded bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
         @click="submit"
       >
@@ -117,9 +174,16 @@
 
 <script setup lang="ts">
 import { toUserFacingError } from '@/utils/error.util';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { createWorkflow, type NlWorkflowRequest } from '@/services/creation.service';
+import {
+  clarifyNl,
+  createWorkflow,
+  type ClarificationAnswer,
+  type ClarifyingQuestion,
+  type NlWorkflowRequest,
+} from '@/services/creation.service';
+import { buildClarifications } from '@/utils/clarification.util';
 
 const props = withDefaults(defineProps<{ workspaceId: string; method?: 'nl' | 'voice' }>(), { method: 'nl' });
 
@@ -136,7 +200,11 @@ const form = ref<NlWorkflowRequest>({
 });
 
 const generating = ref(false);
+const checking = ref(false);
 const error = ref<string | null>(null);
+/** null = not checked yet for the current form contents. */
+const questions = ref<ClarifyingQuestion[] | null>(null);
+const answers = ref<Record<string, string>>({});
 
 const canSubmit = computed(() =>
   form.value.workflowName.trim() &&
@@ -144,16 +212,45 @@ const canSubmit = computed(() =>
   form.value.stepsDescription.trim()
 );
 
+// Editing the description after questions were shown re-checks on the next submit.
+watch(form, () => { questions.value = null; answers.value = {}; }, { deep: true });
+
 async function submit() {
+  if (!canSubmit.value) return;
+  error.value = null;
+  checking.value = true;
+  let found: ClarifyingQuestion[] = [];
+  try {
+    found = (await clarifyNl(props.workspaceId, form.value)).questions;
+  } catch {
+    // Clarifying questions are an optional helper: if the check itself fails, generate as before and
+    // let generation report any real problem with an actionable message.
+    found = [];
+  } finally {
+    checking.value = false;
+  }
+
+  if (found.length > 0) {
+    questions.value = found;
+    answers.value = Object.fromEntries(found.map((q) => [q.id, '']));
+    return;
+  }
+  await generate([]);
+}
+
+async function generate(clarifications: ClarificationAnswer[]) {
   if (!canSubmit.value) return;
   generating.value = true;
   error.value = null;
 
   try {
+    const nlRequest: NlWorkflowRequest = clarifications.length > 0
+      ? { ...form.value, clarifications }
+      : form.value;
     const result = await createWorkflow(props.workspaceId, {
       name: form.value.workflowName,
       method: props.method,
-      nlRequest: form.value,
+      nlRequest,
     });
     await router.push({ name: 'workflow-editor', params: { id: result.workflowId }, query: { workspaceId: props.workspaceId } });
   } catch (e) {

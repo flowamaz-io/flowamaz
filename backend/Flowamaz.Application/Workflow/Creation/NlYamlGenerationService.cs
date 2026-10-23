@@ -341,8 +341,19 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
     private static string BuildCacheInput(NlWorkflowRequest r)
     {
         static string N(string? s) => (s ?? string.Empty).Trim().ToLowerInvariant();
-        return $"{N(r.WorkflowName)}|{N(r.Purpose)}|{N(r.TriggerDescription)}|{N(r.StepsDescription)}|{N(r.RulesAndConstraints)}|{N(r.SystemsAndAi)}|{N(r.ExistingContext)}";
+        var key = $"{N(r.WorkflowName)}|{N(r.Purpose)}|{N(r.TriggerDescription)}|{N(r.StepsDescription)}|{N(r.RulesAndConstraints)}|{N(r.SystemsAndAi)}|{N(r.ExistingContext)}";
+        var answers = AnsweredClarifications(r);
+        // Unanswered requests keep the pre-clarification key so existing cache entries stay valid.
+        return answers.Count == 0
+            ? key
+            : key + "|" + string.Join("|", answers.Select(a => $"{N(a.Topic)}={N(a.Answer)}"));
     }
+
+    /// <summary>Clarification answers the user actually gave (skipped/blank answers are ignored).</summary>
+    internal static IReadOnlyList<ClarificationAnswer> AnsweredClarifications(NlWorkflowRequest r) =>
+        (r.Clarifications ?? [])
+            .Where(a => !string.IsNullOrWhiteSpace(a.Answer))
+            .ToList();
 
     private static string BuildUserPrompt(NlWorkflowRequest r)
     {
@@ -364,6 +375,14 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         {
             sb.AppendLine();
             sb.AppendLine($"**Existing Context:** {r.ExistingContext}");
+        }
+        var answers = AnsweredClarifications(r);
+        if (answers.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("**Clarifications (answers from the user — treat as authoritative):**");
+            foreach (var a in answers)
+                sb.AppendLine($"- Q: {(a.Question ?? string.Empty).Trim()} A: {a.Answer.Trim()}");
         }
         sb.AppendLine();
         sb.AppendLine("Output ONLY the YAML. No explanation.");

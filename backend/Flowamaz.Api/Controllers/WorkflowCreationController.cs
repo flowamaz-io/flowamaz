@@ -8,6 +8,7 @@ using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
 using Flowamaz.Core.Workflow;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using YamlDotNet.Serialization;
 
@@ -25,6 +26,10 @@ public sealed class WorkflowCreationController : ControllerBase
     private readonly IWorkflowValidator _validator;
     private readonly WorkflowService _workflows;
     private readonly ICurrentUserService _currentUser;
+    private readonly INlClarificationService _clarification;
+    private readonly IValidator<NlWorkflowRequest> _nlValidator;
+    private readonly IValidator<ConfirmedVisualGraph> _graphValidator;
+    private readonly IValidator<VisualPreviewRequest> _previewValidator;
     private readonly ILogger<WorkflowCreationController> _log;
 
     private const long MaxImageBytes = 10 * 1024 * 1024;
@@ -48,8 +53,16 @@ public sealed class WorkflowCreationController : ControllerBase
         IWorkflowValidator validator,
         WorkflowService workflows,
         ICurrentUserService currentUser,
+        INlClarificationService clarification,
+        IValidator<NlWorkflowRequest> nlValidator,
+        IValidator<ConfirmedVisualGraph> graphValidator,
+        IValidator<VisualPreviewRequest> previewValidator,
         ILogger<WorkflowCreationController> log)
     {
+        _clarification = clarification;
+        _nlValidator = nlValidator;
+        _graphValidator = graphValidator;
+        _previewValidator = previewValidator;
         _generator = generator;
         _copilot = copilot;
         _visualInput = visualInput;
@@ -95,6 +108,7 @@ public sealed class WorkflowCreationController : ControllerBase
                     if (request.NlRequest is null)
                         return BadRequest(new { error = "Provide nlRequest fields (purpose, steps, trigger) to generate a workflow." });
 
+                    await _nlValidator.ValidateAndThrowAsync(request.NlRequest, cancellationToken);
                     var gen = await _generator.GenerateAsync(request.NlRequest, workspaceId, cancellationToken);
                     yamlContent = gen.YamlContent;
                     validationResult = gen.ValidationResult;
@@ -105,6 +119,17 @@ public sealed class WorkflowCreationController : ControllerBase
 
                 case "visual":
                 {
+                    // Review path: the user confirmed the graph from POST /visual/preview. No AI call —
+                    // YAML is built from exactly what they kept/renamed, then validated below.
+                    if (request.VisualGraph is not null)
+                    {
+                        await _graphValidator.ValidateAndThrowAsync(request.VisualGraph, cancellationToken);
+                        yamlContent = _visualInput.BuildYamlFromConfirmedGraph(request.VisualGraph, slug, request.Name);
+                        break;
+                    }
+
+                    // One-shot path (API clients that skip review): low-confidence nodes are kept and
+                    // marked config.review_needed: true rather than dropped.
                     if (string.IsNullOrWhiteSpace(request.ImageBase64))
                         return BadRequest(new { error = "Provide an imageBase64 value for visual workflow creation." });
 
@@ -167,7 +192,8 @@ public sealed class WorkflowCreationController : ControllerBase
                     break;
             }
         }
-        catch (Exception ex) when (ex is not WorkflowSlugExistsException and not AppException and not OperationCanceledException)
+        catch (Exception ex) when (ex is not WorkflowSlugExistsException and not AppException
+                                       and not OperationCanceledException and not ValidationException)
         {
             _log.LogError(ex, "WorkflowCreationController.CreateWorkflow AI service error method={Method}", method);
             return StatusCode(502, new { error = $"AI processing failed. {ex.Message} Please try again." });
@@ -230,6 +256,69 @@ public sealed class WorkflowCreationController : ControllerBase
         var result = await _generator.GenerateAsync(request, workspaceId, cancellationToken);
         _log.LogInformation("WorkflowCreationController.GenerateWorkflow exit workspaceId={WorkspaceId} tokens={Tokens} cached={Cached}", workspaceId, result.TokensUsed, result.Cached);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// NL creation step 1 (optional): returns up to 3 clarifying questions about missing essentials
+    /// (trigger, approver, rejection path, systems). Empty list = generate straight away. Answers go
+    /// back in <c>nlRequest.clarifications</c> on POST /create. Heuristics first; AI only for very thin input.
+    /// </summary>
+    [HttpPost("clarify")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    public async Task<ActionResult<ClarificationResult>> Clarify(
+        Guid workspaceId, [FromBody] NlWorkflowRequest request, CancellationToken cancellationToken)
+    {
+        _log.LogInformation("WorkflowCreationController.Clarify entry workspaceId={WorkspaceId}", workspaceId);
+        await _nlValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        var result = await _clarification.GetQuestionsAsync(request, workspaceId, cancellationToken);
+
+        _log.LogInformation("WorkflowCreationController.Clarify exit questions={Count} usedAi={UsedAi}", result.Questions.Count, result.UsedAi);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Visual creation step 1: parse the image and return the full detected graph for review. Nodes under
+    /// the confidence threshold are flagged (<c>reviewNeeded</c>) with the AI's reason. Nothing is saved;
+    /// POST /create with method=visual and <c>visualGraph</c> creates the workflow from the confirmed graph.
+    /// </summary>
+    [HttpPost("visual/preview")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    [RequestSizeLimit(15 * 1024 * 1024)]
+    public async Task<ActionResult<VisualPreviewResult>> PreviewVisual(
+        Guid workspaceId, [FromBody] VisualPreviewRequest request, CancellationToken cancellationToken)
+    {
+        _log.LogInformation("WorkflowCreationController.PreviewVisual entry workspaceId={WorkspaceId}", workspaceId);
+        await _previewValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        var imageBytes = Convert.FromBase64String(request.ImageBase64);
+        var mimeType = (request.ImageMimeType ?? "image/jpeg").ToLowerInvariant();
+
+        VisualPreviewResult preview;
+        try
+        {
+            preview = await _visualInput.PreviewImageAsync(imageBytes, mimeType, workspaceId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not AppException and not OperationCanceledException)
+        {
+            _log.LogError(ex, "WorkflowCreationController.PreviewVisual AI service error workspaceId={WorkspaceId}", workspaceId);
+            return StatusCode(502, new { error = $"Diagram analysis failed. {ex.Message} Please try again in a moment." });
+        }
+
+        if (preview.Nodes.Count == 0)
+        {
+            _log.LogWarning("WorkflowCreationController.PreviewVisual nothing detected workspaceId={WorkspaceId}", workspaceId);
+            return UnprocessableEntity(new
+            {
+                error = "We couldn't find any workflow steps in that image. Use a clearer, well-lit photo where boxes and arrows " +
+                        "are visible, crop out the background, then upload again — or start from the canvas.",
+                code = "VISUAL_NOTHING_DETECTED",
+            });
+        }
+
+        _log.LogInformation("WorkflowCreationController.PreviewVisual exit nodes={Nodes} reviewNeeded={Review}",
+            preview.Nodes.Count, preview.Nodes.Count(n => n.ReviewNeeded));
+        return Ok(preview);
     }
 
     /// <summary>
@@ -385,8 +474,12 @@ public sealed record UnifiedWorkflowCreateRequest(
     string? ConversationText = null,
     string? SourceType = null,
     string? DocumentBase64 = null,
-    string? DocumentMimeType = null
+    string? DocumentMimeType = null,
+    ConfirmedVisualGraph? VisualGraph = null
 );
+
+/// <summary>Body of POST /workflows/visual/preview.</summary>
+public sealed record VisualPreviewRequest(string ImageBase64, string? ImageMimeType = null);
 
 public sealed record WorkflowCreationResult(
     Guid WorkflowId,
