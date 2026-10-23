@@ -71,6 +71,47 @@ public class StripeServiceTests
     }
 
     [Fact]
+    public async Task EconomyEvents_AreRoutedBeforePlanBilling()
+    {
+        var economy = new Mock<IWorkflowEconomyService>();
+        economy.Setup(e => e.HandleCheckoutCompletedAsync(It.IsAny<Flowamaz.Core.Models.EconomyCheckoutCompleted>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var svc = new StripeService(Options.Create(new StripeOptions { SecretKey = "sk_test_dummy", WebhookSecret = "whsec_dummy" }),
+            _orgs.Object, _subs.Object, _plans.Object, _uow.Object, _redis.Object, _email.Object,
+            NullLogger<StripeService>.Instance, _verifier.Object, null, economy.Object);
+        StubEvent(EventTypes.CheckoutSessionCompleted, new Session
+        {
+            Id = "cs_tpl",
+            PaymentStatus = "paid",
+            Metadata = new Dictionary<string, string> { ["kind"] = "template_purchase", ["purchaseId"] = Guid.NewGuid().ToString() },
+        });
+
+        await svc.HandleWebhookAsync("{}", "sig");
+
+        economy.Verify(e => e.HandleCheckoutCompletedAsync(
+            It.Is<Flowamaz.Core.Models.EconomyCheckoutCompleted>(c => c.SessionId == "cs_tpl" && c.Metadata["kind"] == "template_purchase"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _orgs.Verify(o => o.GetForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ConnectWebhookSecret_IsTriedWhenPlatformSecretFails()
+    {
+        var verifier = new Mock<IStripeEventVerifier>();
+        verifier.Setup(v => v.Verify(It.IsAny<string>(), It.IsAny<string>(), "whsec_platform")).Throws(new StripeException("bad sig"));
+        verifier.Setup(v => v.Verify(It.IsAny<string>(), It.IsAny<string>(), "whsec_connect"))
+            .Returns(new Event { Id = "evt_acct", Type = "ping", Data = new EventData { Object = new Session() } });
+        var svc = new StripeService(Options.Create(new StripeOptions
+            {
+                SecretKey = "sk_test_dummy", WebhookSecret = "whsec_platform", ConnectWebhookSecret = "whsec_connect",
+            }),
+            _orgs.Object, _subs.Object, _plans.Object, _uow.Object, _redis.Object, _email.Object,
+            NullLogger<StripeService>.Instance, verifier.Object);
+
+        await svc.Invoking(s => s.HandleWebhookAsync("{}", "sig")).Should().NotThrowAsync();
+    }
+
+    [Fact]
     public async Task CheckoutSessionCompleted_updates_org_plan()
     {
         var orgId = Guid.NewGuid();

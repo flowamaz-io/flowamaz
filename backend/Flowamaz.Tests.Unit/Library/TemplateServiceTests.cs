@@ -87,6 +87,44 @@ public sealed class TemplateServiceTests
     };
 
     [Fact]
+    public async Task InstallPaidTemplate_WithoutPurchase_Is402()
+    {
+        var template = Template();
+        template.IsOfficial = false; template.OrgId = Guid.NewGuid();
+        template.PricingModel = "one_time"; template.PriceCents = 4999;
+        _templates.Setup(r => r.GetByIdAsync(template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(template);
+        var workspaces = new Mock<IWorkspaceRepository>();
+        workspaces.Setup(w => w.GetByIdAsync(_ws, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Flowamaz.Core.Entities.Workspaces.Workspace { Id = _ws, OrgId = _org });
+        var economy = new Mock<IWorkflowEconomyService>();
+        economy.Setup(e => e.HasEntitlementAsync(_ws, _org, template, It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var svc = new TemplateService(_templates.Object, _definitions.Object, WorkflowSvc(),
+            new Flowamaz.Application.Workflow.Validation.WorkflowValidator(
+                NullLogger<Flowamaz.Application.Workflow.Validation.WorkflowValidator>.Instance),
+            _unitOfWork.Object, NullLogger<TemplateService>.Instance, null, economy.Object, workspaces.Object);
+
+        var ex = await FluentActions.Awaiting(() => svc.InstallTemplateAsync(template.Id, _ws, _user, "x"))
+            .Should().ThrowAsync<Flowamaz.Core.Exceptions.EconomyException>();
+        ex.Which.HttpStatusCode.Should().Be(402);
+        _templates.Verify(r => r.IncrementInstallCountAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PaidTemplateDetail_DoesNotExposeYaml()
+    {
+        var template = Template();
+        template.PricingModel = "monthly"; template.PriceCents = 1900;
+        _templates.Setup(r => r.GetByIdAsync(template.Id, It.IsAny<CancellationToken>())).ReturnsAsync(template);
+
+        var detail = await NewService().GetTemplateAsync(template.Id);
+
+        detail!.YamlContent.Should().BeEmpty();
+        detail.NodeSummary.Should().NotBeEmpty("buyers still see what the workflow contains");
+        detail.PricingModel.Should().Be("monthly");
+    }
+
+    [Fact]
     public async Task InstallTemplate_IncrementsInstallCount_Atomically()
     {
         var template = Template();

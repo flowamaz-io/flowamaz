@@ -52,4 +52,14 @@ public class WorkflowTemplate : AuditableEntity
     /// Official templates are always "approved".
     /// </summary>
     public string ReviewStatus { get; set; } = "approved";
+
+    // ── Workflow Economy (FUNCTIONAL.md §8.9) ──
+    /// <summary>free | one_time | monthly (see <c>TemplatePricing</c>).</summary>
+    public string PricingModel { get; set; } = "free";
+
+    /// <summary>Price in minor units (0 when free).</summary>
+    public int PriceCents { get; set; }
+
+    /// <summary>Lowercase ISO currency, e.g. "usd".</summary>
+    public string Currency { get; set; } = "usd";
 }

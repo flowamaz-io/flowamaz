@@ -1749,6 +1749,298 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.ToTable("workspace_credentials");
                 });
 
+            modelBuilder.Entity("Flowamaz.Core.Entities.Economy.PublisherAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("ChargesEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("charges_enabled");
+
+                    b.Property<string>("Country")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("country");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("DetailsSubmitted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("details_submitted");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<bool>("PayoutsEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("payouts_enabled");
+
+                    b.Property<string>("RequirementsDue")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("requirements_due");
+
+                    b.Property<DateTime?>("StatusRefreshedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("status_refreshed_at");
+
+                    b.Property<string>("StripeAccountId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("stripe_account_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_publisher_accounts");
+
+                    b.HasIndex("OrgId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_publisher_accounts_org_id");
+
+                    b.HasIndex("StripeAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_publisher_accounts_stripe_account_id");
+
+                    b.ToTable("publisher_accounts");
+                });
+
+            modelBuilder.Entity("Flowamaz.Core.Entities.Economy.PublisherEarning", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("FeeCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("fee_cents");
+
+                    b.Property<int>("GrossCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("gross_cents");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("NetCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("net_cents");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<Guid>("PublisherOrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("publisher_org_id");
+
+                    b.Property<Guid>("PurchaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("purchase_id");
+
+                    b.Property<string>("StripeObjectId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("stripe_object_id");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_publisher_earnings");
+
+                    b.HasIndex("PublisherOrgId", "OccurredAt")
+                        .HasDatabaseName("ix_publisher_earnings_publisher_org_id_occurred_at");
+
+                    b.HasIndex("StripeObjectId", "Type")
+                        .IsUnique()
+                        .HasDatabaseName("ix_publisher_earnings_stripe_object_id_type");
+
+                    b.ToTable("publisher_earnings");
+                });
+
+            modelBuilder.Entity("Flowamaz.Core.Entities.Economy.TemplatePurchase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AmountCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("amount_cents");
+
+                    b.Property<bool>("CancelAtPeriodEnd")
+                        .HasColumnType("boolean")
+                        .HasColumnName("cancel_at_period_end");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime?>("CurrentPeriodEnd")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("current_period_end");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("FeeCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("fee_cents");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("PricingModel")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("pricing_model");
+
+                    b.Property<Guid>("PublisherOrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("publisher_org_id");
+
+                    b.Property<DateTime?>("PurchasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("purchased_at");
+
+                    b.Property<Guid?>("PurchasedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("purchased_by_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StripeCheckoutSessionId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("stripe_checkout_session_id");
+
+                    b.Property<string>("StripePaymentIntentId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("stripe_payment_intent_id");
+
+                    b.Property<string>("StripeSubscriptionId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("stripe_subscription_id");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_template_purchases");
+
+                    b.HasIndex("PublisherOrgId")
+                        .HasDatabaseName("ix_template_purchases_publisher_org_id");
+
+                    b.HasIndex("StripeCheckoutSessionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_template_purchases_stripe_checkout_session_id")
+                        .HasFilter("stripe_checkout_session_id IS NOT NULL");
+
+                    b.HasIndex("StripePaymentIntentId")
+                        .HasDatabaseName("ix_template_purchases_stripe_payment_intent_id")
+                        .HasFilter("stripe_payment_intent_id IS NOT NULL");
+
+                    b.HasIndex("StripeSubscriptionId")
+                        .HasDatabaseName("ix_template_purchases_stripe_subscription_id")
+                        .HasFilter("stripe_subscription_id IS NOT NULL");
+
+                    b.HasIndex("WorkspaceId", "TemplateId")
+                        .HasDatabaseName("ix_template_purchases_workspace_id_template_id");
+
+                    b.ToTable("template_purchases");
+                });
+
             modelBuilder.Entity("Flowamaz.Core.Entities.Library.ConnectorRating", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1885,6 +2177,14 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("usd")
+                        .HasColumnName("currency");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -1925,6 +2225,20 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("preview_image_url");
+
+                    b.Property<int>("PriceCents")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("price_cents");
+
+                    b.Property<string>("PricingModel")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("free")
+                        .HasColumnName("pricing_model");
 
                     b.Property<string>("ReviewStatus")
                         .IsRequired()
@@ -1984,12 +2298,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Finance",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Two-level purchase approval with a resubmission loop for rejected requests.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Purchase Approval",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "purchase-approval",
                             Tags = "[\"finance\",\"approval\",\"purchase\"]",
@@ -2003,12 +2320,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "HR",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Multi-step new-hire onboarding checklist with HR approval gates.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Employee Onboarding",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "employee-onboarding",
                             Tags = "[\"hr\",\"onboarding\",\"checklist\"]",
@@ -2022,12 +2342,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "HR",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Manager-approved leave request with a calendar update step.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Leave Request",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "leave-request",
                             Tags = "[\"hr\",\"leave\",\"approval\"]",
@@ -2041,12 +2364,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "IT",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Triage, assign, resolve and close an IT support ticket.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "IT Support Ticket",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "it-support-ticket",
                             Tags = "[\"it\",\"support\",\"ticket\"]",
@@ -2060,12 +2386,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Legal",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Legal review gate followed by an e-signature placeholder step.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Contract Review",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "contract-review",
                             Tags = "[\"legal\",\"contract\",\"review\"]",
@@ -2079,12 +2408,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Finance",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Receipt upload, manager approval, then finance approval.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Expense Claim",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "expense-claim",
                             Tags = "[\"finance\",\"expense\",\"approval\"]",
@@ -2098,12 +2430,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Operations",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Procurement workflow with three sequential approval levels.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Vendor Onboarding",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "vendor-onboarding",
                             Tags = "[\"operations\",\"vendor\",\"procurement\"]",
@@ -2117,12 +2452,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "IT",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Detect, triage, escalate, resolve and run a post-mortem.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Incident Response",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "incident-response",
                             Tags = "[\"it\",\"incident\",\"response\"]",
@@ -2136,12 +2474,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Finance",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Customer-support review, finance approval, then payment trigger.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Customer Refund",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "customer-refund",
                             Tags = "[\"finance\",\"refund\",\"approval\"]",
@@ -2155,12 +2496,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Operations",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Periodic compliance review workflow driven by due dates.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Compliance Checklist",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "compliance-checklist",
                             Tags = "[\"operations\",\"compliance\",\"review\"]",

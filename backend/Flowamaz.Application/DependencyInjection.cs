@@ -39,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IWebhookService, Webhooks.WebhookService>();
         services.AddScoped<Library.Services.ConnectorMarketplaceService>();
         services.AddScoped<Core.Interfaces.Library.ITemplateService, Library.Services.TemplateService>();
+        services.AddScoped<IWorkflowEconomyService, Economy.WorkflowEconomyService>();
         services.AddScoped<INotificationService, Notifications.NotificationService>();
         services.AddScoped<IWorkspaceApiKeyService, WorkspaceApiKeyService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();

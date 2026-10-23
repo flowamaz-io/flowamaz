@@ -16,10 +16,13 @@ public class EgressProxyServerTests
         await client.ConnectAsync(IPAddress.Loopback, proxyPort);
         var stream = client.GetStream();
         await stream.WriteAsync(Encoding.ASCII.GetBytes(request));
+        // Error responses close the connection: read to EOF (head and body may arrive separately).
         var buffer = new byte[readBytes];
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var read = await stream.ReadAsync(buffer, cts.Token);
-        return Encoding.ASCII.GetString(buffer, 0, read);
+        var total = 0;
+        int read;
+        while (total < buffer.Length && (read = await stream.ReadAsync(buffer.AsMemory(total), cts.Token)) > 0) total += read;
+        return Encoding.ASCII.GetString(buffer, 0, total);
     }
 
     private static EgressProxyServer Start(EgressProxyOptions options)

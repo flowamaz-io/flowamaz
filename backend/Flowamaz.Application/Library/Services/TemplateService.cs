@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Flowamaz.Application.Workflow.DTOs;
 using Flowamaz.Application.Workflow.Services;
+using Flowamaz.Core.Entities.Economy;
 using Flowamaz.Core.Entities.Library;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Exceptions;
@@ -25,7 +26,9 @@ namespace Flowamaz.Application.Library.Services;
 public sealed partial class TemplateService : ITemplateService
 {
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder()
-        .WithNamingConvention(NullNamingConvention.Instance)
+        // YAML keys are lower camel case (spec.nodes[].type); NullNamingConvention never matched them,
+        // so the node summary was always empty.
+        .WithNamingConvention(CamelCaseNamingConvention.Instance)
         .IgnoreUnmatchedProperties()
         .Build();
 
@@ -36,6 +39,9 @@ public sealed partial class TemplateService : ITemplateService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<TemplateService> _logger;
     private readonly IAuditService? _audit;
+    private readonly IWorkflowEconomyService? _economy;
+    private readonly IWorkspaceRepository? _workspaces;
+    private readonly IOrganisationRepository? _organisations;
 
     public TemplateService(
         IWorkflowTemplateRepository templates,
@@ -44,8 +50,14 @@ public sealed partial class TemplateService : ITemplateService
         IWorkflowValidator validator,
         IUnitOfWork unitOfWork,
         ILogger<TemplateService> logger,
-        IAuditService? audit = null)
+        IAuditService? audit = null,
+        IWorkflowEconomyService? economy = null,
+        IWorkspaceRepository? workspaces = null,
+        IOrganisationRepository? organisations = null)
     {
+        _economy = economy;
+        _workspaces = workspaces;
+        _organisations = organisations;
         _templates = templates;
         _definitions = definitions;
         _workflows = workflows;
@@ -65,11 +77,12 @@ public sealed partial class TemplateService : ITemplateService
 
         var clampedSize = Math.Clamp(pageSize <= 0 ? 12 : pageSize, 1, 100);
         var clampedPage = page <= 0 ? 1 : page;
-        var items = all
+        var pageRows = all
             .Skip((clampedPage - 1) * clampedSize)
             .Take(clampedSize)
-            .Select(ToListItem)
             .ToList();
+        var publishers = await PublisherNamesAsync(pageRows, ct);
+        var items = pageRows.Select(t => ToListItem(t, publishers)).ToList();
 
         _logger.LogInformation("TemplateService.ListTemplatesAsync exit total={Total} returned={Returned}", all.Count, items.Count);
         return new TemplatePage(items, clampedPage, clampedSize, all.Count);
@@ -87,12 +100,18 @@ public sealed partial class TemplateService : ITemplateService
         }
 
         var nodeSummary = BuildNodeSummary(template.YamlContent);
+        var publishers = await PublisherNamesAsync([template], ct);
+
+        // A paid workflow's YAML is the product: never expose it on the public detail endpoint.
+        var yaml = TemplatePricing.IsPaid(template.PricingModel) ? string.Empty : template.YamlContent;
 
         _logger.LogInformation("TemplateService.GetTemplateAsync exit template={TemplateId} found=true", id);
         return new TemplateDetail(
             template.Id, template.Name, template.Slug, template.Description, template.Category,
             template.IsOfficial, template.PreviewImageUrl, template.InstallCount, template.AverageRating,
-            template.Tags, template.Version, template.YamlContent, nodeSummary, template.CreatedAt);
+            template.Tags, template.Version, yaml, nodeSummary, template.CreatedAt,
+            template.PricingModel, template.PriceCents, template.Currency,
+            template.OrgId is { } o ? publishers.GetValueOrDefault(o) : null);
     }
 
     public async Task<Guid> InstallTemplateAsync(
@@ -103,6 +122,16 @@ public sealed partial class TemplateService : ITemplateService
 
         var template = await _templates.GetByIdAsync(templateId, ct)
             ?? throw TemplateException.NotFound(templateId);
+
+        // Paid workflows (FUNCTIONAL.md §8.9) install only with an active purchase in this workspace
+        // (or for the publisher's own organisation).
+        if (TemplatePricing.IsPaid(template.PricingModel))
+        {
+            var workspace = _workspaces is null ? null : await _workspaces.GetByIdAsync(workspaceId, ct);
+            var entitled = workspace is not null && _economy is not null
+                && await _economy.HasEntitlementAsync(workspaceId, workspace.OrgId, template, ct);
+            if (!entitled) throw EconomyException.PurchaseRequired(template.Name);
+        }
 
         var workflowName = string.IsNullOrWhiteSpace(name) ? template.Name : name.Trim();
 
@@ -163,6 +192,12 @@ public sealed partial class TemplateService : ITemplateService
         if (!validation.IsValid)
             throw TemplateException.InvalidYaml(validation.Errors[0].Message);
 
+        if (details.Pricing is { } requested && TemplatePricing.IsPaid(TemplatePricing.Normalize(requested.PricingModel)))
+        {
+            if (_economy is null) throw EconomyException.NotConfigured();
+            await _economy.ValidatePricingAsync(orgId, requested, ct);
+        }
+
         var slug = await BuildUniqueTemplateSlugAsync(details.Name, ct);
 
         var template = new WorkflowTemplate
@@ -181,6 +216,7 @@ public sealed partial class TemplateService : ITemplateService
             ReviewStatus = "pending",
             CreatedBy = userId,
         };
+        if (details.Pricing is { } pricing) Economy.WorkflowEconomyService.ApplyPricing(template, pricing);
         await _templates.AddAsync(template, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
@@ -204,9 +240,22 @@ public sealed partial class TemplateService : ITemplateService
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
-    private static TemplateListItem ToListItem(WorkflowTemplate t) => new(
+    private static TemplateListItem ToListItem(WorkflowTemplate t, IReadOnlyDictionary<Guid, string> publishers) => new(
         t.Id, t.Name, t.Slug, t.Description, t.Category, t.IsOfficial, t.PreviewImageUrl,
-        t.InstallCount, t.AverageRating, t.Tags, t.Version, t.CreatedAt);
+        t.InstallCount, t.AverageRating, t.Tags, t.Version, t.CreatedAt,
+        t.PricingModel, t.PriceCents, t.Currency, t.OrgId is { } o ? publishers.GetValueOrDefault(o) : null);
+
+    private async Task<IReadOnlyDictionary<Guid, string>> PublisherNamesAsync(IEnumerable<WorkflowTemplate> templates, CancellationToken ct)
+    {
+        var names = new Dictionary<Guid, string>();
+        if (_organisations is null) return names;
+        foreach (var orgId in templates.Where(t => t.OrgId.HasValue).Select(t => t.OrgId!.Value).Distinct())
+        {
+            var org = await _organisations.GetByIdAsync(orgId, ct);
+            if (org is not null) names[orgId] = org.Name;
+        }
+        return names;
+    }
 
     private IReadOnlyList<TemplateNodeSummary> BuildNodeSummary(string yaml)
     {
