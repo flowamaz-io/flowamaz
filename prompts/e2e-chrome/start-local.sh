@@ -8,9 +8,47 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LOGS="$ROOT/prompts/e2e-chrome/results/logs"
 mkdir -p "$LOGS"
 
+# PIDs listening on a TCP port (lsof on macOS/Linux; fuser as a fallback).
+port_pids() {
+  if command -v lsof >/dev/null 2>&1; then lsof -nP -ti "tcp:$1" -sTCP:LISTEN 2>/dev/null || true
+  elif command -v fuser >/dev/null 2>&1; then fuser -n tcp "$1" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' || true
+  fi
+}
+
+# The pid files hold the `dotnet run` / `npx` launchers; the real servers are their children, so
+# stop the launchers' process trees AND whatever still listens on the app ports.
+stop_app() {
+  for f in "$LOGS"/api.pid "$LOGS"/web.pid; do
+    if [[ -f $f ]]; then
+      pid=$(cat "$f")
+      pkill -TERM -P "$pid" 2>/dev/null || true
+      kill -TERM "$pid" 2>/dev/null || true
+      rm -f "$f"
+    fi
+  done
+  for port in 8307 5173; do
+    pids=$(port_pids "$port")
+    [[ -n "$pids" ]] && kill -TERM $pids 2>/dev/null || true
+  done
+  for i in {1..10}; do
+    [[ -z "$(port_pids 8307)$(port_pids 5173)" ]] && return 0
+    sleep 1
+  done
+  for port in 8307 5173; do pids=$(port_pids "$port"); [[ -n "$pids" ]] && kill -KILL $pids 2>/dev/null || true; done
+  sleep 1
+  if [[ -n "$(port_pids 8307)$(port_pids 5173)" ]]; then
+    echo "Could not free ports 8307/5173. Check with: lsof -nP -i tcp:8307 -i tcp:5173"; return 1
+  fi
+}
+
 if [[ "${1:-}" == "stop" ]]; then
-  for f in "$LOGS"/api.pid "$LOGS"/web.pid; do [[ -f $f ]] && kill "$(cat "$f")" 2>/dev/null || true; rm -f "$f"; done
-  echo "Stopped API and web."; exit 0
+  stop_app && echo "Stopped API and web (ports 8307 and 5173 are free)."; exit $?
+fi
+
+# A previous run (or a stale server) still holding the ports would answer instead of the new build.
+if [[ -n "$(port_pids 8307)$(port_pids 5173)" ]]; then
+  echo "0/4 Ports 8307/5173 are in use — stopping the previous Flowamaz API/web first…"
+  stop_app
 fi
 
 echo "1/4 Postgres + Redis (Docker)…"

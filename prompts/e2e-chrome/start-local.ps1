@@ -8,9 +8,30 @@ $Root = Resolve-Path "$PSScriptRoot\..\.."
 $Logs = Join-Path $Root "prompts\e2e-chrome\results\logs"
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
 
+# The pid files hold the `dotnet run` / `npx` launchers; the real servers are their children, so
+# stop the launchers' process trees AND whatever still listens on the app ports.
+function Get-PortPids([int]$Port) {
+  (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
+}
+function Stop-App {
+  foreach ($f in "api.pid","web.pid") {
+    $p = Join-Path $Logs $f
+    if (Test-Path $p) { & taskkill /PID (Get-Content $p) /T /F *> $null; Remove-Item $p }
+  }
+  foreach ($port in 8307, 5173) { foreach ($procId in (Get-PortPids $port)) { & taskkill /PID $procId /T /F *> $null } }
+  Start-Sleep 1
+  if ((Get-PortPids 8307) -or (Get-PortPids 5173)) { Write-Host "Could not free ports 8307/5173. Check with: Get-NetTCPConnection -LocalPort 8307,5173"; return $false }
+  return $true
+}
+
 if ($Action -eq "stop") {
-  foreach ($f in "api.pid","web.pid") { $p = Join-Path $Logs $f; if (Test-Path $p) { Stop-Process -Id (Get-Content $p) -Force -ErrorAction SilentlyContinue; Remove-Item $p } }
-  Write-Host "Stopped API and web."; exit 0
+  if (Stop-App) { Write-Host "Stopped API and web (ports 8307 and 5173 are free)." }
+  exit 0
+}
+
+if ((Get-PortPids 8307) -or (Get-PortPids 5173)) {
+  Write-Host "0/4 Ports 8307/5173 are in use - stopping the previous Flowamaz API/web first..."
+  Stop-App | Out-Null
 }
 
 Write-Host "1/4 Postgres + Redis (Docker)..."
