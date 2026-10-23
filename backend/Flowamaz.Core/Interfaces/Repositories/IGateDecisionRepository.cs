@@ -26,5 +26,8 @@ public interface IGateDecisionRepository
     /// <summary>Pending gates whose <c>ExpiresAt</c> is at or before <paramref name="asOf"/> (timer scanner).</summary>
     Task<List<GateDecision>> GetExpiredAsync(DateTime asOf, CancellationToken cancellationToken = default);
     Task AddAsync(GateDecision gate, CancellationToken cancellationToken = default);
+
+    /// <summary>True when the gate's run was cancelled or has already completed/failed — its approval no longer applies.</summary>
+    Task<bool> IsInstanceFinishedAsync(Guid instanceId, CancellationToken cancellationToken = default);
     void Update(GateDecision gate);
 }

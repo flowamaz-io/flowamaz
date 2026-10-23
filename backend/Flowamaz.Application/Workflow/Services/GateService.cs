@@ -75,6 +75,7 @@ public sealed class GateService
         var gate = await _gates.GetByNodeAsync(instanceId, nodeId, ct);
         if (gate is null || gate.WorkspaceId != workspaceId) return null;
         if (gate.Decision != GateDecisionStatus.Pending) throw new GateAlreadyDecidedException(nodeId);
+        if (await _gates.IsInstanceFinishedAsync(instanceId, ct)) throw new GateRunEndedException(nodeId);
 
         var approved = string.Equals(decision, "approved", StringComparison.OrdinalIgnoreCase);
         gate.Decision = approved ? GateDecisionStatus.Approved : GateDecisionStatus.Rejected;

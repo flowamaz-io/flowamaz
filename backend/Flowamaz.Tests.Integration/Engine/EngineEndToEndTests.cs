@@ -154,6 +154,26 @@ public class EngineEndToEndTests : ApiTestBase
     }
 
     [Fact]
+    public async Task CancelledRun_ApprovalLeavesTheInbox_AndCannotBeDecided()
+    {
+        var owner = await RegisterOwnerAsync("e2e-cancel-gate");
+        var ws = await CreateWorkspaceAsync(owner.Client, "Ops", "e2e-cancel-gate");
+        var instanceId = await PublishAndTriggerAsync(owner, ws, "approval-router-cancel", ApprovalRouterYaml, new { });
+        (await DriveAsync(ws, instanceId)).Should().Be("Waiting");
+
+        var cancel = await owner.Client.PostAsync($"/api/v1/workspaces/{ws}/instances/{instanceId}/cancel", null);
+        cancel.StatusCode.Should().Be(HttpStatusCode.OK, await cancel.Content.ReadAsStringAsync());
+
+        var pending = await owner.Client.GetAsync($"/api/v1/workspaces/{ws}/gates");
+        (await DataAsync(pending)).EnumerateArray().Should().NotContain(g => g.GetProperty("instanceId").GetGuid() == instanceId);
+
+        var decide = await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/gates/{instanceId}/manager-approval/decide",
+            new { decision = "approved", note = "too late" });
+        decide.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await decide.Content.ReadAsStringAsync()).Should().Contain("GATE_RUN_ENDED");
+    }
+
+    [Fact]
     public async Task ApprovalGate_Rejection_FailsTheRun_WithoutRetrying()
     {
         const string yaml = """

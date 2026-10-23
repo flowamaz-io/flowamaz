@@ -25,12 +25,22 @@ public sealed class GateDecisionRepository(FlowAmazDbContext db) : IGateDecision
     public Task<List<GateDecision>> GetPendingForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>
         db.GateDecisions.AsNoTracking()
             .Where(g => g.WorkspaceId == workspaceId && g.Decision == GateDecisionStatus.Pending)
+            // A cancelled/failed/finished run's approval no longer needs anyone's attention.
+            .Where(g => db.WorkflowInstances.Any(i => i.Id == g.InstanceId
+                && (i.Status == InstanceStatus.Waiting || i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Pending)))
             .OrderBy(g => g.CreatedAt).ToListAsync(cancellationToken);
 
     public Task<List<GateDecision>> GetExpiredAsync(DateTime asOf, CancellationToken cancellationToken = default) =>
         db.GateDecisions
             .Where(g => g.Decision == GateDecisionStatus.Pending && g.ExpiresAt != null && g.ExpiresAt <= asOf)
+            .Where(g => db.WorkflowInstances.Any(i => i.Id == g.InstanceId
+                && (i.Status == InstanceStatus.Waiting || i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Pending)))
             .ToListAsync(cancellationToken);
+
+    public Task<bool> IsInstanceFinishedAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
+        db.WorkflowInstances.AnyAsync(i => i.Id == instanceId
+            && (i.Status == InstanceStatus.Cancelled || i.Status == InstanceStatus.Completed || i.Status == InstanceStatus.Failed),
+            cancellationToken);
 
     public async Task AddAsync(GateDecision gate, CancellationToken cancellationToken = default) =>
         await db.GateDecisions.AddAsync(gate, cancellationToken);
