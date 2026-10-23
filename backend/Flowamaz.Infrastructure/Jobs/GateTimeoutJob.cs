@@ -115,6 +115,15 @@ public sealed class GateTimeoutJob : IJob
             return;
         }
 
+        if (decision == GateDecisionStatus.Rejected
+            && await _orchestrator.HasDecisionRouteAsync(gate.InstanceId, gate.NodeId, "rejected", ct))
+        {
+            _logger.LogInformation("GateTimeoutJob auto-rejected gate node={NodeId} instance={InstanceId}; following the rejected route", gate.NodeId, gate.InstanceId);
+            await _orchestrator.CompleteNodeAsync(gate.InstanceId, gate.NodeId,
+                """{"decision":"rejected","auto":true}""", "gate-timeout", ct);
+            return;
+        }
+
         var reason = decision == GateDecisionStatus.Rejected
             ? "Approval auto-rejected: no decision was made before the deadline."
             : action == GateTimeoutActions.Escalate && gate.EscalationCount > 0

@@ -577,11 +577,28 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         var targets = new List<string>();
         var defaults = new List<string>();
         var anyConditionalMatched = false;
-        foreach (var edge in graph.OutgoingEdges(nodeId))
+        var outgoing = graph.OutgoingEdges(nodeId).ToList();
+
+        // Label-only branches (via: approved / rejected) route on the upstream decision. Without this a
+        // router with no branch config would take every edge (e.g. approve AND notify-rejected).
+        string? decision = null;
+        if (outgoing.Any(IsLabelOnly))
+            decision = await UpstreamDecisionAsync(instanceId, graph, nodeId, ct);
+
+        foreach (var edge in outgoing)
         {
             if (edge.IsDefault)
             {
                 defaults.Add(edge.ToNodeId);
+                continue;
+            }
+            if (IsLabelOnly(edge) && decision is not null)
+            {
+                if (DecisionMatches(edge.Via!, decision))
+                {
+                    targets.Add(edge.ToNodeId);
+                    anyConditionalMatched = true;
+                }
                 continue;
             }
             if (await _variableEvaluation.EvaluateConditionAsync(instanceId, edge.Condition, ct))
@@ -592,6 +609,52 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         }
         if (!anyConditionalMatched) targets.AddRange(defaults);
         return targets;
+    }
+
+    private static bool IsLabelOnly(SfgEdge edge) =>
+        !edge.IsDefault && string.IsNullOrWhiteSpace(edge.Condition) && !string.IsNullOrWhiteSpace(edge.Via);
+
+    /// <summary>The "decision" field of this node's output, else of its nearest predecessor that has one.</summary>
+    private async Task<string?> UpstreamDecisionAsync(Guid instanceId, WorkflowGraph graph, string nodeId, CancellationToken ct)
+    {
+        foreach (var candidate in new[] { nodeId }.Concat(graph.IncomingEdges(nodeId).Select(e => e.FromNodeId)))
+        {
+            var variable = await _variables.GetByNameAsync(instanceId, $"{candidate}.output", ct);
+            if (variable is null || string.IsNullOrWhiteSpace(variable.Value)) continue;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(variable.Value);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("decision", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.String)
+                    return d.GetString();
+            }
+            catch (System.Text.Json.JsonException) { }
+        }
+        return null;
+    }
+
+    internal static bool DecisionMatches(string via, string decision)
+    {
+        static string Norm(string v) => v.Trim().ToLowerInvariant() switch
+        {
+            "approve" or "approved" or "yes" or "accept" or "accepted" => "approved",
+            "reject" or "rejected" or "no" or "decline" or "declined" or "denied" => "rejected",
+            var other => other,
+        };
+        return Norm(via) == Norm(decision);
+    }
+
+    public async Task<bool> HasDecisionRouteAsync(Guid instanceId, string nodeId, string decision, CancellationToken cancellationToken = default)
+    {
+        var instance = await _instances.GetByIdAsync(instanceId, cancellationToken);
+        if (instance is null) return false;
+        var graph = await LoadGraphAsync(instance, cancellationToken);
+
+        bool Routes(string from) => graph.OutgoingEdges(from).Any(e => IsLabelOnly(e) && DecisionMatches(e.Via!, decision));
+        if (Routes(nodeId)) return true;
+        return graph.OutgoingEdges(nodeId)
+            .Select(e => graph.Nodes.FirstOrDefault(n => n.Id == e.ToNodeId))
+            .Any(n => n is { Type: NodeType.Router } && Routes(n.Id));
     }
 
     private async Task SeedTriggerVariablesAsync(WorkflowInstance instance, CancellationToken ct)

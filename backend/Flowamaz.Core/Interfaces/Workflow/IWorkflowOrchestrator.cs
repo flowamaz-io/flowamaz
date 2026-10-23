@@ -47,6 +47,13 @@ public interface IWorkflowOrchestrator
     /// </summary>
     Task ParkAtGateAsync(Guid instanceId, string nodeId, Guid gateId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// True when the workflow routes <paramref name="decision"/> (e.g. "rejected") onward from this gate —
+    /// a <c>via</c>-labelled edge on the gate itself or on a router directly after it. A gate decision with
+    /// a route completes the node; without one a rejection fails the run as before.
+    /// </summary>
+    Task<bool> HasDecisionRouteAsync(Guid instanceId, string nodeId, string decision, CancellationToken cancellationToken = default);
+
     /// <summary>Cancels the instance, appends the event, and releases any worker lease.</summary>
     Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default);
 }

@@ -438,4 +438,15 @@ public class WorkflowOrchestratorTests
     private void AllConditionsTrue() =>
         _variableEvaluation.Setup(v => v.EvaluateConditionAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
+
+    [Theory]
+    [InlineData("approved", "approved", true)]
+    [InlineData("Approve", "approved", true)]
+    [InlineData("yes", "approved", true)]
+    [InlineData("rejected", "rejected", true)]
+    [InlineData("no", "rejected", true)]
+    [InlineData("rejected", "approved", false)]
+    [InlineData("escalated", "escalated", true)]
+    public void DecisionMatches_NormalisesCommonLabels(string via, string decision, bool expected) =>
+        Flowamaz.Application.Workflow.Orchestrator.WorkflowOrchestrator.DecisionMatches(via, decision).Should().Be(expected);
 }

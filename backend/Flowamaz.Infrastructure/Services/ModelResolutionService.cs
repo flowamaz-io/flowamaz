@@ -139,6 +139,14 @@ public sealed class ModelResolutionService : IModelResolutionService
         }
 
         var key = provider == AiProviders.Anthropic ? _aiOptions.AnthropicPlatformKey : null;
+        if (string.IsNullOrWhiteSpace(key) && provider == AiProviders.Anthropic
+            && (_aiOptions.AllowStubWithoutKey || _aiOptions.UseStubCompletion))
+        {
+            // Explicit stub mode (Development / E2E): hand back no key so AiCompletionService returns
+            // its deterministic stub instead of failing before it is ever consulted.
+            _logger.LogWarning("ModelResolutionService: no Anthropic platform key — AI stub mode is enabled, using canned completions");
+            return string.Empty;
+        }
         if (string.IsNullOrWhiteSpace(key))
         {
             throw new ConfigViolationException(

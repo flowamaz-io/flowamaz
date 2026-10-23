@@ -169,6 +169,7 @@ public sealed class SfgParser
         {
             var edge = edges[i];
             var via = dtos[i].Via?.Trim();
+            if (!string.IsNullOrEmpty(via)) edge = edge with { Via = via };
             if (string.IsNullOrEmpty(via) || !byId.TryGetValue(edge.FromNodeId, out var source)
                 || source.Config.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object
                 || !source.Config.RootElement.TryGetProperty("branches", out var branches)

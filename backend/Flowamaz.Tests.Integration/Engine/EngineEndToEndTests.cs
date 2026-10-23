@@ -108,6 +108,51 @@ public class EngineEndToEndTests : ApiTestBase
         (await DriveAsync(ws, instanceId)).Should().Be("Completed");
     }
 
+    // Shape of the official Purchase Approval template: gate → router with label-only branches
+    // (via: approved / rejected) and no branch config. Ends are distinct so the path is observable.
+    private const string ApprovalRouterYaml = """
+        apiVersion: flowamaz/v1
+        kind: Workflow
+        metadata: { id: approval-router, name: "Approval router" }
+        spec:
+          trigger: { type: manual }
+          nodes:
+            - { id: start, type: trigger }
+            - id: manager-approval
+              type: human-gate
+              config: { delivery_channel: Portal }
+            - { id: route-decision, type: router, label: "Approved?" }
+            - { id: approved-end, type: end }
+            - { id: rejected-end, type: end }
+          edges:
+            - { id: e1, from: start, to: manager-approval }
+            - { id: e2, from: manager-approval, to: route-decision }
+            - { id: e3, from: route-decision, to: approved-end, via: approved }
+            - { id: e4, from: route-decision, to: rejected-end, via: rejected }
+        """;
+
+    [Theory]
+    [InlineData("approved", "approved-end", "rejected-end")]
+    [InlineData("rejected", "rejected-end", "approved-end")]
+    public async Task GateThenLabelledRouter_FollowsOnlyTheDecidedBranch(string decision, string taken, string skipped)
+    {
+        var owner = await RegisterOwnerAsync($"e2e-route-{decision}");
+        var ws = await CreateWorkspaceAsync(owner.Client, "Ops", $"e2e-route-{decision}");
+        var instanceId = await PublishAndTriggerAsync(owner, ws, $"approval-router-{decision}", ApprovalRouterYaml, new { });
+        (await DriveAsync(ws, instanceId)).Should().Be("Waiting");
+
+        var decide = await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/gates/{instanceId}/manager-approval/decide",
+            new { decision, note = "e2e" });
+        decide.StatusCode.Should().Be(HttpStatusCode.OK, await decide.Content.ReadAsStringAsync());
+
+        (await DriveAsync(ws, instanceId)).Should().Be("Completed", "a rejection with a rejected route continues instead of failing");
+        using var scope = Fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+        var states = await db.WorkflowNodeStates.AsNoTracking().Where(n => n.InstanceId == instanceId).ToListAsync();
+        states.Should().Contain(n => n.NodeId == taken);
+        states.Should().NotContain(n => n.NodeId == skipped, "a label-only router must not take every branch");
+    }
+
     [Fact]
     public async Task ApprovalGate_Rejection_FailsTheRun_WithoutRetrying()
     {

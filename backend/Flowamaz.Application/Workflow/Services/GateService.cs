@@ -101,6 +101,11 @@ public sealed class GateService
         {
             await _orchestrator.CompleteNodeAsync(instanceId, nodeId, $$"""{"decision":"approved"}""", "gate", ct);
         }
+        else if (await _orchestrator.HasDecisionRouteAsync(instanceId, nodeId, "rejected", ct))
+        {
+            // The workflow handles rejection (e.g. "Approved?" router → notify requester): continue down that path.
+            await _orchestrator.CompleteNodeAsync(instanceId, nodeId, $$"""{"decision":"rejected"}""", "gate", ct);
+        }
         else
         {
             await _orchestrator.FailNodeAsync(instanceId, nodeId, $"Gate rejected{(string.IsNullOrWhiteSpace(note) ? "" : $": {note}")}", "gate", ct,
