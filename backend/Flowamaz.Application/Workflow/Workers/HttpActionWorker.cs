@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using Flowamaz.Application.Connectors.Services;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
@@ -9,7 +10,11 @@ using Microsoft.Extensions.Logging;
 namespace Flowamaz.Application.Workflow.Workers;
 
 /// <summary>
-/// Executes Action nodes that call external HTTP APIs. Uses <see cref="IHttpClientFactory"/> (never
+/// Executes Action nodes. Nodes that reference a connector (<c>connector_id</c>/<c>operation</c>, or the
+/// legacy canvas keys) are dispatched to <see cref="ConnectorActionExecutor"/> — handler, vault
+/// credential, interpolated inputs. Nodes with a raw <c>url</c> are called directly below.
+///
+/// Raw HTTP: executes Action nodes that call external HTTP APIs. Uses <see cref="IHttpClientFactory"/> (never
 /// <c>new HttpClient()</c>), substitutes <c>{{ vars }}</c> in URL/headers/body, stamps an idempotency
 /// header, enforces the node TimeoutPolicy via a linked CTS, and retries transient failures (5xx /
 /// timeout / network) with exponential backoff per the node RetryPolicy. Credential resolution from
@@ -23,15 +28,18 @@ public sealed class HttpActionWorker : INodeWorker
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IVariableEvaluationService _variableEvaluation;
     private readonly ILogger<HttpActionWorker> _logger;
+    private readonly ConnectorActionExecutor? _connectors;
 
     public HttpActionWorker(
         IHttpClientFactory httpClientFactory,
         IVariableEvaluationService variableEvaluation,
-        ILogger<HttpActionWorker> logger)
+        ILogger<HttpActionWorker> logger,
+        ConnectorActionExecutor? connectors = null)
     {
         _httpClientFactory = httpClientFactory;
         _variableEvaluation = variableEvaluation;
         _logger = logger;
+        _connectors = connectors;
     }
 
     public NodeType SupportedType => NodeType.Action;
@@ -44,12 +52,20 @@ public sealed class HttpActionWorker : INodeWorker
         try
         {
             var config = context.Node.Config.RootElement;
+
+            if (ConnectorNodeConfig.TryParse(config) is { } connectorNode)
+            {
+                if (_connectors is null)
+                    return NodeExecutionResult.Fatal("Connector execution is not available in this host.");
+                return await _connectors.ExecuteAsync(context, connectorNode, cancellationToken);
+            }
+
             var method = new HttpMethod((GetString(config, "method") ?? "GET").ToUpperInvariant());
             var urlTemplate = GetString(config, "url");
             if (string.IsNullOrWhiteSpace(urlTemplate))
             {
                 return NodeExecutionResult.Fatal(
-                    $"Action node '{context.Node.Id}' has no 'url' in its config. Add a url to call.");
+                    $"Action node '{context.Node.Id}' has no connector or url configured. Open the node config and select a connector and action.");
             }
 
             var url = await _variableEvaluation.InterpolateAsync(context.InstanceId, urlTemplate, cancellationToken);

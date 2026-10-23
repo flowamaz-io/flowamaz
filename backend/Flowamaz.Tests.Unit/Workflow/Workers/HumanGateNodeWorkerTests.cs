@@ -8,6 +8,7 @@ using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
+using Flowamaz.Core.Models;
 using Flowamaz.Core.Workflow;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -25,6 +26,8 @@ public class HumanGateNodeWorkerTests
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IEmailService> _email = new();
     private readonly Mock<IConnectorOperationHandlerRegistry> _registry = new();
+    private readonly Mock<IConnectorCredentialResolver> _credentials = new();
+    private static readonly ConnectorCredential SlackCred = new(Guid.NewGuid(), "slack-oauth", "OAuth2AuthCode", "xoxb-ws-token");
     private readonly IConfiguration _config;
 
     private readonly Guid _workspaceId = Guid.NewGuid();
@@ -43,7 +46,7 @@ public class HumanGateNodeWorkerTests
 
     private HumanGateNodeWorker BuildWorker() =>
         new(_gateRepo.Object, _unitOfWork.Object, _email.Object,
-            _registry.Object, _config, NullLogger<HumanGateNodeWorker>.Instance);
+            _registry.Object, _config, NullLogger<HumanGateNodeWorker>.Instance, _credentials.Object);
 
     private NodeExecutionContext BuildContext(
         string deliveryChannel = "Portal",
@@ -143,15 +146,18 @@ public class HumanGateNodeWorkerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_SlackChannel_CallsSlackApprovalHandler()
+    public async Task ExecuteAsync_SlackChannel_CallsSlackApprovalHandler_WithWorkspaceCredential()
     {
         // Arrange
         var slackHandler = new Mock<IConnectorOperationHandler>();
         slackHandler.Setup(h => h.ConnectorId).Returns("slack");
         slackHandler.Setup(h => h.OperationId).Returns("post-approval-message");
         slackHandler
-            .Setup(h => h.ExecuteAsync(It.IsAny<JsonDocument>(), null, It.IsAny<CancellationToken>()))
+            .Setup(h => h.ExecuteAsync(It.IsAny<JsonDocument>(), It.IsAny<ConnectorCredential?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonDocument.Parse("{\"ok\":true}"));
+        _credentials
+            .Setup(c => c.ResolveAsync(It.IsAny<Guid>(), "slack", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SlackCred);
 
         _registry
             .Setup(r => r.Get("slack", "post-approval-message"))
@@ -174,9 +180,38 @@ public class HumanGateNodeWorkerTests
             h => h.ExecuteAsync(
                 It.Is<JsonDocument>(d =>
                     d.RootElement.GetProperty("channel").GetString() == "#approvals"),
-                null,
+                SlackCred,
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SlackChannel_NoCredential_SkipsSlack_GateStillOpen()
+    {
+        var slackHandler = new Mock<IConnectorOperationHandler>();
+        _registry.Setup(r => r.Get("slack", "post-approval-message")).Returns(slackHandler.Object);
+        _credentials
+            .Setup(c => c.ResolveAsync(It.IsAny<Guid>(), "slack", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ConnectorCredential?)null);
+
+        var result = await BuildWorker().ExecuteAsync(BuildContext("Slack"), CancellationToken.None);
+
+        result.IsGateWaiting.Should().BeTrue();
+        slackHandler.Verify(h => h.ExecuteAsync(It.IsAny<JsonDocument>(), It.IsAny<ConnectorCredential?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GateAlreadyOpen_ReturnsExistingGate_DoesNotCreateDuplicate()
+    {
+        var existing = new GateDecision { Id = Guid.NewGuid(), NodeId = "approval", Decision = GateDecisionStatus.Pending };
+        _gateRepo.Setup(r => r.GetByNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var result = await BuildWorker().ExecuteAsync(BuildContext(), CancellationToken.None);
+
+        result.IsGateWaiting.Should().BeTrue();
+        result.GateDecisionId.Should().Be(existing.Id.ToString());
+        _gateRepo.Verify(r => r.AddAsync(It.IsAny<GateDecision>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -187,7 +222,7 @@ public class HumanGateNodeWorkerTests
         teamsHandler.Setup(h => h.ConnectorId).Returns("microsoft-teams");
         teamsHandler.Setup(h => h.OperationId).Returns("post-adaptive-card");
         teamsHandler
-            .Setup(h => h.ExecuteAsync(It.IsAny<JsonDocument>(), null, It.IsAny<CancellationToken>()))
+            .Setup(h => h.ExecuteAsync(It.IsAny<JsonDocument>(), It.IsAny<ConnectorCredential?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(JsonDocument.Parse("{\"success\":true}"));
 
         _registry

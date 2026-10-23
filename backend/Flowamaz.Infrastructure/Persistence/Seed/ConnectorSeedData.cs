@@ -117,10 +117,11 @@ internal static class ConnectorSeedData
         ConnectorId   = connectorId,
         PublisherId   = "flowamaz-io",
         DisplayName   = displayName,
-        Version       = "1.0.0",
+        Version       = "1.1.0",
         Category      = category,
         Tags          = tags,
-        ManifestJson  = $$$"""{"id":"{{{connectorId}}}","version":"1.0.0","operations":[]}""",
+        // Operations come from the single catalog the engine validates against (no drift).
+        ManifestJson  = Flowamaz.Application.Connectors.OfficialConnectorCatalog.ManifestJson(connectorId),
         SourceUrl     = null,
         Tier          = ConnectorTier.Official,
         IsEnabled     = true,

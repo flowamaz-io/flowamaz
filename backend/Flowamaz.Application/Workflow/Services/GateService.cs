@@ -103,7 +103,8 @@ public sealed class GateService
         }
         else
         {
-            await _orchestrator.FailNodeAsync(instanceId, nodeId, $"Gate rejected{(string.IsNullOrWhiteSpace(note) ? "" : $": {note}")}", "gate", ct);
+            await _orchestrator.FailNodeAsync(instanceId, nodeId, $"Gate rejected{(string.IsNullOrWhiteSpace(note) ? "" : $": {note}")}", "gate", ct,
+                retryable: false);
         }
 
         _audit?.RecordAsync(new Core.Models.AuditEventRequest

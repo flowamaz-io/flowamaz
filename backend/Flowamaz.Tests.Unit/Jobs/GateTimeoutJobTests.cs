@@ -53,7 +53,7 @@ public class GateTimeoutJobTests
         await NewJob().Execute(Context());
 
         _gates.Verify(r => r.Update(It.IsAny<GateDecision>()), Times.Never);
-        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class GateTimeoutJobTests
         _gates.Verify(r => r.Update(gate), Times.Once);
         _events.Verify(e => e.AppendAsync(It.Is<WorkflowEvent>(w => w.EventType == "GateDecided"), It.IsAny<CancellationToken>()), Times.Once);
         _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
-        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -82,7 +82,8 @@ public class GateTimeoutJobTests
         await NewJob().Execute(Context());
 
         gate.Decision.Should().Be(GateDecisionStatus.Escalated);
-        _orchestrator.Verify(o => o.FailNodeAsync(gate.InstanceId, gate.NodeId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        // A timed-out gate must not be retried (that would open a new approval).
+        _orchestrator.Verify(o => o.FailNodeAsync(gate.InstanceId, gate.NodeId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), false), Times.Once);
     }
 
     [Fact]

@@ -72,7 +72,7 @@ public sealed class GateTimeoutJob : IJob
                     _logger.LogWarning(
                         "GateTimeoutJob no escalation target for gate node={NodeId} instance={InstanceId} — failing the gate",
                         gate.NodeId, gate.InstanceId);
-                    await _orchestrator.FailNodeAsync(gate.InstanceId, gate.NodeId, "Approval gate timed out with no escalation target.", "gate-timeout", context.CancellationToken);
+                    await _orchestrator.FailNodeAsync(gate.InstanceId, gate.NodeId, "Approval gate timed out with no escalation target.", "gate-timeout", context.CancellationToken, retryable: false);
                 }
             }
 

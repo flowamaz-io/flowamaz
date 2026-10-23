@@ -1,18 +1,25 @@
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Flowamaz.Core.Entities.Connector;
+using Flowamaz.Application.Connectors.Security;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Flowamaz.Application.Connectors.Handlers;
 
 /// <summary>
-/// Base helper for HTTP-REST connector handlers. Each HTTP method gets its own subclass so the
-/// registry can look up by (connectorId, operationId).
-/// Input schema: { url: string, headers?: object, body?: string, timeout_seconds?: int }
+/// Generic HTTP connector. One subclass per verb so the registry resolves (http-rest, VERB).
+/// Input: { url, headers?, body?, timeout_seconds?, api_key_header? }.
+/// Auth comes from the optional credential: BearerToken/OAuth → Authorization: Bearer,
+/// BasicAuth ("user:password") → Authorization: Basic, ApiKey → api_key_header (default X-API-Key).
+/// Output: { status_code, body }. Non-2xx responses fail the step (429/5xx retryable).
+/// The named client goes through <see cref="EgressGuard"/>.
 /// </summary>
 public abstract class HttpRestConnectorHandlerBase : IConnectorOperationHandler
 {
+    public const string HttpClientName = "http-rest-connector";
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger _logger;
 
@@ -25,51 +32,89 @@ public abstract class HttpRestConnectorHandlerBase : IConnectorOperationHandler
     public string ConnectorId => "http-rest";
     public abstract string OperationId { get; }
 
-    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
+    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
         _logger.LogInformation("[HttpRest:{Op}] ExecuteAsync entry", OperationId);
-
+        var op = $"http-rest/{OperationId}";
         var root = input.RootElement;
-        var url = root.GetProperty("url").GetString()
-            ?? throw new InvalidOperationException("Input property 'url' is required.");
-        var timeoutSeconds = root.TryGetProperty("timeout_seconds", out var tEl) && tEl.TryGetInt32(out var t) ? t : 30;
+        var url = EgressGuard.RequireHttpUrl(ConnectorInput.Optional(root, "url"));
+        var timeoutSeconds = ConnectorInput.Int(root, "timeout_seconds", 30, 1, 120);
 
-        using var client = _httpClientFactory.CreateClient("http-rest-connector");
+        using var client = _httpClientFactory.CreateClient(HttpClientName);
         client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
-
         using var request = new HttpRequestMessage(new HttpMethod(OperationId), url);
 
         if (root.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Object)
         {
             foreach (var hdr in headersEl.EnumerateObject())
-                request.Headers.TryAddWithoutValidation(hdr.Name, hdr.Value.GetString());
+            {
+                if (hdr.Name.Equals("Authorization", StringComparison.OrdinalIgnoreCase) && credential is not null) continue;
+                var value = hdr.Value.ValueKind == JsonValueKind.String ? hdr.Value.GetString() : hdr.Value.GetRawText();
+                request.Headers.TryAddWithoutValidation(hdr.Name, value);
+            }
         }
 
-        if (root.TryGetProperty("body", out var bodyEl) && bodyEl.ValueKind != JsonValueKind.Null)
+        ApplyCredential(request, credential, ConnectorInput.Optional(root, "api_key_header"));
+
+        if (root.TryGetProperty("body", out var bodyEl) && bodyEl.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
         {
-            var bodyStr = bodyEl.ValueKind == JsonValueKind.String
-                ? bodyEl.GetString() ?? string.Empty
-                : bodyEl.GetRawText();
+            var bodyStr = bodyEl.ValueKind == JsonValueKind.String ? bodyEl.GetString() ?? string.Empty : bodyEl.GetRawText();
             request.Content = new StringContent(bodyStr, Encoding.UTF8, "application/json");
         }
 
-        using var response = await client.SendAsync(request, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
-        var statusCode = (int)response.StatusCode;
-
-        _logger.LogInformation("[HttpRest:{Op}] ExecuteAsync exit status={Status}", OperationId, statusCode);
-
-        if (string.IsNullOrWhiteSpace(responseBody))
-            return JsonDocument.Parse($"{{\"status_code\":{statusCode},\"body\":null}}");
-
+        HttpResponseMessage response;
         try
         {
-            return JsonDocument.Parse($"{{\"status_code\":{statusCode},\"body\":{responseBody}}}");
+            response = await client.SendAsync(request, ct);
         }
-        catch
+        catch (HttpRequestException ex)
         {
-            var escaped = JsonSerializer.Serialize(responseBody);
-            return JsonDocument.Parse($"{{\"status_code\":{statusCode},\"body\":{escaped}}}");
+            throw new ConnectorOperationException($"{op}: could not reach {url.Host}: {ex.Message}", retryable: true, ex);
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new ConnectorOperationException($"{op}: {url.Host} did not respond within {timeoutSeconds}s.", retryable: true, ex);
+        }
+
+        using (response)
+        {
+            var status = (int)response.StatusCode;
+            var text = await response.Content.ReadAsStringAsync(ct);
+            _logger.LogInformation("[HttpRest:{Op}] ExecuteAsync exit status={Status}", OperationId, status);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var detail = text.Length > 300 ? text[..300] : text;
+                throw new ConnectorOperationException($"{op}: {url.Host} returned HTTP {status}. Detail: {detail}",
+                    ConnectorOperationException.IsRetryableStatus(status));
+            }
+
+            object? body = null;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                try { body = JsonDocument.Parse(text).RootElement.Clone(); }
+                catch (JsonException) { body = text; }
+            }
+            return ConnectorHttp.ToDocument(new { status_code = status, body });
+        }
+    }
+
+    internal static void ApplyCredential(HttpRequestMessage request, ConnectorCredential? credential, string? apiKeyHeader)
+    {
+        if (credential is null) return;
+        switch (credential.AuthType)
+        {
+            case "BasicAuth":
+                request.Headers.Authorization = new AuthenticationHeaderValue(
+                    "Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(credential.Secret)));
+                break;
+            case "ApiKey":
+                request.Headers.Remove(apiKeyHeader ?? "X-API-Key");
+                request.Headers.TryAddWithoutValidation(string.IsNullOrWhiteSpace(apiKeyHeader) ? "X-API-Key" : apiKeyHeader, credential.Secret);
+                break;
+            default: // BearerToken, OAuth2*
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential.AccessToken);
+                break;
         }
     }
 }

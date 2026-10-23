@@ -123,6 +123,11 @@ public sealed class CredentialVaultService : ICredentialVaultService
                 ?? throw new UnauthorizedAccessException(
                     $"Credential '{credentialId}' not found or access denied. Cross-workspace access is not permitted.");
 
+            // A revoked credential must stop working immediately, not just disappear from the UI.
+            if (!credential.IsActive)
+                throw new UnauthorizedAccessException(
+                    $"Credential '{credential.Name}' has been revoked. Reconnect the account or pick another credential.");
+
             var workspaceMk = DeriveWorkspaceMasterKey(workspaceId);
 
             // Unwrap DEK from EncryptedKey (nonce||ciphertext||tag)
@@ -154,6 +159,43 @@ public sealed class CredentialVaultService : ICredentialVaultService
         {
             _logger.LogError(ex,
                 "CredentialVaultService.RetrieveAsync error workspace={WorkspaceId} credentialId={CredentialId}",
+                workspaceId, credentialId);
+            throw;
+        }
+    }
+
+    public async Task UpdateValueAsync(Guid workspaceId, Guid credentialId, string plainValue, CancellationToken ct = default)
+    {
+        _logger.LogDebug(
+            "CredentialVaultService.UpdateValueAsync enter workspace={WorkspaceId} credentialId={CredentialId}",
+            workspaceId, credentialId);
+        try
+        {
+            var credential = await _db.WorkspaceCredentials
+                .FirstOrDefaultAsync(c => c.Id == credentialId && c.WorkspaceId == workspaceId && !c.IsDeleted, ct)
+                ?? throw new UnauthorizedAccessException(
+                    $"Credential '{credentialId}' not found or access denied. Cross-workspace access is not permitted.");
+
+            // Fresh DEK + nonces on every write — never reuse a nonce with the same key.
+            var workspaceMk = DeriveWorkspaceMasterKey(workspaceId);
+            var dek = RandomNumberGenerator.GetBytes(KeySize);
+            var (encryptedKey, keyNonce, keyTag) = AesGcmEncrypt(workspaceMk, dek);
+            var (encryptedValue, valueNonce, valueTag) = AesGcmEncrypt(dek, Encoding.UTF8.GetBytes(plainValue));
+
+            credential.EncryptedKey = CombineNonceCiphertextTag(keyNonce, encryptedKey, keyTag);
+            credential.EncryptedValue = encryptedValue;
+            credential.IV = valueNonce;
+            credential.Tag = valueTag;
+            _db.WorkspaceCredentials.Update(credential);
+            await _db.SaveChangesAsync(ct);
+
+            _logger.LogInformation(
+                "CredentialVaultService.UpdateValueAsync exit credentialId={CredentialId} workspace={WorkspaceId}",
+                credentialId, workspaceId);
+        }
+        catch (Exception ex) when (ex is not UnauthorizedAccessException)
+        {
+            _logger.LogError(ex, "CredentialVaultService.UpdateValueAsync error workspace={WorkspaceId} credentialId={CredentialId}",
                 workspaceId, credentialId);
             throw;
         }

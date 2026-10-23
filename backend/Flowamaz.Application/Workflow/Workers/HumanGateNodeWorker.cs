@@ -26,6 +26,7 @@ public sealed class HumanGateNodeWorker : INodeWorker
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailService _email;
     private readonly IConnectorOperationHandlerRegistry _connectorRegistry;
+    private readonly IConnectorCredentialResolver? _credentials;
     private readonly IConfiguration _config;
     private readonly ILogger<HumanGateNodeWorker> _logger;
 
@@ -35,8 +36,10 @@ public sealed class HumanGateNodeWorker : INodeWorker
         IEmailService email,
         IConnectorOperationHandlerRegistry connectorRegistry,
         IConfiguration config,
-        ILogger<HumanGateNodeWorker> logger)
+        ILogger<HumanGateNodeWorker> logger,
+        IConnectorCredentialResolver? credentials = null)
     {
+        _credentials = credentials;
         _gateRepo = gateRepo;
         _unitOfWork = unitOfWork;
         _email = email;
@@ -55,6 +58,14 @@ public sealed class HumanGateNodeWorker : INodeWorker
 
         try
         {
+            // Idempotent: a redelivered queue message must not open a second approval for the same node.
+            var existing = await _gateRepo.GetByNodeAsync(context.InstanceId, context.Node.Id, cancellationToken);
+            if (existing is not null && existing.Decision == GateDecisionStatus.Pending)
+            {
+                _logger.LogInformation("HumanGateNodeWorker: gate already open gate={GateId} — not re-creating", existing.Id);
+                return NodeExecutionResult.GateWaiting(existing.Id.ToString());
+            }
+
             var config = context.Node.Config.RootElement;
 
             // ── Read node config ──────────────────────────────────────────────
@@ -64,6 +75,7 @@ public sealed class HumanGateNodeWorker : INodeWorker
             var gateSummary = GetString(config, "gate_summary") ?? string.Empty;
             var timeoutHours = GetInt(config, "timeout_hours") ?? DefaultTimeoutHours;
             var slackChannel = GetString(config, "slack_channel");
+            var slackCredentialRef = GetString(config, "slack_credential");
             var teamsWebhookUrl = GetString(config, "teams_webhook_url");
             var workflowName = GetString(config, "workflow_name") ?? "Workflow";
 
@@ -105,7 +117,7 @@ public sealed class HumanGateNodeWorker : INodeWorker
                 gate.Id, deliveryChannel, assigneeEmail ?? "(none)");
 
             // ── Deliver notification ──────────────────────────────────────────
-            await DeliverAsync(gate, deliveryChannel, gateLabel, gateSummary, workflowName, slackChannel, teamsWebhookUrl, cancellationToken);
+            await DeliverAsync(gate, deliveryChannel, gateLabel, gateSummary, workflowName, slackChannel, slackCredentialRef, teamsWebhookUrl, cancellationToken);
 
             _logger.LogInformation(
                 "HumanGateNodeWorker.ExecuteAsync exit instance={InstanceId} node={NodeId} gate={GateId}",
@@ -133,13 +145,14 @@ public sealed class HumanGateNodeWorker : INodeWorker
         string gateSummary,
         string workflowName,
         string? slackChannel,
+        string? slackCredentialRef,
         string? teamsWebhookUrl,
         CancellationToken ct)
     {
         switch (channel)
         {
             case GateDeliveryChannel.Slack:
-                await DeliverSlackAsync(gate, gateLabel, gateSummary, workflowName, slackChannel, ct);
+                await DeliverSlackAsync(gate, gateLabel, gateSummary, workflowName, slackChannel, slackCredentialRef, ct);
                 break;
 
             case GateDeliveryChannel.Teams:
@@ -165,6 +178,7 @@ public sealed class HumanGateNodeWorker : INodeWorker
         string gateSummary,
         string workflowName,
         string? slackChannel,
+        string? slackCredentialRef,
         CancellationToken ct)
     {
         var handler = _connectorRegistry.Get("slack", "post-approval-message");
@@ -186,7 +200,17 @@ public sealed class HumanGateNodeWorker : INodeWorker
 
         try
         {
-            await handler.ExecuteAsync(inputPayload, null, ct);
+            var credential = _credentials is null
+                ? null
+                : await _credentials.ResolveAsync(gate.WorkspaceId, "slack", slackCredentialRef, ct);
+            if (credential is null)
+            {
+                _logger.LogWarning(
+                    "HumanGateNodeWorker: no Slack credential in workspace — gate={GateId} is available in the portal only", gate.Id);
+                return;
+            }
+
+            await handler.ExecuteAsync(inputPayload, credential, ct);
             _logger.LogInformation(
                 "HumanGateNodeWorker: Slack approval message posted gate={GateId} channel={Channel}", gate.Id, channel);
         }

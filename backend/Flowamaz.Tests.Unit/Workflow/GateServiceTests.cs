@@ -84,7 +84,7 @@ public class GateServiceTests
         gate.Decision.Should().Be(GateDecisionStatus.Approved);
         appended!.EventType.Should().Be("GateDecided");
         _orchestrator.Verify(o => o.CompleteNodeAsync(_instanceId, Node, It.IsAny<string>(), "gate", It.IsAny<CancellationToken>()), Times.Once);
-        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -96,6 +96,7 @@ public class GateServiceTests
         await NewService().DecideAsync(_ws, _instanceId, Node, "rejected", "budget exceeded", Guid.NewGuid());
 
         gate.Decision.Should().Be(GateDecisionStatus.Rejected);
-        _orchestrator.Verify(o => o.FailNodeAsync(_instanceId, Node, It.Is<string>(s => s.Contains("budget exceeded")), "gate", It.IsAny<CancellationToken>()), Times.Once);
+        // A rejection is a decision, not a transient failure — never retried.
+        _orchestrator.Verify(o => o.FailNodeAsync(_instanceId, Node, It.Is<string>(s => s.Contains("budget exceeded")), "gate", It.IsAny<CancellationToken>(), false), Times.Once);
     }
 }

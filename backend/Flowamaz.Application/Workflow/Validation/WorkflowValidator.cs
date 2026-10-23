@@ -327,9 +327,13 @@ public sealed class WorkflowValidator : IWorkflowValidator
             var isAi = node.Type?.Equals("ai", StringComparison.OrdinalIgnoreCase) == true;
             if (!isAction && !isAi) continue;
 
-            var hasConfig = node.Config is { Count: > 0 };
-            var hasConnector = node.Config?.ContainsKey("connector_id") == true;
-            if (hasConfig && hasConnector) continue;
+            // Runnable when it names a connector (spec key connector_id, or the canvas key connector)
+            // or, for action nodes, a raw HTTP url. AI nodes are configured by prompt/model instead.
+            var cfg = node.Config;
+            var hasConnector = cfg is not null && (HasText(cfg, "connector_id") || HasText(cfg, "connector"));
+            var hasUrl = isAction && cfg is not null && HasText(cfg, "url");
+            var aiConfigured = isAi && cfg is not null && (HasText(cfg, "prompt") || hasConnector);
+            if (hasConnector || hasUrl || aiConfigured) continue;
 
             var label = string.IsNullOrWhiteSpace(node.Label) ? node.Id : node.Label;
             warnings.Add(new ValidationIssue(6, "BPR-010",
@@ -338,6 +342,9 @@ public sealed class WorkflowValidator : IWorkflowValidator
                 node.Id, null, null));
         }
     }
+
+    private static bool HasText(Dictionary<string, JsonElement> config, string key) =>
+        config.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString());
 
     // ─── DTOs (System.Text.Json deserialization from JSON) ──────────────────
 

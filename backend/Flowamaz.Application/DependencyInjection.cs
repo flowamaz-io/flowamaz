@@ -50,7 +50,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowOrchestrator, WorkflowOrchestrator>();
 
         // Node workers + saga engine (prompt 02-03).
-        services.AddHttpClient(HttpActionWorker.HttpClientName);
+        services.AddHttpClient(HttpActionWorker.HttpClientName).ConfigurePrimaryHttpMessageHandler(GuardedHandler);
         services.AddScoped<INodeWorker, HttpActionWorker>();
 
         // AI node worker + BYOM provider (prompt 04-03).
@@ -111,12 +111,20 @@ public static class DependencyInjection
         // Payload auto-mapper (prompt 04-07).
         services.AddScoped<IPayloadAutoMapper, PayloadAutoMapper>();
 
-        // Connector operation handlers (prompt 04-02) — registered as IConnectorOperationHandler for registry resolution.
-        services.AddHttpClient("http-rest-connector");
-        services.AddHttpClient("slack-connector");
-        services.AddHttpClient("teams-connector");
-        services.AddHttpClient("github-connector");
-        services.AddHttpClient("webhook-emit-connector");
+        // Connector operation handlers — registered as IConnectorOperationHandler for registry resolution.
+        // Every client a workflow can point at a URL goes through the SSRF egress guard.
+        foreach (var client in new[]
+                 {
+                     HttpRestConnectorHandlerBase.HttpClientName, SlackHandlerBase.HttpClientName,
+                     TeamsSendMessageHandler.HttpClientName, GitHubHandlerBase.HttpClientName,
+                     WebhookEmitHandler.HttpClientName, Microsoft365HandlerBase.HttpClientName,
+                 })
+        {
+            services.AddHttpClient(client).ConfigurePrimaryHttpMessageHandler(GuardedHandler);
+        }
+
+        services.AddScoped<ConnectorCallContext>();
+        services.AddScoped<ConnectorActionExecutor>();
 
         services.AddScoped<IConnectorOperationHandler, HttpGetHandler>();
         services.AddScoped<IConnectorOperationHandler, HttpPostHandler>();
@@ -128,6 +136,7 @@ public static class DependencyInjection
         services.AddScoped<IConnectorOperationHandler, SlackSendDmHandler>();
         services.AddScoped<IConnectorOperationHandler, SlackPostApprovalMessageHandler>();
         services.AddScoped<IConnectorOperationHandler, TeamsSendMessageHandler>();
+        services.AddScoped<IConnectorOperationHandler, TeamsSendWebhookMessageHandler>();
         services.AddScoped<IConnectorOperationHandler, TeamsPostAdaptiveCardHandler>();
         services.AddScoped<IConnectorOperationHandler, EmailSendHandler>();
         services.AddScoped<IConnectorOperationHandler, GitHubCreateIssueHandler>();
@@ -136,10 +145,17 @@ public static class DependencyInjection
         services.AddScoped<IConnectorOperationHandler, GitHubAddCommentHandler>();
         services.AddScoped<IConnectorOperationHandler, PostgreSqlQueryHandler>();
         services.AddScoped<IConnectorOperationHandler, PostgreSqlExecuteHandler>();
-        services.AddScoped<IConnectorOperationHandler, WebhookEmitHandler>();
-        services.AddScoped<IConnectorOperationHandler, ScheduleCronValidateHandler>();
         services.AddScoped<IConnectorOperationHandler, MySqlQueryHandler>();
         services.AddScoped<IConnectorOperationHandler, MySqlExecuteHandler>();
+        services.AddScoped<IConnectorOperationHandler, WebhookEmitHandler>();
+        services.AddScoped<IConnectorOperationHandler, ScheduleCronValidateHandler>();
+        services.AddScoped<IConnectorOperationHandler, FileSystemReadHandler>();
+        services.AddScoped<IConnectorOperationHandler, FileSystemWriteHandler>();
+        services.AddScoped<IConnectorOperationHandler, FileSystemListHandler>();
+        services.AddScoped<IConnectorOperationHandler, ScriptShellRunHandler>();
+        services.AddScoped<IConnectorOperationHandler, Microsoft365SendMailHandler>();
+        services.AddScoped<IConnectorOperationHandler, Microsoft365CreateEventHandler>();
+        services.AddScoped<IConnectorOperationHandler, Microsoft365UploadFileHandler>();
 
         services.AddScoped<ConnectorOperationHandlerRegistry>();
         services.AddScoped<IConnectorOperationHandlerRegistry>(sp => sp.GetRequiredService<ConnectorOperationHandlerRegistry>());
@@ -149,5 +165,13 @@ public static class DependencyInjection
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         return services;
+    }
+
+    /// <summary>SSRF-guarded primary handler; private networks allowed only when configured (dev/self-hosted).</summary>
+    public static HttpMessageHandler GuardedHandler(IServiceProvider sp)
+    {
+        var configuration = sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+        var allowPrivate = bool.TryParse(configuration[Connectors.Security.EgressGuard.ConfigKey], out var allow) && allow;
+        return Connectors.Security.EgressGuard.CreateHandler(allowPrivate);
     }
 }

@@ -1,14 +1,18 @@
-using System.Text;
 using System.Text.Json;
-using Flowamaz.Core.Entities.Connector;
+using Flowamaz.Application.Connectors.Security;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Flowamaz.Application.Connectors.Handlers;
 
-/// <summary>Sends a plain text message via Microsoft Teams incoming webhook.</summary>
+/// <summary>
+/// Teams channel message through Microsoft Graph, using the workspace's Microsoft OAuth credential
+/// (delegated ChannelMessage.Send). Input: { team_id, channel_id, text }.
+/// </summary>
 public sealed class TeamsSendMessageHandler : IConnectorOperationHandler
 {
+    public const string HttpClientName = "teams-connector";
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<TeamsSendMessageHandler> _logger;
 
@@ -21,25 +25,56 @@ public sealed class TeamsSendMessageHandler : IConnectorOperationHandler
     public string ConnectorId => "microsoft-teams";
     public string OperationId => "send-message";
 
-    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
+    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
         _logger.LogInformation("[Teams:send-message] ExecuteAsync entry");
-
+        const string op = "microsoft-teams/send-message";
         var root = input.RootElement;
-        var webhookUrl = root.GetProperty("webhook_url").GetString() ?? throw new InvalidOperationException("'webhook_url' is required.");
-        var text = root.GetProperty("text").GetString() ?? throw new InvalidOperationException("'text' is required.");
+        var cred = ConnectorInput.RequireCredential(credential, "Microsoft Teams", op);
+        var teamId = ConnectorInput.Segment(ConnectorInput.Required(root, "team_id", op));
+        var channelId = ConnectorInput.Segment(ConnectorInput.Required(root, "channel_id", op));
+        var text = ConnectorInput.Required(root, "text", op);
 
-        var body = JsonSerializer.Serialize(new { text });
-        using var client = _httpClientFactory.CreateClient("teams-connector");
-        using var request = new HttpRequestMessage(HttpMethod.Post, webhookUrl)
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json")
-        };
+        using var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var request = ConnectorHttp.Json(HttpMethod.Post,
+            $"https://graph.microsoft.com/v1.0/teams/{teamId}/channels/{channelId}/messages",
+            new { body = new { contentType = "html", content = text } }, cred.AccessToken);
+        var result = await ConnectorHttp.SendAsync(client, request, op, ct);
 
-        using var response = await client.SendAsync(request, ct);
-        _logger.LogInformation("[Teams:send-message] ExecuteAsync exit status={Status}", (int)response.StatusCode);
+        _logger.LogInformation("[Teams:send-message] ExecuteAsync exit");
+        return result;
+    }
+}
 
-        return JsonDocument.Parse($"{{\"success\":{response.IsSuccessStatusCode.ToString().ToLowerInvariant()},\"status_code\":{(int)response.StatusCode}}}");
+/// <summary>Teams message through an incoming-webhook (Workflows) URL. Input: { webhook_url, text }.</summary>
+public sealed class TeamsSendWebhookMessageHandler : IConnectorOperationHandler
+{
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<TeamsSendWebhookMessageHandler> _logger;
+
+    public TeamsSendWebhookMessageHandler(IHttpClientFactory httpClientFactory, ILogger<TeamsSendWebhookMessageHandler> logger)
+    {
+        _httpClientFactory = httpClientFactory;
+        _logger = logger;
+    }
+
+    public string ConnectorId => "microsoft-teams";
+    public string OperationId => "send-webhook-message";
+
+    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
+    {
+        _logger.LogInformation("[Teams:send-webhook-message] ExecuteAsync entry");
+        const string op = "microsoft-teams/send-webhook-message";
+        var root = input.RootElement;
+        var url = EgressGuard.RequireHttpUrl(ConnectorInput.Optional(root, "webhook_url"), "webhook_url");
+        var text = ConnectorInput.Required(root, "text", op);
+
+        using var client = _httpClientFactory.CreateClient(TeamsSendMessageHandler.HttpClientName);
+        using var request = ConnectorHttp.Json(HttpMethod.Post, url.ToString(), new { text });
+        var result = await ConnectorHttp.SendAsync(client, request, op, ct);
+
+        _logger.LogInformation("[Teams:send-webhook-message] ExecuteAsync exit");
+        return result;
     }
 }
 
@@ -61,40 +96,31 @@ public sealed class TeamsPostAdaptiveCardHandler : IConnectorOperationHandler
     public string ConnectorId => "microsoft-teams";
     public string OperationId => "post-adaptive-card";
 
-    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
+    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
         _logger.LogInformation("[Teams:post-adaptive-card] ExecuteAsync entry");
-
+        const string op = "microsoft-teams/post-adaptive-card";
         var root = input.RootElement;
-        var webhookUrl = root.GetProperty("webhook_url").GetString() ?? throw new InvalidOperationException("'webhook_url' is required.");
-        var gateId = root.GetProperty("gate_id").GetString() ?? throw new InvalidOperationException("'gate_id' is required.");
-        var gateSummary = root.GetProperty("gate_summary").GetString() ?? "";
-        var platformUrl = root.GetProperty("platform_url").GetString() ?? "";
+        var url = EgressGuard.RequireHttpUrl(ConnectorInput.Optional(root, "webhook_url"), "webhook_url");
+        var gateId = ConnectorInput.Required(root, "gate_id", op);
+        var gateSummary = ConnectorInput.Optional(root, "gate_summary") ?? string.Empty;
+        var platformUrl = ConnectorInput.Optional(root, "platform_url") ?? string.Empty;
 
-        var card = BuildAdaptiveCard(gateId, gateSummary, platformUrl);
-        var payload = JsonSerializer.Serialize(new
+        var payload = new
         {
             type = "message",
             attachments = new[]
             {
-                new
-                {
-                    contentType = "application/vnd.microsoft.card.adaptive",
-                    content = card
-                }
+                new { contentType = "application/vnd.microsoft.card.adaptive", content = BuildAdaptiveCard(gateId, gateSummary, platformUrl) }
             }
-        });
-
-        using var client = _httpClientFactory.CreateClient("teams-connector");
-        using var request = new HttpRequestMessage(HttpMethod.Post, webhookUrl)
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
         };
 
-        using var response = await client.SendAsync(request, ct);
-        _logger.LogInformation("[Teams:post-adaptive-card] ExecuteAsync exit status={Status}", (int)response.StatusCode);
+        using var client = _httpClientFactory.CreateClient(TeamsSendMessageHandler.HttpClientName);
+        using var request = ConnectorHttp.Json(HttpMethod.Post, url.ToString(), payload);
+        var result = await ConnectorHttp.SendAsync(client, request, op, ct);
 
-        return JsonDocument.Parse($"{{\"success\":{response.IsSuccessStatusCode.ToString().ToLowerInvariant()},\"status_code\":{(int)response.StatusCode}}}");
+        _logger.LogInformation("[Teams:post-adaptive-card] ExecuteAsync exit");
+        return result;
     }
 
     private static object BuildAdaptiveCard(string gateId, string gateSummary, string platformUrl) => new
@@ -108,8 +134,8 @@ public sealed class TeamsPostAdaptiveCardHandler : IConnectorOperationHandler
         },
         actions = new object[]
         {
-            new { type = "Action.OpenUrl", title = "Approve", url = $"{platformUrl}/gates/{gateId}/approve" },
-            new { type = "Action.OpenUrl", title = "Reject",  url = $"{platformUrl}/gates/{gateId}/reject" }
+            new { type = "Action.OpenUrl", title = "Approve", url = $"{platformUrl}/gates/{Uri.EscapeDataString(gateId)}/approve" },
+            new { type = "Action.OpenUrl", title = "Reject",  url = $"{platformUrl}/gates/{Uri.EscapeDataString(gateId)}/reject" }
         }
     };
 }

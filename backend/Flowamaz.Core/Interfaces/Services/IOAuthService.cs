@@ -15,6 +15,12 @@ public interface IOAuthService
     /// Returns the newly-created credential ID.
     /// </summary>
     Task<Guid> HandleCallbackAsync(string code, string state, CancellationToken ct = default);
+
+    /// <summary>
+    /// Exchanges a refresh token for a new token bundle. Returns null when the connector's provider
+    /// does not use refresh tokens (Slack bot tokens, GitHub OAuth app tokens do not expire).
+    /// </summary>
+    Task<Flowamaz.Core.Models.OAuthTokenBundle?> RefreshAsync(string connectorId, string refreshToken, CancellationToken ct = default);
 }
 
 public record OAuthInitiateResult(string AuthorizationUrl, string State);

@@ -195,6 +195,7 @@ public static class DependencyInjection
     private static void AddConnectors(IServiceCollection services)
     {
         services.AddScoped<ICredentialVaultService, CredentialVaultService>();
+        services.AddScoped<IConnectorCredentialResolver, ConnectorCredentialResolver>();
         services.AddScoped<IConnectorMarketplaceRepository, ConnectorMarketplaceRepository>();
         services.AddScoped<IWorkflowTemplateRepository, WorkflowTemplateRepository>();
         services.AddHttpClient(ConnectorSubmissionPrService.HttpClientName);
@@ -214,7 +215,7 @@ public static class DependencyInjection
         services.AddHttpClient(Services.Sso.OidcClient.HttpClientName);
         services.AddScoped<IOidcClient, Services.Sso.OidcClient>();
         services.AddScoped<IConnectorCatalogueService, ConnectorCatalogueService>();
-        services.AddHttpClient(ConnectorSandbox.HttpClientName);
+        services.AddHttpClient(ConnectorSandbox.HttpClientName).ConfigurePrimaryHttpMessageHandler(Flowamaz.Application.DependencyInjection.GuardedHandler);
         services.AddScoped<IConnectorSandbox, ConnectorSandbox>();
     }
 }

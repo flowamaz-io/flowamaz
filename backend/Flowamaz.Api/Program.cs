@@ -207,6 +207,11 @@ if (backgroundWorkersEnabled)
         q.AddTrigger(t => t.ForJob(gateKey)
             .WithSimpleSchedule(s => s.WithIntervalInSeconds(60).RepeatForever()));
 
+        // Schedule triggers — every minute; exactly-once per occurrence via idempotency key.
+        var scheduleKey = new JobKey(nameof(ScheduleTriggerJob));
+        q.AddJob<ScheduleTriggerJob>(scheduleKey);
+        q.AddTrigger(t => t.ForJob(scheduleKey).WithCronSchedule("5 * * * * ?"));
+
         // Process Intelligence hourly, with up to 5min jitter to avoid a thundering herd (prompt 02-07).
         var intelKey = new JobKey(nameof(ProcessIntelligenceJob));
         q.AddJob<ProcessIntelligenceJob>(intelKey);

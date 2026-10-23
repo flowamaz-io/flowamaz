@@ -401,6 +401,13 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         state.OutputPayload = string.IsNullOrWhiteSpace(output) ? null : output;
         _nodeStates.Update(state);
 
+        // A decided gate resumes a parked instance.
+        if (instance.Status == InstanceStatus.Waiting)
+        {
+            instance.TransitionTo(InstanceStatus.Running);
+            _instances.Update(instance);
+        }
+
         await UpsertVariableAsync(instance, $"{nodeId}.output", string.IsNullOrWhiteSpace(output) ? "null" : output, cancellationToken);
 
         // Snapshot what this node produced + how long it ran (07-04 step debugger). The output is
@@ -419,7 +426,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _logger.LogInformation("WorkflowOrchestrator.CompleteNodeAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
     }
 
-    public async Task FailNodeAsync(Guid instanceId, string nodeId, string error, string leaseId, CancellationToken cancellationToken = default)
+    public async Task FailNodeAsync(Guid instanceId, string nodeId, string error, string leaseId, CancellationToken cancellationToken = default,
+        bool retryable = true)
     {
         _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync enter instance={InstanceId} node={NodeId}", instanceId, nodeId);
 
@@ -433,7 +441,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         var seq = await _events.GetNextSequenceNumberAsync(instanceId, cancellationToken);
 
         var retry = node?.RetryPolicy;
-        if (retry is not null && state.RetryCount < retry.MaxAttempts)
+        if (retryable && retry is not null && state.RetryCount < retry.MaxAttempts)
         {
             state.RetryCount++;
             state.LastRetryAt = DateTime.UtcNow;
@@ -492,6 +500,34 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
+    }
+
+    public async Task ParkAtGateAsync(Guid instanceId, string nodeId, Guid gateId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("WorkflowOrchestrator.ParkAtGateAsync enter instance={InstanceId} node={NodeId} gate={GateId}",
+            instanceId, nodeId, gateId);
+
+        var instance = await _instances.GetByIdAsync(instanceId, cancellationToken)
+            ?? throw new InvalidOperationException($"Instance '{instanceId}' not found parking at gate '{nodeId}'.");
+        var state = await _nodeStates.GetByNodeAsync(instanceId, nodeId, cancellationToken)
+            ?? throw new InvalidOperationException($"Node state '{nodeId}' not found on instance '{instanceId}'.");
+
+        if (state.Status == NodeStatus.Pending)
+        {
+            state.Status = NodeStatus.Running;
+            state.StartedAt ??= DateTime.UtcNow;
+            _nodeStates.Update(state);
+        }
+
+        if (instance.CanTransitionTo(InstanceStatus.Waiting)) instance.TransitionTo(InstanceStatus.Waiting);
+        instance.CurrentNodeId = nodeId;
+        _instances.Update(instance);
+
+        var seq = await _events.GetNextSequenceNumberAsync(instanceId, cancellationToken);
+        await AppendEventAsync(seq, instance, "GateWaiting", nodeId, state.NodeType, $$"""{"gateId":"{{gateId}}"}""", cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("WorkflowOrchestrator.ParkAtGateAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
     }
 
     public async Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default)

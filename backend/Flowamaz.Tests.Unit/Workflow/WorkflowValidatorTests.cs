@@ -337,4 +337,39 @@ public sealed class WorkflowValidatorTests
         var result = await validator.ValidateAsync(yaml);
         result.Warnings.Should().NotContain(w => w.Code == "BPR-010");
     }
+
+    [Theory]
+    [InlineData("connector: slack\n                    action: send-message")]
+    [InlineData("url: https://api.example.com/orders")]
+    public async Task Bpr010_CanvasConnectorKey_OrRawUrl_CountsAsConfigured(string configLines)
+    {
+        // Regression: the canvas writes `connector`, but only `connector_id` was recognised, so every
+        // node configured in the UI was flagged as "will fail at runtime".
+        var yaml = $$"""
+            apiVersion: flowamaz/v1
+            kind: Workflow
+            metadata: { id: canvas, name: "Canvas" }
+            spec:
+              trigger: { type: manual }
+              nodes:
+                - id: start
+                  type: trigger
+                  label: "Start"
+                - id: step
+                  type: action
+                  label: "Step"
+                  config:
+                    {{configLines}}
+                - id: done
+                  type: end
+                  label: "Done"
+              edges:
+                - { id: e1, from: start, to: step }
+                - { id: e2, from: step, to: done }
+            """;
+
+        var result = await Create().ValidateAsync(yaml);
+
+        result.Warnings.Should().NotContain(w => w.Code == "BPR-010");
+    }
 }

@@ -220,6 +220,14 @@ public sealed class WorkflowService
 
         await _parser.ParseAsync(definition.YamlContent, ct); // never publish an invalid graph
 
+        // Record the trigger type so the schedule job can find scheduled workflows, and refuse to
+        // publish a schedule that could never fire.
+        var trigger = Scheduling.WorkflowTriggerReader.Read(definition.YamlContent);
+        if (trigger.Type == WorkflowTriggerType.Schedule
+            && !Scheduling.CronSchedule.TryParse(trigger.Cron, trigger.TimeZone, out _, out var scheduleError))
+            throw new InvalidScheduleException(scheduleError);
+        definition.TriggerType = trigger.Type;
+
         // Demote the current production version, if any.
         var current = await _versions.GetProductionAsync(id, workspaceId, ct);
         if (current is not null)
