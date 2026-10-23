@@ -180,4 +180,63 @@ public class SfgParserTests
         graph.TriggerNode.Id.Should().Be("start");
         graph.FindNode("gate")!.Type.Should().Be(NodeType.HumanGate);
     }
+
+    [Fact]
+    public void CanvasRouterBranches_AreCopiedOntoTheirEdges_AndDefaultIsFlagged()
+    {
+        // The canvas keeps branch conditions on the router and links edges by label (via).
+        const string yaml = """
+            apiVersion: flowamaz/v1
+            kind: Workflow
+            metadata: { id: r, name: R }
+            spec:
+              nodes:
+                - { id: start, type: trigger }
+                - id: route
+                  type: router
+                  config:
+                    branches:
+                      - { label: Large, condition: "${amount} > 1000" }
+                      - { label: Otherwise, condition: "", isDefault: true }
+                - { id: big, type: end }
+                - { id: small, type: end }
+              edges:
+                - { id: e1, from: start, to: route }
+                - { id: e2, from: route, to: big, via: Large }
+                - { id: e3, from: route, to: small, via: Otherwise }
+            """;
+
+        var graph = new SfgParser().Parse(yaml);
+
+        graph.Edges.Single(e => e.Id == "e2").Condition.Should().Be("${amount} > 1000");
+        graph.Edges.Single(e => e.Id == "e2").IsDefault.Should().BeFalse();
+        graph.Edges.Single(e => e.Id == "e3").IsDefault.Should().BeTrue();
+        graph.Edges.Single(e => e.Id == "e1").Condition.Should().BeNull();
+    }
+
+    [Fact]
+    public void NodeConfig_PlainScalars_AreTyped_QuotedStaysString()
+    {
+        // Regression: untyped YAML scalars became JSON strings, so GetInt/boolean reads in workers
+        // (timeout_hours, max_tokens, isDefault, channels) silently fell back to defaults.
+        const string yaml = """
+            nodes:
+              - { id: start, type: Trigger }
+              - id: gate
+                type: HumanGate
+                config: { timeout_hours: 72, notify: true, ratio: 0.5, version: "1.0", code: "007" }
+              - { id: done, type: End }
+            edges:
+              - { from: start, to: gate }
+              - { from: gate, to: done }
+            """;
+
+        var config = new SfgParser().Parse(yaml).FindNode("gate")!.Config.RootElement;
+
+        config.GetProperty("timeout_hours").GetInt32().Should().Be(72);
+        config.GetProperty("notify").GetBoolean().Should().BeTrue();
+        config.GetProperty("ratio").GetDouble().Should().Be(0.5);
+        config.GetProperty("version").GetString().Should().Be("1.0");
+        config.GetProperty("code").GetString().Should().Be("007");
+    }
 }

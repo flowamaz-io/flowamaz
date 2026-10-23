@@ -69,18 +69,24 @@ public sealed class HumanGateNodeWorker : INodeWorker
             var config = context.Node.Config.RootElement;
 
             // ── Read node config ──────────────────────────────────────────────
-            var assignedToVariable = GetString(config, "assigned_to_variable");
-            var deliveryChannelRaw = GetString(config, "delivery_channel") ?? "Portal";
-            var gateLabel = GetString(config, "gate_label") ?? "Approval Required";
+            // Spec keys (snake_case) first; canvas-authored gates use assignee/assigneeType/channels/
+            // timeoutValue+timeoutUnit, which the engine previously ignored.
+            var assigneeType = GetString(config, "assigneeType")?.ToLowerInvariant();
+            var assigneeRaw = GetString(config, "assignee");
+            var assignedToVariable = GetString(config, "assigned_to_variable")
+                ?? (assigneeType == "variable" ? StripPlaceholder(assigneeRaw) : null);
+            var directAssigneeEmail = assigneeType == "user" && !string.IsNullOrWhiteSpace(assigneeRaw) ? assigneeRaw.Trim() : null;
+            var deliveryChannelRaw = GetString(config, "delivery_channel") ?? ChannelFromCanvas(config) ?? "Portal";
+            var gateLabel = GetString(config, "gate_label") ?? (string.IsNullOrWhiteSpace(context.Node.Label) ? "Approval Required" : context.Node.Label);
             var gateSummary = GetString(config, "gate_summary") ?? string.Empty;
-            var timeoutHours = GetInt(config, "timeout_hours") ?? DefaultTimeoutHours;
+            var timeoutHours = GetInt(config, "timeout_hours") ?? TimeoutFromCanvas(config) ?? DefaultTimeoutHours;
             var slackChannel = GetString(config, "slack_channel");
             var slackCredentialRef = GetString(config, "slack_credential");
             var teamsWebhookUrl = GetString(config, "teams_webhook_url");
             var workflowName = GetString(config, "workflow_name") ?? "Workflow";
 
             // ── Resolve assignee email ────────────────────────────────────────
-            string? assigneeEmail = null;
+            string? assigneeEmail = directAssigneeEmail;
             if (!string.IsNullOrWhiteSpace(assignedToVariable)
                 && context.Variables.TryGetValue(assignedToVariable, out var emailElement)
                 && emailElement.ValueKind == JsonValueKind.String)
@@ -312,6 +318,33 @@ public sealed class HumanGateNodeWorker : INodeWorker
                 "HumanGateNodeWorker: approval email failed to={Email} gate={GateId} — gate is still pending in portal",
                 gate.AssignedToEmail, gate.Id);
         }
+    }
+
+    /// <summary>"${approver}" / "{{ variables.approver }}" / "approver" → "approver".</summary>
+    internal static string? StripPlaceholder(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var v = value.Trim();
+        if (v.StartsWith("${", StringComparison.Ordinal) && v.EndsWith('}')) v = v[2..^1];
+        else if (v.StartsWith("{{", StringComparison.Ordinal) && v.EndsWith("}}", StringComparison.Ordinal)) v = v[2..^2];
+        v = v.Trim();
+        if (v.StartsWith("variables.", StringComparison.Ordinal)) v = v["variables.".Length..];
+        return v.Length == 0 ? null : v;
+    }
+
+    /// <summary>Canvas stores channels as { email: bool, slack: bool, teams: bool }; pick the richest enabled.</summary>
+    private static string? ChannelFromCanvas(JsonElement config)
+    {
+        if (!config.TryGetProperty("channels", out var channels) || channels.ValueKind != JsonValueKind.Object) return null;
+        bool On(string key) => channels.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True;
+        return On("slack") ? "Slack" : On("teams") ? "Teams" : On("email") ? "Email" : null;
+    }
+
+    private static int? TimeoutFromCanvas(JsonElement config)
+    {
+        var value = GetInt(config, "timeoutValue");
+        if (value is null or <= 0) return null;
+        return string.Equals(GetString(config, "timeoutUnit"), "days", StringComparison.OrdinalIgnoreCase) ? value * 24 : value;
     }
 
     private static string? GetString(JsonElement element, string property) =>

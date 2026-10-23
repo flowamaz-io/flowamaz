@@ -17,6 +17,9 @@ public sealed class SfgParser
 {
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder()
         .WithNamingConvention(CamelCaseNamingConvention.Instance)
+        // Plain scalars in node config (timeout_hours: 24, isDefault: true) must reach workers as JSON
+        // numbers/booleans, not strings — otherwise every numeric/boolean setting is silently ignored.
+        .WithAttemptingUnquotedStringTypeDeserialization()
         .IgnoreUnmatchedProperties()
         .Build();
 
@@ -64,7 +67,7 @@ public sealed class SfgParser
 
         var nodes = MapNodes(nodeDtos);
         var nodeIds = nodes.Select(n => n.Id).ToHashSet();
-        var edges = MapEdges(edgeDtos, nodeIds);
+        var edges = ResolveBranchConditions(MapEdges(edgeDtos, nodeIds), edgeDtos, nodes);
 
         ValidateExactlyOneTrigger(nodes);
         ValidateHasEnd(nodes);
@@ -149,6 +152,48 @@ public sealed class SfgParser
         }
 
         return edges;
+    }
+
+    /// <summary>
+    /// The canvas stores router branches on the router node (<c>config.branches: [{ label, condition,
+    /// isDefault }]</c>) and links each edge to a branch by label (<c>via</c>). Copy the branch condition
+    /// onto its edge (an explicit edge condition still wins) and flag default branches, so the
+    /// orchestrator evaluates canvas-built routers the same as hand-written YAML.
+    /// </summary>
+    private static List<SfgEdge> ResolveBranchConditions(List<SfgEdge> edges, List<EdgeDto>? dtos, List<SfgNode> nodes)
+    {
+        if (dtos is null || dtos.Count != edges.Count) return edges;
+        var byId = nodes.ToDictionary(n => n.Id);
+        var result = new List<SfgEdge>(edges.Count);
+        for (var i = 0; i < edges.Count; i++)
+        {
+            var edge = edges[i];
+            var via = dtos[i].Via?.Trim();
+            if (string.IsNullOrEmpty(via) || !byId.TryGetValue(edge.FromNodeId, out var source)
+                || source.Config.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object
+                || !source.Config.RootElement.TryGetProperty("branches", out var branches)
+                || branches.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                result.Add(edge);
+                continue;
+            }
+
+            var branch = branches.EnumerateArray().FirstOrDefault(b =>
+                b.ValueKind == System.Text.Json.JsonValueKind.Object && b.TryGetProperty("label", out var l)
+                && string.Equals(l.GetString(), via, StringComparison.Ordinal));
+            if (branch.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                result.Add(edge);
+                continue;
+            }
+
+            var isDefault = branch.TryGetProperty("isDefault", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.True;
+            var condition = edge.Condition
+                ?? (branch.TryGetProperty("condition", out var c) && c.ValueKind == System.Text.Json.JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(c.GetString()) ? c.GetString() : null);
+            result.Add(edge with { Condition = isDefault ? null : condition, IsDefault = isDefault });
+        }
+        return result;
     }
 
     private static void ValidateExactlyOneTrigger(List<SfgNode> nodes)
@@ -261,6 +306,8 @@ public sealed class SfgParser
         public string? From { get; set; }
         public string? To { get; set; }
         public string? Condition { get; set; }
+        /// <summary>Canvas: the label of the router branch this edge belongs to.</summary>
+        public string? Via { get; set; }
     }
 
     private sealed class RetryDto

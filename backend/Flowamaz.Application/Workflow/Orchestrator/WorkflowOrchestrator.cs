@@ -251,6 +251,13 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                 instance.StartedAt = DateTime.UtcNow;
                 _instances.Update(instance);
 
+                // Expose the trigger payload to the workflow: the whole payload as {{ trigger }} and each
+                // top-level field as its own variable ({{ variables.amount }}), so steps can use their input.
+                await SeedTriggerVariablesAsync(instance, cancellationToken);
+                // Persist now: condition evaluation later in this same step reads variables from the
+                // database, so unsaved trigger variables would look empty to the first router.
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
                 var trigger = graph.TriggerNode;
                 await _nodeStates.AddAsync(NewState(instance, trigger, NodeStatus.Completed), cancellationToken);
                 seq = await AppendEventAsync(seq, instance, "NodeCompleted", trigger.Id, trigger.Type.ToString(), "{}", cancellationToken);
@@ -266,12 +273,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             var work = new Queue<string>();
             foreach (var source in completedNodeIds)
             {
-                foreach (var edge in graph.OutgoingEdges(source))
+                foreach (var target in await SelectTargetsAsync(instanceId, graph, source, cancellationToken))
                 {
-                    if (await _variableEvaluation.EvaluateConditionAsync(instanceId, edge.Condition, cancellationToken))
-                    {
-                        work.Enqueue(edge.ToNodeId);
-                    }
+                    work.Enqueue(target);
                 }
             }
 
@@ -317,12 +321,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                         // Routing is instantaneous: mark complete and follow matching edges.
                         await _nodeStates.AddAsync(NewState(instance, node, NodeStatus.Completed), cancellationToken);
                         seq = await AppendEventAsync(seq, instance, "NodeCompleted", node.Id, node.Type.ToString(), "{}", cancellationToken);
-                        foreach (var edge in graph.OutgoingEdges(node.Id))
+                        foreach (var target in await SelectTargetsAsync(instanceId, graph, node.Id, cancellationToken))
                         {
-                            if (await _variableEvaluation.EvaluateConditionAsync(instanceId, edge.Condition, cancellationToken))
-                            {
-                                work.Enqueue(edge.ToNodeId);
-                            }
+                            work.Enqueue(target);
                         }
                         break;
 
@@ -565,6 +566,53 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             ?? throw new InvalidOperationException(
                 $"Pinned version '{instance.WorkflowVersionId}' missing for instance '{instance.Id}'.");
         return await _parser.ParseAsync(version.YamlContent, ct);
+    }
+
+    /// <summary>
+    /// Targets of a node's outgoing edges whose conditions hold. Default ("else") edges are followed
+    /// only when no conditional sibling matched — otherwise a router would take every branch.
+    /// </summary>
+    private async Task<List<string>> SelectTargetsAsync(Guid instanceId, WorkflowGraph graph, string nodeId, CancellationToken ct)
+    {
+        var targets = new List<string>();
+        var defaults = new List<string>();
+        var anyConditionalMatched = false;
+        foreach (var edge in graph.OutgoingEdges(nodeId))
+        {
+            if (edge.IsDefault)
+            {
+                defaults.Add(edge.ToNodeId);
+                continue;
+            }
+            if (await _variableEvaluation.EvaluateConditionAsync(instanceId, edge.Condition, ct))
+            {
+                targets.Add(edge.ToNodeId);
+                if (!string.IsNullOrWhiteSpace(edge.Condition)) anyConditionalMatched = true;
+            }
+        }
+        if (!anyConditionalMatched) targets.AddRange(defaults);
+        return targets;
+    }
+
+    private async Task SeedTriggerVariablesAsync(WorkflowInstance instance, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(instance.TriggerPayload)) return;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(instance.TriggerPayload);
+            await UpsertVariableAsync(instance, "trigger", doc.RootElement.GetRawText(), ct);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return;
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                if (property.Name.Length is 0 or > 100 || property.Name.Contains('.')) continue;
+                await UpsertVariableAsync(instance, property.Name, property.Value.GetRawText(), ct);
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Non-JSON payloads stay available as a plain string.
+            await UpsertVariableAsync(instance, "trigger", System.Text.Json.JsonSerializer.Serialize(instance.TriggerPayload), ct);
+        }
     }
 
     private async Task UpsertVariableAsync(WorkflowInstance instance, string name, string value, CancellationToken ct)

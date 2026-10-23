@@ -107,6 +107,12 @@ public class ScheduleTriggerJobTests
           trigger: { type: webhook }
         """, WorkflowTriggerType.Webhook, null)]
     [InlineData("not: [valid", WorkflowTriggerType.Manual, null)]
+    [InlineData("""
+        spec:
+          trigger: { type: manual }
+          nodes:
+            - { id: start, type: trigger, config: { triggerType: schedule, cron: "0 8 * * *" } }
+        """, WorkflowTriggerType.Schedule, "0 8 * * *")]
     public void TriggerReader_ReadsSpecAndCanvasForms(string yaml, WorkflowTriggerType type, string? cron)
     {
         var info = WorkflowTriggerReader.Read(yaml);

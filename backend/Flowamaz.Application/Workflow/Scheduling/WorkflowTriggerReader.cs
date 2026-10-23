@@ -8,9 +8,9 @@ public sealed record WorkflowTriggerInfo(WorkflowTriggerType Type, string? Cron,
 
 /// <summary>
 /// Reads the trigger declaration from workflow YAML (via YamlDotNet — CLAUDE.md rule 5).
-/// Sources, first match wins:
+/// Sources (a non-manual declaration in either wins):
 ///   1. <c>spec.trigger: { type: schedule, config: { cron, timezone } }</c> (flowamaz/v1 spec)
-///   2. the Trigger node's config: <c>{ trigger_type|type: schedule, cron, timezone }</c> (canvas form)
+///   2. the Trigger node's config: <c>{ trigger_type|triggerType|type: schedule, cron, timezone }</c> (canvas form)
 /// Anything unrecognised is Manual.
 /// </summary>
 public static class WorkflowTriggerReader
@@ -32,23 +32,27 @@ public static class WorkflowTriggerReader
         }
         if (root is null) return new(WorkflowTriggerType.Manual, null, null);
 
+        WorkflowTriggerInfo? fromSpec = null;
         if (Map(root, "spec") is { } spec && Map(spec, "trigger") is { } trigger)
         {
-            var type = Parse(Scalar(trigger, "type"));
             var config = Map(trigger, "config");
-            return new(type, config is null ? null : Scalar(config, "cron"), config is null ? null : Scalar(config, "timezone"));
+            fromSpec = new(Parse(Scalar(trigger, "type")),
+                config is null ? null : Scalar(config, "cron"), config is null ? null : Scalar(config, "timezone"));
         }
 
+        WorkflowTriggerInfo? fromNode = null;
         var nodes = Seq(Map(root, "spec") ?? root, "nodes");
         var triggerNode = nodes?.Children.OfType<YamlMappingNode>()
             .FirstOrDefault(n => string.Equals(Scalar(n, "type"), "trigger", StringComparison.OrdinalIgnoreCase));
         if (triggerNode is not null && Map(triggerNode, "config") is { } cfg)
-        {
-            var type = Parse(Scalar(cfg, "trigger_type") ?? Scalar(cfg, "type"));
-            return new(type, Scalar(cfg, "cron"), Scalar(cfg, "timezone"));
-        }
+            fromNode = new(Parse(Scalar(cfg, "trigger_type") ?? Scalar(cfg, "triggerType") ?? Scalar(cfg, "type")),
+                Scalar(cfg, "cron"), Scalar(cfg, "timezone"));
 
-        return new(WorkflowTriggerType.Manual, null, null);
+        // The canvas skeleton writes spec.trigger: manual while the trigger panel stores the real type on
+        // the node, so whichever source declares a non-manual trigger wins.
+        if (fromSpec is { Type: not WorkflowTriggerType.Manual }) return fromSpec;
+        if (fromNode is { Type: not WorkflowTriggerType.Manual }) return fromNode;
+        return fromSpec ?? fromNode ?? new(WorkflowTriggerType.Manual, null, null);
     }
 
     private static WorkflowTriggerType Parse(string? value) =>

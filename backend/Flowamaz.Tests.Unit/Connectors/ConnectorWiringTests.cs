@@ -478,4 +478,17 @@ public class ConnectorWiringTests
         var cred = new ConnectorCredential(Guid.NewGuid(), "prod-db", "ConnectionString", "Password=hunter2");
         cred.ToString().Should().NotContain("hunter2").And.Contain("***");
     }
+
+    [Theory]
+    [InlineData("1500", "1000", ">", true)]
+    [InlineData("999.5", "1000", ">", false)]
+    [InlineData("1000", "1000", ">=", true)]
+    [InlineData("10", "9", "<", false)]
+    [InlineData("10", "10", "<=", true)]
+    [InlineData("1500.0", "1500", "==", true)]   // numeric equality ignores formatting
+    [InlineData("approved", "approved", "==", true)]
+    [InlineData("approved", "rejected", "!=", true)]
+    [InlineData("abc", "10", ">", false)]       // non-numeric ordering is never true
+    public void ConditionComparison_SupportsNumericOperators(string left, string right, string op, bool expected) =>
+        VariableEvaluationService.Compare(left, right, op).Should().Be(expected);
 }

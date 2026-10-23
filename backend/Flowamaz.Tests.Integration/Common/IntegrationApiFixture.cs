@@ -23,10 +23,16 @@ namespace Flowamaz.Tests.Integration.Common;
 /// </summary>
 public sealed class IntegrationApiFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine").WithDatabase("flowamaz_api_test")
-        .WithUsername("flowamaz").WithPassword("flowamaz_test_pw").Build();
+    // Optional: point the suite at already-running services instead of containers (no Docker needed).
+    // IT_POSTGRES_CONNECTION must be an empty database the suite may migrate; IT_REDIS_CONNECTION is host:port.
+    private static readonly string? ExternalPostgres = Environment.GetEnvironmentVariable("IT_POSTGRES_CONNECTION");
+    private static readonly string? ExternalRedis = Environment.GetEnvironmentVariable("IT_REDIS_CONNECTION");
 
-    private readonly RedisContainer _redis = new RedisBuilder("redis:7-alpine").Build();
+    private PostgreSqlContainer? _postgres;
+    private RedisContainer? _redis;
+
+    private string PostgresConnection => ExternalPostgres ?? _postgres!.GetConnectionString();
+    private string RedisConnection => ExternalRedis ?? _redis!.GetConnectionString();
 
     private WebApplicationFactory<Flowamaz.Api.Program> _factory = null!;
     private ConnectionMultiplexer _redisClient = null!;
@@ -74,9 +80,18 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
         // network call is ever made (CreateCheckoutSession degrades to BillingException.NotConfigured).
         Environment.SetEnvironmentVariable("STRIPE_WEBHOOK_SECRET", StripeWebhookSecret);
 
-        await _postgres.StartAsync();
-        await _redis.StartAsync();
-        _redisClient = await ConnectionMultiplexer.ConnectAsync($"{_redis.GetConnectionString()},allowAdmin=true");
+        if (ExternalPostgres is null)
+        {
+            _postgres = new PostgreSqlBuilder("postgres:16-alpine").WithDatabase("flowamaz_api_test")
+                .WithUsername("flowamaz").WithPassword("flowamaz_test_pw").Build();
+            await _postgres.StartAsync();
+        }
+        if (ExternalRedis is null)
+        {
+            _redis = new RedisBuilder("redis:7-alpine").Build();
+            await _redis.StartAsync();
+        }
+        _redisClient = await ConnectionMultiplexer.ConnectAsync($"{RedisConnection},allowAdmin=true");
 
         _factory = new WebApplicationFactory<Flowamaz.Api.Program>().WithWebHostBuilder(builder =>
         {
@@ -85,10 +100,10 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
             {
                 services.RemoveAll<DbContextOptions<FlowAmazDbContext>>();
                 services.RemoveAll<DbContextOptions>();
-                services.AddDbContext<FlowAmazDbContext>(options => options.UseNpgsql(_postgres.GetConnectionString()));
+                services.AddDbContext<FlowAmazDbContext>(options => options.UseNpgsql(PostgresConnection));
 
                 services.RemoveAll<IConnectionMultiplexer>();
-                services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(_redis.GetConnectionString()));
+                services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(RedisConnection));
 
                 // Stub the OAuth token-exchange HttpClient so callback tests never hit the live
                 // provider endpoints — returns a deterministic provider-shaped token response.
@@ -105,8 +120,8 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
     {
         await _redisClient.DisposeAsync();
         await _factory.DisposeAsync();
-        await _redis.DisposeAsync();
-        await _postgres.DisposeAsync();
+        if (_redis is not null) await _redis.DisposeAsync();
+        if (_postgres is not null) await _postgres.DisposeAsync();
     }
 
     public HttpClient NewClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });

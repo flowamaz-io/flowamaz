@@ -14,13 +14,10 @@ Include any other backend paths the SPA calls relatively (grep web/src for fetch
 not under /api — e.g. websocket/SSE endpoints; add `ws: true` where needed).
 Verify manually: npm run dev, register in the browser, workspace list loads.
 
---- FIX 2: Migrations in the E2E workflow ---
-.github/workflows/e2e.yml — after dependencies are up and before starting the API:
-  dotnet tool install --global dotnet-ef
-  dotnet ef database update --project backend/Flowamaz.Infrastructure --startup-project backend/Flowamaz.Api
-Use the same connection string env the API uses. Do NOT add auto-migrate-on-startup to
-Program.cs for production; if you add it, gate it behind IsDevelopment() AND an explicit
-config flag, default off.
+--- FIX 2: Migrations ---
+Program.cs already applies migrations on boot (StartupMigrationService). Do not add a separate
+step; just make sure readiness (FIX 3) waits long enough for first-boot migrations, and that the
+API's connection string in the E2E job points at the compose Postgres.
 
 --- FIX 3: Readiness instead of sleep ---
 Replace `sleep 20` with:
@@ -36,7 +33,7 @@ npm run e2e uses web/e2e/playwright.config.ts. Delete the stale root one, or mak
 the e2e one. Set reporter to ['list', ['html', { open: 'never' }], ['json', { outputFile: 'e2e-results.json' }]].
 
 --- FIX 5: Local one-command runner ---
-Create scripts/e2e-local.sh that: starts dev deps, migrates a fresh DB, builds+starts the API,
+Create scripts/e2e-local.sh that: starts dev deps on a fresh DB, builds+starts the API (it migrates on boot),
 starts web, waits on health, runs `npm run e2e --prefix web`, and always tears down.
 Document it in docs/DEVELOPMENT.md.
 
@@ -48,6 +45,6 @@ Wait for it and confirm the run reaches the test step with the API healthy.
 
 DELIVERABLE: results.md entry "fix-test-02-02 E2E harness" with: total / passed / failed /
 skipped counts from e2e-results.json, local vs CI, and confirmation that zero failures are
-caused by connection refused / 404 on /api / empty DB. If any are, the harness is not fixed yet.
+caused by connection refused or 404 on /api. If any are, the harness is not fixed yet.
 Update checkpoint.md → test-03-e2e-triage.
-Commit: test(e2e): working harness — proxy, migrations, readiness, local runner [fix-test-02-02]
+Commit: test(e2e): working harness — proxy, readiness, local runner [fix-test-02-02]

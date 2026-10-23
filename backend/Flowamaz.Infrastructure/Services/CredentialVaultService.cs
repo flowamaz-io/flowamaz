@@ -248,7 +248,8 @@ public sealed class CredentialVaultService : ICredentialVaultService
             var aliases = await _db.WorkspaceCredentials
                 .AsNoTracking()
                 .Where(c => c.WorkspaceId == workspaceId && !c.IsDeleted)
-                .Select(c => new CredentialAlias(c.Id, c.Name, c.AuthType, c.ExpiresAt, c.IsActive))
+                .Select(c => new CredentialAlias(c.Id, c.Name, c.AuthType, c.ExpiresAt, c.IsActive,
+                    c.ConnectorDefinition != null ? c.ConnectorDefinition.ConnectorId : null, c.LastUsedAt))
                 .ToListAsync(ct);
 
             _logger.LogInformation(

@@ -68,7 +68,8 @@ public sealed class AiNodeWorker : INodeWorker
             // ── Step 1: Model resolution ──────────────────────────────────────────
             var nodeModelOverride = GetString(config, "model");
             var fallbackModels = GetStringArray(config, "fallback_models");
-            var maxTokens = GetInt(config, "max_tokens") ?? 1024;
+            // Spec keys are snake_case; canvas-authored nodes use camelCase — accept both.
+            var maxTokens = GetInt(config, "max_tokens") ?? GetInt(config, "maxTokens") ?? 1024;
 
             ModelConfig resolvedConfig;
             if (!string.IsNullOrWhiteSpace(nodeModelOverride))
@@ -97,8 +98,8 @@ public sealed class AiNodeWorker : INodeWorker
             }
 
             // ── Step 3: Input construction ────────────────────────────────────────
-            var promptTemplate = GetString(config, "prompt_template") ?? string.Empty;
-            var systemPrompt = GetString(config, "system_prompt") ?? string.Empty;
+            var promptTemplate = GetString(config, "prompt_template") ?? GetString(config, "userPrompt") ?? GetString(config, "prompt") ?? string.Empty;
+            var systemPrompt = GetString(config, "system_prompt") ?? GetString(config, "systemPrompt") ?? string.Empty;
 
             // Interpolate using variable evaluation service for instance-stored variables,
             // then do a second pass substituting redacted in-context variables.

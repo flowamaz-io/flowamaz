@@ -57,19 +57,22 @@ public sealed partial class VariableEvaluationService : IVariableEvaluationServi
 
         try
         {
-            foreach (var op in new[] { "==", "!=" })
-            {
-                var idx = condition.IndexOf(op, StringComparison.Ordinal);
-                if (idx < 0) continue;
+            // The canvas condition builder uses ${name}; conditions are never shell text, so it is safe
+            // to accept it alongside {{ name }} here (unlike connector inputs).
+            var normalized = DollarPlaceholderRegex().Replace(condition, m => "{{ " + m.Groups[1].Value + " }}");
 
-                var left = Unquote((await InterpolateAsync(instanceId, condition[..idx].Trim(), cancellationToken)).Trim());
-                var right = Unquote((await InterpolateAsync(instanceId, condition[(idx + op.Length)..].Trim(), cancellationToken)).Trim());
-                var equal = string.Equals(left, right, StringComparison.Ordinal);
-                return op == "==" ? equal : !equal;
+            // Multi-character operators first so ">=" is not read as ">".
+            foreach (var op in new[] { "==", "!=", ">=", "<=", ">", "<" })
+            {
+                var idx = IndexOfOperator(normalized, op);
+                if (idx < 0) continue;
+                var left = Unquote((await InterpolateAsync(instanceId, normalized[..idx].Trim(), cancellationToken)).Trim());
+                var right = Unquote((await InterpolateAsync(instanceId, normalized[(idx + op.Length)..].Trim(), cancellationToken)).Trim());
+                return Compare(left, right, op);
             }
 
             // No operator → truthiness of the interpolated value.
-            var value = (await InterpolateAsync(instanceId, condition, cancellationToken)).Trim();
+            var value = (await InterpolateAsync(instanceId, normalized, cancellationToken)).Trim();
             return value.Length > 0
                    && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)
                    && value != "0";
@@ -81,6 +84,44 @@ public sealed partial class VariableEvaluationService : IVariableEvaluationServi
                 instanceId, condition);
             throw;
         }
+    }
+
+    internal static bool Compare(string left, string right, string op)
+    {
+        var numeric = decimal.TryParse(left, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var l)
+                      & decimal.TryParse(right, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var r);
+        return op switch
+        {
+            "==" => numeric ? l == r : string.Equals(left, right, StringComparison.Ordinal),
+            "!=" => numeric ? l != r : !string.Equals(left, right, StringComparison.Ordinal),
+            ">" => numeric && l > r,
+            ">=" => numeric && l >= r,
+            "<" => numeric && l < r,
+            "<=" => numeric && l <= r,
+            _ => false,
+        };
+    }
+
+    // Finds an operator outside quotes and outside {{ }} placeholders.
+    private static int IndexOfOperator(string text, string op)
+    {
+        var inQuote = '\0';
+        var depth = 0;
+        for (var i = 0; i <= text.Length - op.Length; i++)
+        {
+            var c = text[i];
+            if (inQuote != '\0') { if (c == inQuote) inQuote = '\0'; continue; }
+            if (c is '"' or '\'') { inQuote = c; continue; }
+            if (c == '{' && i + 1 < text.Length && text[i + 1] == '{') { depth++; i++; continue; }
+            if (c == '}' && i + 1 < text.Length && text[i + 1] == '}') { depth = Math.Max(0, depth - 1); i++; continue; }
+            if (depth > 0) continue;
+            if (string.CompareOrdinal(text, i, op, 0, op.Length) != 0) continue;
+            // A single ">"/"<" must not be the first char of ">="/"<=" (handled by the longer op).
+            if (op.Length == 1 && i + 1 < text.Length && text[i + 1] == '=') continue;
+            // "=" inside "!=" / "==" is handled by those ops.
+            return i;
+        }
+        return -1;
     }
 
     private async Task<Dictionary<string, JsonElement>> LoadVariablesAsync(Guid instanceId, CancellationToken ct)
@@ -156,4 +197,7 @@ public sealed partial class VariableEvaluationService : IVariableEvaluationServi
 
     [GeneratedRegex(@"\{\{\s*([\w.\-]+)\s*\}\}")]
     private static partial Regex PlaceholderRegex();
+
+    [GeneratedRegex(@"\$\{\s*([\w.\-]+)\s*\}")]
+    private static partial Regex DollarPlaceholderRegex();
 }

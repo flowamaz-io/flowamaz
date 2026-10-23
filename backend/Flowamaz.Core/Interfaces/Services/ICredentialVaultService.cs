@@ -9,7 +9,9 @@ public record CredentialAlias(
     string Name,
     string AuthType,
     DateTime? ExpiresAt,
-    bool IsActive);
+    bool IsActive,
+    string? ConnectorId = null,
+    DateTime? LastUsedAt = null);
 
 /// <summary>
 /// Secure credential vault: store/retrieve/revoke AES-256-GCM encrypted credentials.

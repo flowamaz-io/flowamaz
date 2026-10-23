@@ -32,6 +32,8 @@ public class UnifiedCreateEndpointTests : ApiTestBase
                 purpose = "Approve purchase requests",
                 triggerDescription = "Employee submits a request",
                 stepsDescription = "Manager approves, finance pays",
+                rulesAndConstraints = "Requests over $1000 need approval",
+                systemsAndAi = "Email",
             },
         });
 

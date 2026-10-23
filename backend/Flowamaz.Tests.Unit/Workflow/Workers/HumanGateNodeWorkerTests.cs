@@ -300,4 +300,37 @@ public class HumanGateNodeWorkerTests
     {
         GateHmacHelper.ValidateHmac("message", "wrongsig", "key").Should().BeFalse();
     }
+
+    [Fact]
+    public async Task ExecuteAsync_CanvasKeys_AreHonoured_UserAssignee_SlackChannel_DayTimeout()
+    {
+        // Regression: the canvas panel writes assignee/assigneeType/channels/timeoutValue/timeoutUnit,
+        // which the engine ignored (every canvas gate ran portal-only with no assignee and a 48h timeout).
+        GateDecision? created = null;
+        _gateRepo.Setup(r => r.AddAsync(It.IsAny<GateDecision>(), It.IsAny<CancellationToken>()))
+            .Callback<GateDecision, CancellationToken>((g, _) => created = g).Returns(Task.CompletedTask);
+        var config = JsonDocument.Parse("""
+            {"assigneeType":"user","assignee":"cfo@example.com","channels":{"email":true,"slack":true},
+             "timeoutValue":2,"timeoutUnit":"days"}
+            """);
+        var ctx = new NodeExecutionContext(Guid.NewGuid(), Guid.NewGuid(),
+            new SfgNode("approval", NodeType.HumanGate, "CFO approval", config, null, null, null),
+            new WorkflowGraph("w", "v", [], [], new WorkflowMetadata("w", null)), new Dictionary<string, JsonElement>(), "lease");
+
+        var before = DateTime.UtcNow;
+        var result = await BuildWorker().ExecuteAsync(ctx, CancellationToken.None);
+
+        result.IsGateWaiting.Should().BeTrue();
+        created!.AssignedToEmail.Should().Be("cfo@example.com");
+        created.DeliveryChannel.Should().Be(GateDeliveryChannel.Slack);
+        created.ExpiresAt.Should().BeCloseTo(before.AddHours(48), TimeSpan.FromMinutes(1));
+    }
+
+    [Theory]
+    [InlineData("${approver_email}", "approver_email")]
+    [InlineData("{{ variables.approver_email }}", "approver_email")]
+    [InlineData("approver_email", "approver_email")]
+    [InlineData("  ", null)]
+    public void StripPlaceholder_AcceptsEverySyntax(string input, string? expected) =>
+        HumanGateNodeWorker.StripPlaceholder(input).Should().Be(expected);
 }
