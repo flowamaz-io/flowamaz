@@ -9,6 +9,68 @@ export interface NlWorkflowRequest {
   rulesAndConstraints: string;
   systemsAndAi: string;
   existingContext?: string;
+  /** Answers to clarifying questions from POST /workflows/clarify. Skipped questions are omitted. */
+  clarifications?: ClarificationAnswer[];
+}
+
+export type ClarificationTopic = 'trigger' | 'approver' | 'rejection' | 'systems' | 'other';
+
+export interface ClarifyingQuestion {
+  id: string;
+  topic: ClarificationTopic;
+  question: string;
+  hint?: string | null;
+}
+
+export interface ClarificationAnswer {
+  topic: ClarificationTopic;
+  question: string;
+  answer: string;
+}
+
+export interface ClarificationResult {
+  questions: ClarifyingQuestion[];
+  usedAi: boolean;
+  tokensUsed: number;
+}
+
+export interface DetectedNode {
+  id: string;
+  label: string;
+  type: string;
+  confidence: number;
+  reviewNeeded: boolean;
+  reason: string | null;
+  annotations: string[];
+  suggestedConnectors: string[];
+  x?: number | null;
+  y?: number | null;
+}
+
+export interface DetectedEdge {
+  from: string;
+  to: string;
+  label?: string | null;
+}
+
+export interface VisualPreviewResult {
+  nodes: DetectedNode[];
+  edges: DetectedEdge[];
+  confidenceThreshold: number;
+  costUsd: number;
+  tokensUsed: number;
+}
+
+export interface ConfirmedVisualNode {
+  id: string;
+  label: string;
+  type: string;
+  suggestedConnectors?: string[];
+}
+
+export interface ConfirmedVisualGraph {
+  nodes: ConfirmedVisualNode[];
+  edges: DetectedEdge[];
 }
 
 export interface ValidationIssue {
@@ -37,6 +99,8 @@ export interface UnifiedWorkflowCreateRequest {
   sourceType?: string;
   documentBase64?: string;
   documentMimeType?: string;
+  /** Visual review path: the graph confirmed by the user (replaces imageBase64). */
+  visualGraph?: ConfirmedVisualGraph;
 }
 
 export interface WorkflowCreationResult {
@@ -76,6 +140,31 @@ export async function createWorkflow(
 ): Promise<WorkflowCreationResult> {
   const response = await http.post<ApiEnvelope<WorkflowCreationResult>>(
     `/api/v1/workspaces/${workspaceId}/workflows/create`,
+    request,
+  );
+  return unwrap(response);
+}
+
+/** Visual creation step 1 — detect the graph for review. Nothing is saved. */
+export async function previewVisual(
+  workspaceId: string,
+  imageBase64: string,
+  imageMimeType: string,
+): Promise<VisualPreviewResult> {
+  const response = await http.post<ApiEnvelope<VisualPreviewResult>>(
+    `/api/v1/workspaces/${workspaceId}/workflows/visual/preview`,
+    { imageBase64, imageMimeType },
+  );
+  return unwrap(response);
+}
+
+/** NL creation step 1 — up to 3 questions about missing essentials (empty = generate now). */
+export async function clarifyNl(
+  workspaceId: string,
+  request: NlWorkflowRequest,
+): Promise<ClarificationResult> {
+  const response = await http.post<ApiEnvelope<ClarificationResult>>(
+    `/api/v1/workspaces/${workspaceId}/workflows/clarify`,
     request,
   );
   return unwrap(response);

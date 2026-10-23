@@ -253,6 +253,54 @@ public sealed class NlYamlGenerationServiceTests
         capturedConfig!.ModelId.Should().Be("claude-sonnet-4-6"); // TestModel is Sonnet; complex → keep Sonnet
     }
 
+    [Fact]
+    public async Task GenerateAsync_WithClarificationAnswers_AppendsAnsweredOnesToPromptAndCacheKey()
+    {
+        var (sut, aiMock, cacheMock, _, validatorMock, _) = BuildSut();
+        string? capturedPrompt = null;
+        string? capturedCacheInput = null;
+        cacheMock.Setup(x => x.ComputeKey(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()))
+            .Callback<string, Guid, string>((_, _, input) => capturedCacheInput = input)
+            .Returns("k");
+        aiMock.Setup(x => x.CompleteAsync(It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<int>()))
+            .Callback<ModelConfig, string, string, CancellationToken, int>((_, _, p, _, _) => capturedPrompt = p)
+            .ReturnsAsync(new AiCompletionResult(ValidYaml, 100, 200));
+        validatorMock.Setup(x => x.ValidateAsync(It.IsAny<string>(), WorkspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ValidationResult(true, [], [], []));
+
+        var request = TestRequest with
+        {
+            Clarifications =
+            [
+                new ClarificationAnswer("approver", "Who approves this request?", "The finance controller"),
+                new ClarificationAnswer("rejection", "What should happen if rejected?", "   "),
+            ],
+        };
+
+        await sut.GenerateAsync(request, WorkspaceId);
+
+        capturedPrompt.Should().Contain("Clarifications");
+        capturedPrompt.Should().Contain("Who approves this request?").And.Contain("The finance controller");
+        capturedPrompt.Should().NotContain("What should happen if rejected?"); // skipped answer is ignored
+        capturedCacheInput.Should().Contain("approver=the finance controller");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_NoClarifications_PromptUnchanged()
+    {
+        var (sut, aiMock, _, _, validatorMock, _) = BuildSut();
+        string? capturedPrompt = null;
+        aiMock.Setup(x => x.CompleteAsync(It.IsAny<ModelConfig>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<int>()))
+            .Callback<ModelConfig, string, string, CancellationToken, int>((_, _, p, _, _) => capturedPrompt = p)
+            .ReturnsAsync(new AiCompletionResult(ValidYaml, 100, 200));
+        validatorMock.Setup(x => x.ValidateAsync(It.IsAny<string>(), WorkspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ValidationResult(true, [], [], []));
+
+        await sut.GenerateAsync(TestRequest, WorkspaceId);
+
+        capturedPrompt.Should().NotContain("Clarifications");
+    }
+
     private static (NlYamlGenerationService sut,
         Mock<IAiCompletionService> ai,
         Mock<ISemanticCacheService> cache,
