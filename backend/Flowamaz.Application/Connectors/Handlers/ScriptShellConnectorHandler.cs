@@ -65,8 +65,24 @@ public sealed class ScriptShellRunHandler : IConnectorOperationHandler
             ? a.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() ?? string.Empty : e.GetRawText()).ToArray()
             : [];
 
-        var workDir = Path.Combine(Path.GetTempPath(), "flowamaz-scripts", _context.RequireWorkspace(op).ToString("N"));
+        // Fresh private directory per run, removed afterwards — nothing persists between runs.
+        var workDir = Path.Combine(Path.GetTempPath(), "flowamaz-scripts", _context.RequireWorkspace(op).ToString("N"), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDir);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(workDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        try
+        {
+            return await RunAsync(op, interpreter, script, args, timeout, workDir, ct);
+        }
+        finally
+        {
+            try { Directory.Delete(workDir, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private async Task<JsonDocument> RunAsync(
+        string op, (string File, string[] StdinArgs) interpreter, string script, string[] args, TimeSpan timeout, string workDir, CancellationToken ct)
+    {
 
         var psi = new ProcessStartInfo(interpreter.File)
         {
@@ -82,6 +98,13 @@ public sealed class ScriptShellRunHandler : IConnectorOperationHandler
         psi.Environment["PATH"] = "/usr/local/bin:/usr/bin:/bin";
         psi.Environment["LANG"] = "C.UTF-8";
         psi.Environment["HOME"] = workDir;
+        // In the sandbox container the only route out is the egress proxy; pass it through so
+        // scripts can reach public APIs (private networks stay blocked by the proxy).
+        foreach (var name in new[] { "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy" })
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (!string.IsNullOrEmpty(value)) psi.Environment[name] = value;
+        }
 
         using var process = new Process { StartInfo = psi };
         var stdout = new StringBuilder();

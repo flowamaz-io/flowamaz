@@ -379,6 +379,17 @@ if (!app.Environment.IsDevelopment())
             missing.Add($"  - {envVar}: {how}");
     }
 
+    // Connector sandbox (FUNCTIONAL.md §9.5): if a runner URL is configured the shared secret must be
+    // too (32+ chars, identical on the runner) — otherwise every sandboxed step would fail at run time.
+    if (!string.IsNullOrWhiteSpace(app.Configuration[Flowamaz.Application.Connectors.Services.ConnectorDispatcher.UrlKey]))
+    {
+        var runnerSecret = app.Configuration[Flowamaz.Application.Connectors.Services.ConnectorDispatcher.SecretKey]
+            ?? app.Configuration["CONNECTOR_RUNNER_SECRET"];
+        if (string.IsNullOrWhiteSpace(runnerSecret) || runnerSecret.Length < 32)
+            missing.Add("  - CONNECTOR_RUNNER_SECRET: Connectors__Sandbox__Url is set, so the API needs the runner's shared secret " +
+                "(32+ characters, same value on the connector-runner). Generate with: openssl rand -hex 32");
+    }
+
     if (missing.Count > 0)
         throw new InvalidOperationException(
             "The following required environment variables are not set in a non-Development environment. " +

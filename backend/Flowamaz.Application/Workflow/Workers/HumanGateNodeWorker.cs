@@ -27,6 +27,7 @@ public sealed class HumanGateNodeWorker : INodeWorker
     private readonly IEmailService _email;
     private readonly IConnectorOperationHandlerRegistry _connectorRegistry;
     private readonly IConnectorCredentialResolver? _credentials;
+    private readonly Connectors.Services.ConnectorDispatcher? _dispatcher;
     private readonly IConfiguration _config;
     private readonly ILogger<HumanGateNodeWorker> _logger;
 
@@ -37,9 +38,11 @@ public sealed class HumanGateNodeWorker : INodeWorker
         IConnectorOperationHandlerRegistry connectorRegistry,
         IConfiguration config,
         ILogger<HumanGateNodeWorker> logger,
-        IConnectorCredentialResolver? credentials = null)
+        IConnectorCredentialResolver? credentials = null,
+        Connectors.Services.ConnectorDispatcher? dispatcher = null)
     {
         _credentials = credentials;
+        _dispatcher = dispatcher;
         _gateRepo = gateRepo;
         _unitOfWork = unitOfWork;
         _email = email;
@@ -221,7 +224,7 @@ public sealed class HumanGateNodeWorker : INodeWorker
                 return;
             }
 
-            await handler.ExecuteAsync(inputPayload, credential, ct);
+            await RunAsync(handler, "slack", "post-approval-message", inputPayload, credential, gate, ct);
             _logger.LogInformation(
                 "HumanGateNodeWorker: Slack approval message posted gate={GateId} channel={Channel}", gate.Id, channel);
         }
@@ -267,7 +270,7 @@ public sealed class HumanGateNodeWorker : INodeWorker
 
         try
         {
-            await handler.ExecuteAsync(inputPayload, null, ct);
+            await RunAsync(handler, "microsoft-teams", "post-adaptive-card", inputPayload, null, gate, ct);
             _logger.LogInformation(
                 "HumanGateNodeWorker: Teams adaptive card posted gate={GateId}", gate.Id);
         }
@@ -323,6 +326,19 @@ public sealed class HumanGateNodeWorker : INodeWorker
                 "HumanGateNodeWorker: approval email failed to={Email} gate={GateId} — gate is still pending in portal",
                 gate.AssignedToEmail, gate.Id);
         }
+    }
+
+    /// <summary>Approval delivery goes through the sandbox runner when one is configured.</summary>
+    private async Task RunAsync(IConnectorOperationHandler handler, string connectorId, string operationId,
+        JsonDocument input, Core.Models.ConnectorCredential? credential, GateDecision gate, CancellationToken ct)
+    {
+        if (_dispatcher is not null && _dispatcher.IsSandboxed(connectorId))
+        {
+            using var _ = await _dispatcher.ExecuteAsync(connectorId, operationId, input, credential,
+                gate.WorkspaceId, gate.InstanceId, gate.NodeId, TimeSpan.FromSeconds(30), ct);
+            return;
+        }
+        using var __ = await handler.ExecuteAsync(input, credential, ct);
     }
 
     /// <summary>"${approver}" / "{{ variables.approver }}" / "approver" → "approver".</summary>

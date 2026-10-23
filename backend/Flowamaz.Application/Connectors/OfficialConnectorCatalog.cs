@@ -13,12 +13,16 @@ public sealed record ConnectorOperationSpec(
     IReadOnlyDictionary<string, (string Type, string Description)> Properties,
     bool Internal = false);
 
+/// <param name="AllowedDomains">Hosts the connector may call (subdomains included); null = any public host.</param>
+/// <param name="Sandboxed">Runs in the isolated connector-runner container when one is configured (§9.5).</param>
 public sealed record ConnectorSpec(
     string ConnectorId,
     string AuthType,
     IReadOnlyList<string> CredentialTypes,
     IReadOnlyList<ConnectorOperationSpec> Operations,
-    IReadOnlyList<string>? Triggers = null);
+    IReadOnlyList<string>? Triggers = null,
+    IReadOnlyList<string>? AllowedDomains = null,
+    bool Sandboxed = false);
 
 /// <summary>
 /// Single source of truth for the official connectors' operations. Drives the seeded manifests
@@ -54,7 +58,7 @@ public static class OfficialConnectorCatalog
     public static IReadOnlyList<ConnectorSpec> Connectors { get; } =
     [
         new("http-rest", "optional", ["BearerToken", "ApiKey", "BasicAuth"],
-            [Http("GET"), Http("POST"), Http("PUT"), Http("PATCH"), Http("DELETE"), Http("HEAD")]),
+            [Http("GET"), Http("POST"), Http("PUT"), Http("PATCH"), Http("DELETE"), Http("HEAD")], Sandboxed: true),
 
         new("postgresql", "connection-string", ["ConnectionString"],
         [
@@ -78,7 +82,7 @@ public static class OfficialConnectorCatalog
                 ["channel", "gate_decision_id"],
                 P(("channel", S("Channel")), ("gate_decision_id", S("Gate id")), ("workflow_name", S("Workflow")), ("gate_summary", S("Summary"))),
                 Internal: true),
-        ]),
+        ], AllowedDomains: ["slack.com"], Sandboxed: true),
 
         new("microsoft-teams", "oauth2-auth-code", ["OAuth2AuthCode"],
         [
@@ -92,7 +96,7 @@ public static class OfficialConnectorCatalog
                 ["webhook_url", "gate_id"],
                 P(("webhook_url", S("Webhook")), ("gate_id", S("Gate id")), ("gate_summary", S("Summary")), ("platform_url", S("Platform URL"))),
                 Internal: true),
-        ]),
+        ], AllowedDomains: ["graph.microsoft.com", "webhook.office.com", "logic.azure.com", "powerplatform.com"], Sandboxed: true),
 
         new("email-smtp", "platform", [],
         [
@@ -104,7 +108,7 @@ public static class OfficialConnectorCatalog
         [
             new("send-webhook", "Send webhook", "POST a JSON payload, HMAC-signed when a credential is set", false, ["url", "payload"],
                 P(("url", S("Destination https URL")), ("payload", O("JSON payload")))),
-        ]),
+        ], Sandboxed: true),
 
         new("webhook-receive", "hmac", ["HmacSecret"], [], Triggers: ["webhook"]),
 
@@ -129,7 +133,7 @@ public static class OfficialConnectorCatalog
             new("run-script", "Run script", "Run a bash or python script (self-hosted only; disabled on Cloud)", false, ["interpreter", "script"],
                 P(("interpreter", S("bash or python3")), ("script", S("Script text (passed on stdin, never through a shell string)")),
                   ("args", A("Arguments")), ("timeout_seconds", N("Timeout (default 30, max 300)")))),
-        ]),
+        ], Sandboxed: true),
 
         new("github", "oauth2-auth-code", ["OAuth2AuthCode", "BearerToken"],
         [
@@ -141,7 +145,7 @@ public static class OfficialConnectorCatalog
                 P(("owner", S("Owner")), ("repo", S("Repository")), ("title", S("Title")), ("head", S("Source branch")), ("base", S("Target branch")), ("body", S("Description")))),
             new("add-comment", "Add comment", "Comment on an issue or pull request", true, ["owner", "repo", "issue_number", "body"],
                 P(("owner", S("Owner")), ("repo", S("Repository")), ("issue_number", N("Issue or PR number")), ("body", S("Comment")))),
-        ]),
+        ], AllowedDomains: ["api.github.com"], Sandboxed: true),
 
         new("microsoft-365", "oauth2-auth-code", ["OAuth2AuthCode"],
         [
@@ -152,7 +156,7 @@ public static class OfficialConnectorCatalog
                   ("attendees", S("Attendee emails, comma-separated")), ("body", S("Description")))),
             new("upload-file", "Upload file to OneDrive", "Create or replace a text file in the connected OneDrive", true, ["path", "content"],
                 P(("path", S("OneDrive path, e.g. Reports/summary.txt")), ("content", S("Text content")))),
-        ]),
+        ], AllowedDomains: ["graph.microsoft.com"], Sandboxed: true),
     ];
 
     private static readonly Dictionary<(string, string), ConnectorOperationSpec> ByKey =
@@ -175,6 +179,8 @@ public static class OfficialConnectorCatalog
             ["version"] = "1.1.0",
             ["auth"] = new { type = spec?.AuthType ?? "none", credential_types = spec?.CredentialTypes ?? [] },
             ["triggers"] = spec?.Triggers ?? [],
+            // §9.3: hosts the connector may call (null = any public host; private networks always denied).
+            ["network"] = new { allowed_domains = spec?.AllowedDomains, sandboxed = spec?.Sandboxed ?? false },
             ["operations"] = (spec?.Operations ?? []).Select(o => new Dictionary<string, object?>
             {
                 ["id"] = o.Id,

@@ -125,6 +125,9 @@ public static class DependencyInjection
 
         services.AddScoped<ConnectorCallContext>();
         services.AddScoped<ConnectorActionExecutor>();
+        // Internal call to the connector-runner container (private network) — deliberately not egress-guarded.
+        services.AddHttpClient(ConnectorDispatcher.HttpClientName);
+        services.AddScoped<ConnectorDispatcher>();
 
         services.AddScoped<IConnectorOperationHandler, HttpGetHandler>();
         services.AddScoped<IConnectorOperationHandler, HttpPostHandler>();

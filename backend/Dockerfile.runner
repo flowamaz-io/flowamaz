@@ -1,0 +1,29 @@
+# Connector runner (FUNCTIONAL.md §9.5): runs third-party connector calls and Script/Shell steps
+# in isolation. Build context is ./backend.
+#   docker build -f Dockerfile.runner -t flowamaz-connector-runner .
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY Flowamaz.Core/*.csproj Flowamaz.Core/
+COPY Flowamaz.Application/*.csproj Flowamaz.Application/
+COPY Flowamaz.ConnectorRunner/*.csproj Flowamaz.ConnectorRunner/
+RUN dotnet restore Flowamaz.ConnectorRunner/Flowamaz.ConnectorRunner.csproj
+COPY Flowamaz.Core/ Flowamaz.Core/
+COPY Flowamaz.Application/ Flowamaz.Application/
+COPY Flowamaz.ConnectorRunner/ Flowamaz.ConnectorRunner/
+RUN dotnet publish Flowamaz.ConnectorRunner/Flowamaz.ConnectorRunner.csproj -c Release -o /app/publish --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+# python3 + bash for Script/Shell steps; curl for the HEALTHCHECK. Nothing else.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /app/publish .
+ENV ASPNETCORE_URLS=http://+:8080 \
+    DOTNET_EnableDiagnostics=0 \
+    TMPDIR=/tmp
+EXPOSE 8080
+USER $APP_UID
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+    CMD curl -f http://localhost:8080/health || exit 1
+ENTRYPOINT ["dotnet", "Flowamaz.ConnectorRunner.dll"]

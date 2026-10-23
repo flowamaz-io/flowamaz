@@ -47,6 +47,7 @@ public sealed class ConnectorActionExecutor
     private readonly IVariableEvaluationService _variables;
     private readonly ConnectorCallContext _callContext;
     private readonly IConnectorSandbox? _sandbox;
+    private readonly ConnectorDispatcher? _dispatcher;
     private readonly ILogger<ConnectorActionExecutor> _logger;
 
     public ConnectorActionExecutor(
@@ -55,8 +56,10 @@ public sealed class ConnectorActionExecutor
         IVariableEvaluationService variables,
         ConnectorCallContext callContext,
         ILogger<ConnectorActionExecutor> logger,
-        IConnectorSandbox? sandbox = null)
+        IConnectorSandbox? sandbox = null,
+        ConnectorDispatcher? dispatcher = null)
     {
+        _dispatcher = dispatcher;
         _registry = registry;
         _credentials = credentials;
         _variables = variables;
@@ -78,11 +81,13 @@ public sealed class ConnectorActionExecutor
                 return NodeExecutionResult.Fatal(
                     $"Action node '{context.Node.Id}' uses the {node.ConnectorId} connector but no operation is selected. Open the node config and choose an action.");
 
+            // In-process handler, or (when the sandbox runner is configured) the runner executes it.
             var handler = _registry.Get(node.ConnectorId, node.OperationId);
+            var executable = handler is not null || _dispatcher?.CanExecute(node.ConnectorId, node.OperationId) == true;
             var spec = OfficialConnectorCatalog.Find(node.ConnectorId, node.OperationId);
             var connectorSpec = OfficialConnectorCatalog.FindConnector(node.ConnectorId);
 
-            if (handler is null && connectorSpec is not null)
+            if (!executable && connectorSpec is not null)
             {
                 var available = string.Join(", ", connectorSpec.Operations.Where(o => !o.Internal).Select(o => o.Id));
                 return NodeExecutionResult.Fatal(
@@ -117,7 +122,12 @@ public sealed class ConnectorActionExecutor
             JsonDocument output;
             try
             {
-                if (handler is not null)
+                if (executable && _dispatcher is not null)
+                {
+                    output = await _dispatcher.ExecuteAsync(node.ConnectorId, node.OperationId, input, credential,
+                        context.WorkspaceId, context.InstanceId, context.Node.Id, timeout, timeoutCts.Token);
+                }
+                else if (handler is not null)
                 {
                     output = await handler.ExecuteAsync(input, credential, timeoutCts.Token);
                 }
