@@ -1,6 +1,26 @@
 # Flowamaz — Claude Code Execution Prompts
 
-## ► CONTINUOUS RUN — Prompts 03 to 09 (use this now)
+## ► TESTING SESSION fix-test-02 (use this now — 2026-10-23)
+
+```
+Read CLAUDE.md and FUNCTIONAL.md completely.
+Read checkpoint.md and prompts/fix-test-02/README.md.
+
+Ensure dependencies are running:
+  docker compose -f infrastructure/docker-compose.dev.yml up -d
+
+Execute prompts/fix-test-02/ in order starting from the checkpoint's Current Prompt.
+After each prompt: verify, commit, push origin develop, append results.md,
+advance checkpoint.md, /clear, re-read CLAUDE.md + checkpoint.md, continue.
+
+STOP after test-03-e2e-triage — human reviews e2e-triage-report.md and marks
+NOT-BUILT items in/out of scope before test-04 runs.
+test-04 is repeatable: rerun in fresh sessions until checkpoint Notes say E2E_GREEN.
+```
+
+---
+
+## ► (historical) CONTINUOUS RUN — Prompts 03 to 09
 
 ```
 Read CLAUDE.md and FUNCTIONAL.md completely.

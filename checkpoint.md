@@ -1,22 +1,17 @@
 ## Checkpoint
-Phase: 08
-Phase Title: Deferred Fixes + Marketing Site + Documentation + Multi-Workspace + Launch Readiness + UI Polish + Final Integration
-Total Prompts This Phase: 7
-Completed: 7
-Current Prompt: PHASE_COMPLETE
-Next Prompt: PHASE_COMPLETE
-Phase End Status: PHASE_COMPLETE
-Session Tokens: Low
-Last Updated: 2026-05-30
+Phase: fix-test-02
+Phase Title: Comprehensive Testing Session (baseline → E2E harness → triage → fix → hardening)
+Total Prompts This Phase: 5
+Completed: 0
+Current Prompt: test-01-backend-verify
+Next Prompt: test-02-e2e-harness
+Phase End Status: IN_PROGRESS
+Session Tokens: Fresh
+Last Updated: 2026-10-23
 Notes: |
-  Phases 01-07 + all fix phases complete. Starting Phase 08 — FINAL phase.
-  Phase 08 delivers: deferred fix-07 items, marketing site, documentation,
-  multi-workspace UX, launch readiness (k6, staging, security headers),
-  final UI polish, and integration to S80.
-  After Phase 08 PHASE_COMPLETE: comprehensive testing session begins.
-  Phase report: phase-08-report.md
-  08-01 DONE: 6 DTO validators + Stripe redirect allowlist, TemplateException (404/422/400),
-  breakpoint auto-pause wired into orchestrator StepAsync (InstanceStatus.BreakpointHit +
-  per-instance resume set), dev-endpoint workspace membership check, FmTooltip/Gates/ProductTour
-  UX polish. Also fixed pre-existing SsoSettingsView FmBadge 'green'→'primary' web-build break.
-  unit 535/535, integration 110/110(+1 skip), web build + vitest 58/58.
+  Resumed after a ~5-month pause (last commit 2026-05-31). Phases 01–08 + fix phases complete.
+  CI green on develop. Nightly E2E ran 62x (2026-05-30 → 2026-07-30), never passed, schedule
+  auto-disabled by GitHub. Root causes are harness defects (no migrations, sleep 20, no Vite
+  /api proxy) — see prompts/fix-test-02/README.md.
+  test-03 is a planned STOP for human review of the triage report.
+  Phase 08 checkpoint (for history): 08-01..08-07 complete, report phase-08-report.md.
