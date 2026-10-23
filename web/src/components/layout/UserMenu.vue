@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { onClickOutside } from '@vueuse/core';
-import { ChevronUp, CreditCard, LayoutGrid, LogOut, User } from 'lucide-vue-next';
+import { ChevronUp, CreditCard, LayoutGrid, LogOut, Store, User } from 'lucide-vue-next';
 import { useAuth } from '@/composables/useAuth';
 import { useWorkspaceStore } from '@/stores/workspace.store';
 import { initial } from '@/utils/string.util';
@@ -26,6 +26,12 @@ const planLabel = computed(
   () => PLAN_LABELS[workspaceStore.currentWorkspace?.edition ?? 'community'] ?? 'Community',
 );
 
+// Publisher settings are org-owner only; workspace Admin is the closest client-side signal.
+const showPublisher = computed(() => {
+  const role = workspaceStore.current?.role;
+  return !role || role === 'Admin';
+});
+
 const open = ref(false);
 const root = ref<HTMLElement | null>(null);
 
@@ -46,7 +52,12 @@ function goProfile(): void {
 
 function goBilling(): void {
   open.value = false;
-  router.push('/settings');
+  router.push('/settings/billing');
+}
+
+function goPublisher(): void {
+  open.value = false;
+  router.push('/settings/publisher');
 }
 
 function goWorkspaces(): void {
@@ -133,6 +144,15 @@ async function logout(): Promise<void> {
       >
         <CreditCard class="h-4 w-4" />
         Billing
+      </button>
+      <button
+        v-if="showPublisher"
+        type="button"
+        class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-sidebar-text-secondary transition-colors hover:bg-sidebar-hover hover:text-sidebar-text-primary"
+        @click="goPublisher"
+      >
+        <Store class="h-4 w-4" />
+        Publisher
       </button>
       <button
         type="button"

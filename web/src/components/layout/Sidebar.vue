@@ -5,7 +5,8 @@ import {
   Activity, BarChart2, BookOpen, ChevronLeft, ChevronRight, CircleCheck, CloudSun,
   HelpCircle, HeartPulse, LayoutDashboard, Microscope, Plug, Settings, Sparkles,
   Terminal, Workflow, X, Upload, KeyRound,
-  LockKeyhole, Users, Webhook, ShieldCheck, ScrollText,
+  LockKeyhole, Users, Webhook, ShieldCheck, ScrollText, CreditCard,
+  ShoppingBag, Store,
 } from 'lucide-vue-next';
 import { useUiStore } from '@/stores/ui.store';
 import { useWorkspace } from '@/composables/useWorkspace';
@@ -30,6 +31,8 @@ interface NavItem {
   href?: string;
   icon: typeof LayoutDashboard;
   badgeKey?: 'gates';
+  // Workspace Admin only (org-owner endpoints still enforce 403 server-side).
+  adminOnly?: boolean;
 }
 
 interface NavSection {
@@ -69,6 +72,9 @@ const sections: NavSection[] = [
       { label: 'API Keys', to: '/settings/api-keys', icon: KeyRound },
       { label: 'Webhooks', to: '/settings/webhooks', icon: Webhook },
       { label: 'SSO', to: '/settings/sso', icon: ShieldCheck },
+      { label: 'Billing', to: '/settings/billing', icon: CreditCard },
+      { label: 'Publisher', to: '/settings/publisher', icon: Store, adminOnly: true },
+      { label: 'Purchases', to: '/settings/purchases', icon: ShoppingBag },
       { label: 'Audit Log', to: '/settings/audit', icon: ScrollText },
     ],
   },
@@ -95,8 +101,16 @@ const isDesigner = computed(() => {
   return !role || role === 'Designer' || role === 'Admin';
 });
 
+const isAdmin = computed(() => {
+  const role = current.value?.role;
+  // When role is unknown, show the item — the page itself handles a 403.
+  return !role || role === 'Admin';
+});
+
 const visibleSections = computed(() =>
-  sections.filter((s) => !s.designerOnly || isDesigner.value),
+  sections
+    .filter((s) => !s.designerOnly || isDesigner.value)
+    .map((s) => ({ ...s, items: s.items.filter((i) => !i.adminOnly || isAdmin.value) })),
 );
 
 // ── Gates pending badge ──────────────────────────────────────────────────────

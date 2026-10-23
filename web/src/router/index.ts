@@ -72,6 +72,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'settings/webhooks', name: 'webhooks', component: () => import('@/views/settings/WebhookSettingsView.vue') },
       { path: 'settings/sso', name: 'sso', component: () => import('@/views/settings/SsoSettingsView.vue') },
       { path: 'settings/billing', name: 'billing', component: () => import('@/views/settings/BillingSettingsView.vue') },
+      { path: 'settings/publisher', name: 'publisher', component: () => import('@/views/settings/PublisherSettingsView.vue') },
+      { path: 'settings/purchases', name: 'purchases', component: () => import('@/views/settings/PurchasesView.vue') },
       { path: 'settings/audit', name: 'audit', component: () => import('@/views/settings/AuditLogView.vue') },
     ],
   },
