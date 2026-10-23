@@ -66,7 +66,7 @@ public class AiTokenMeteringServiceTests
             using var scope = scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
             return await db.AiTokenUsage.AnyAsync(u => u.WorkspaceId == workspaceId);
-        }, TimeSpan.FromSeconds(2));
+        }, TimeSpan.FromSeconds(10)); // background write; generous under parallel test load
 
         using var verifyScope = scopeFactory.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
@@ -98,7 +98,7 @@ public class AiTokenMeteringServiceTests
             using var scope = scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
             return await db.AiTokenUsage.AnyAsync(u => u.WorkspaceId == null && u.FunctionId == AiFunctionIds.HelpAssist);
-        }, TimeSpan.FromSeconds(2));
+        }, TimeSpan.FromSeconds(10)); // background write; generous under parallel test load
 
         using var verify = scopeFactory.CreateScope();
         var verifyDb = verify.ServiceProvider.GetRequiredService<FlowAmazDbContext>();

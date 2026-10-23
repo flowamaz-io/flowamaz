@@ -216,6 +216,66 @@ public sealed class WorkflowValidatorTests
         result.Warnings.Should().Contain(w => w.Code == "BPR-001" && w.NodeId == "gate");
     }
 
+    [Theory]
+    [InlineData("timeout_hours: 24")]
+    [InlineData("timeoutValue: 2")]
+    public async Task HumanGate_WithConfiguredTimeout_HasNoTimeoutWarning(string timeoutLine)
+    {
+        var yaml = $$"""
+            apiVersion: flowamaz/v1
+            kind: Workflow
+            metadata:
+              id: gate-timeout
+              name: "Gate timeout"
+            spec:
+              trigger:
+                type: manual
+              nodes:
+                - id: start
+                  type: trigger
+                  label: Start
+                - id: gate
+                  type: human-gate
+                  label: Approval
+                  config:
+                    {{timeoutLine}}
+                - id: done
+                  type: end
+                  label: Done
+              edges:
+                - { id: e1, from: start, to: gate }
+                - { id: e2, from: gate, to: done }
+            """;
+        var result = await Create().ValidateAsync(yaml);
+        result.Warnings.Should().NotContain(w => w.Code == "BPR-001");
+    }
+
+    [Fact]
+    public async Task EdgeCondition_IsAcceptedBySchema()
+    {
+        var yaml = """
+            apiVersion: flowamaz/v1
+            kind: Workflow
+            metadata:
+              id: edge-condition
+              name: "Edge condition"
+            spec:
+              trigger:
+                type: manual
+              nodes:
+                - { id: start, type: trigger, label: Start }
+                - { id: route, type: router, label: "Amount?" }
+                - { id: small, type: end, label: Small }
+                - { id: large, type: end, label: Large }
+              edges:
+                - { id: e1, from: start, to: route }
+                - { id: e2, from: route, to: small, condition: "{{ amount }} <= 50000" }
+                - { id: e3, from: route, to: large, condition: "{{ amount }} > 50000" }
+            """;
+        var result = await Create().ValidateAsync(yaml);
+        result.Errors.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task UnknownVariableReference_Returns_EXP001_Warning()
     {

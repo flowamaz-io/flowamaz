@@ -137,7 +137,8 @@
         "id": { "type": "string", "minLength": 1 },
         "from": { "type": "string", "minLength": 1 },
         "to": { "type": "string", "minLength": 1 },
-        "via": { "type": "string" }
+        "via": { "type": "string" },
+        "condition": { "type": "string", "description": "Expression evaluated before following this edge, e.g. \"{{ amount }} > 1000\"." }
       }
     },
     "group": {

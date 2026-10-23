@@ -297,7 +297,9 @@ public sealed class WorkflowValidator : IWorkflowValidator
     {
         foreach (var gate in doc.Spec?.Nodes?.Where(n => n.Type?.Equals("human-gate", StringComparison.OrdinalIgnoreCase) == true) ?? [])
         {
-            if (gate.Timeout == null && (gate.Config == null || !gate.Config.ContainsKey("timeout")))
+            // The gate worker reads timeout_hours (canvas: timeoutHours); "timeout" is the legacy key.
+            if (gate.Timeout == null && (gate.Config == null
+                || !(gate.Config.ContainsKey("timeout") || gate.Config.ContainsKey("timeout_hours") || gate.Config.ContainsKey("timeoutHours") || gate.Config.ContainsKey("timeoutValue"))))
                 warnings.Add(new ValidationIssue(6, "BPR-001",
                     $"Human gate '{gate.Id}' has no timeout. Without a timeout the gate waits forever and may block the workflow.",
                     gate.Id, null, null));
