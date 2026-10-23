@@ -2,6 +2,10 @@ Read CLAUDE.md, FUNCTIONAL.md, checkpoint.md, results.md (fix-test-02-02 entry).
 
 GOAL: Classify every failing E2E scenario. NO fixes in this prompt — diagnosis only.
 
+Also read prompts/fix-test-02/feature-depth-audit.md. Include every APP-BUG and NOT-BUILT item
+listed there in the triage report even if no E2E scenario currently fails on it (mark those
+"found by audit, no scenario"), and note which scenarios pass only because they test a shell.
+
 1. Run scripts/e2e-local.sh. Load e2e-results.json.
 2. For EACH failing test, open the trace / screenshot / API log and classify:
    - APP-BUG      — product behaviour contradicts FUNCTIONAL.md
