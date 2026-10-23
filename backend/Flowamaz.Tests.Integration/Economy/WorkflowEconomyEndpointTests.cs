@@ -71,6 +71,14 @@ public class WorkflowEconomyEndpointTests : ApiTestBase
 
         var purchases = await DataAsync(await buyer.Client.GetAsync($"/api/v1/workspaces/{ws}/purchases"));
         purchases.EnumerateArray().Should().ContainSingle(p => p.GetProperty("templateName").GetString() == "Paid AP Flow");
+
+        // The gallery is shared across the "api" collection: take the paid listing down again.
+        using (var scope = Fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+            db.WorkflowTemplates.Single(t => t.Id == paid.Id).IsActive = false;
+            await db.SaveChangesAsync();
+        }
     }
 
     [Fact]

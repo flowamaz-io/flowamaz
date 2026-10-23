@@ -48,7 +48,7 @@ public class Phase7TemplateTests : ApiTestBase
 
         // Pick the first official template.
         var listResp = await Fixture.NewClient().GetAsync("/api/v1/templates?pageSize=50");
-        var template = (await DataAsync(listResp)).GetProperty("items").EnumerateArray().First();
+        var template = (await DataAsync(listResp)).GetProperty("items").EnumerateArray().First(t => t.GetProperty("pricingModel").GetString() == "free");
         var templateId = template.GetProperty("id").GetGuid();
         var installCountBefore = template.GetProperty("installCount").GetInt32();
 
