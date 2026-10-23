@@ -544,13 +544,31 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             return;
         }
 
+        var now = DateTime.UtcNow;
         instance.TransitionTo(InstanceStatus.Cancelled);
+        // B6: a cancelled run has ended — stamp the end time so the run's duration stops counting.
+        instance.CompletedAt ??= now;
         instance.UpdatedBy = requestedBy;
         _instances.Update(instance);
 
         var seq = await _events.GetNextSequenceNumberAsync(instanceId, cancellationToken);
+
+        // B6: close every node still in flight (e.g. a gate waiting for a decision) so it no longer
+        // reads "Running" with an ever-growing duration on the timeline.
+        var states = await _nodeStates.GetForInstanceAsync(instanceId, cancellationToken) ?? [];
+        var closed = 0;
+        foreach (var state in states.Where(s => s.Status is NodeStatus.Pending or NodeStatus.Running))
+        {
+            state.Status = NodeStatus.Cancelled;
+            state.CompletedAt ??= now;
+            _nodeStates.Update(state);
+            seq = await AppendEventAsync(seq, instance, "NodeCancelled", state.NodeId, state.NodeType, "{}", cancellationToken);
+            closed++;
+        }
+
         await AppendEventAsync(seq, instance, "InstanceCancelled", null, null, "{}", cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("WorkflowOrchestrator.CancelAsync closed {Count} in-flight node(s) instance={InstanceId}", closed, instanceId);
 
         if (!string.IsNullOrEmpty(instance.WorkerLeaseId))
         {
@@ -751,7 +769,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         NodeId = node.Id,
         NodeType = node.Type.ToString(),
         Status = status,
-        StartedAt = status is NodeStatus.Running or NodeStatus.Pending ? DateTime.UtcNow : null,
+        // O3: instantly-completed nodes (trigger, routers, end) get a start time too, so timelines
+        // ordered by StartedAt follow execution order instead of falling back to the save-time CreatedAt.
+        StartedAt = status is NodeStatus.Running or NodeStatus.Pending or NodeStatus.Completed ? DateTime.UtcNow : null,
         CompletedAt = status == NodeStatus.Completed ? DateTime.UtcNow : null,
     };
 

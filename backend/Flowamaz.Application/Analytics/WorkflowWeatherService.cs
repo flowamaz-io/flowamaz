@@ -69,7 +69,9 @@ public sealed class WorkflowWeatherService
                 workflowInsights.OrderByDescending(i => i.CreatedAt).FirstOrDefault()?.Message));
         }
 
-        var runsThisMonth = await _metrics.GetRunCountSinceAsync(workspaceId, monthStart, ct);
+        // Live production-run count (B11): the hourly metric roll-up lags by up to two hours and only
+        // runs where the Quartz job is scheduled, so a fresh workspace showed 0 after real runs.
+        var runsThisMonth = await _analytics.GetProductionRunCountSinceAsync(workspaceId, monthStart, ct);
 
         _logger.LogInformation("WorkflowWeatherService.GetWeatherAsync exit workspace={WorkspaceId} workflows={Count}", workspaceId, cards.Count);
         return new WeatherResponse(now, definitions.Count, totalActive, runsThisMonth, cards);

@@ -73,7 +73,7 @@ public sealed class PublicWorkflowsController : PublicApiController
         var idempotencyKey = Request.Headers.TryGetValue("X-Idempotency-Key", out var k) ? k.ToString() : null;
 
         var instance = await _orchestrator.TriggerAsync(
-            ws, definition.Id, payload, idempotencyKey, InstanceTriggerType.Manual,
+            ws, definition.Id, payload, idempotencyKey, InstanceTriggerType.Api,
             correlationId: null, isTest: false, cancellationToken: ct);
 
         return Data(new { InstanceId = instance.Id, Status = "accepted" }, statusCode: StatusCodes.Status202Accepted);

@@ -60,6 +60,11 @@ public sealed class AiCompletionService : IAiCompletionService
                 "AiCompletionService.CompleteAsync exit tokensIn={In} tokensOut={Out}", result.TokensInput, result.TokensOutput);
             return result;
         }
+        catch (Exception ex) when (TranslateTransportFailure(ex, config, cancellationToken) is { } translated)
+        {
+            _logger.LogError(ex, "AiCompletionService.CompleteAsync provider unreachable kind={Kind} model={ModelId}", translated.Kind, config.ModelId);
+            throw translated;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "AiCompletionService.CompleteAsync error model={ModelId} provider={Provider}", config.ModelId, config.Provider);
@@ -83,7 +88,7 @@ public sealed class AiCompletionService : IAiCompletionService
         });
 
         using var response = await client.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureProviderSuccessAsync(response, config, ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
@@ -136,6 +141,11 @@ public sealed class AiCompletionService : IAiCompletionService
             _logger.LogDebug("AiCompletionService.CompleteWithImageAsync exit tokensIn={In} tokensOut={Out}", result.TokensInput, result.TokensOutput);
             return result;
         }
+        catch (Exception ex) when (TranslateTransportFailure(ex, config, cancellationToken) is { } translated)
+        {
+            _logger.LogError(ex, "AiCompletionService.CompleteWithImageAsync provider unreachable kind={Kind} model={ModelId}", translated.Kind, config.ModelId);
+            throw translated;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "AiCompletionService.CompleteWithImageAsync error model={ModelId}", config.ModelId);
@@ -171,7 +181,7 @@ public sealed class AiCompletionService : IAiCompletionService
         });
 
         using var response = await client.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureProviderSuccessAsync(response, config, ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
@@ -216,13 +226,18 @@ public sealed class AiCompletionService : IAiCompletionService
             });
 
             using var response = await client.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
+            await EnsureProviderSuccessAsync(response, config, cancellationToken);
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
             var batchId = doc.RootElement.GetProperty("id").GetString()!;
             _logger.LogInformation("AiCompletionService.SubmitBatchAsync exit batchId={BatchId}", batchId);
             return batchId;
+        }
+        catch (Exception ex) when (TranslateTransportFailure(ex, config, cancellationToken) is { } translated)
+        {
+            _logger.LogError(ex, "AiCompletionService.SubmitBatchAsync provider unreachable kind={Kind} model={ModelId}", translated.Kind, config.ModelId);
+            throw translated;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -251,7 +266,7 @@ public sealed class AiCompletionService : IAiCompletionService
             statusRequest.Headers.TryAddWithoutValidation("x-api-key", config.ApiKey);
             statusRequest.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
             using var statusResponse = await client.SendAsync(statusRequest, cancellationToken);
-            statusResponse.EnsureSuccessStatusCode();
+            await EnsureProviderSuccessAsync(statusResponse, config, cancellationToken);
 
             await using var statusStream = await statusResponse.Content.ReadAsStreamAsync(cancellationToken);
             using var statusDoc = await JsonDocument.ParseAsync(statusStream, cancellationToken: cancellationToken);
@@ -267,7 +282,7 @@ public sealed class AiCompletionService : IAiCompletionService
             resultsRequest.Headers.TryAddWithoutValidation("x-api-key", config.ApiKey);
             resultsRequest.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
             using var resultsResponse = await client.SendAsync(resultsRequest, cancellationToken);
-            resultsResponse.EnsureSuccessStatusCode();
+            await EnsureProviderSuccessAsync(resultsResponse, config, cancellationToken);
 
             var jsonl = await resultsResponse.Content.ReadAsStringAsync(cancellationToken);
             var firstLine = jsonl.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
@@ -282,12 +297,67 @@ public sealed class AiCompletionService : IAiCompletionService
                 batchId, parsed.TokensInput, parsed.TokensOutput);
             return parsed;
         }
+        catch (Exception ex) when (TranslateTransportFailure(ex, config, cancellationToken) is { } translated)
+        {
+            _logger.LogError(ex, "AiCompletionService.PollBatchResultAsync provider unreachable kind={Kind} model={ModelId}", translated.Kind, config.ModelId);
+            throw translated;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "AiCompletionService.PollBatchResultAsync error batchId={BatchId}", batchId);
             throw;
         }
     }
+
+    /// <summary>
+    /// B8: replaces <c>EnsureSuccessStatusCode</c>. A non-success provider response becomes an actionable
+    /// <see cref="AiProviderException"/> (401/403 bad key, 429 throttled, 5xx outage, other 4xx refused).
+    /// The provider's error type/message is logged for operators — never the API key, never shown to users.
+    /// </summary>
+    private async Task EnsureProviderSuccessAsync(HttpResponseMessage response, ModelConfig config, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode) return;
+
+        var status = (int)response.StatusCode;
+        string? errorType = null;
+        string? errorMessage = null;
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+            {
+                errorType = error.TryGetProperty("type", out var t) ? t.GetString() : null;
+                errorMessage = error.TryGetProperty("message", out var msg) ? msg.GetString() : null;
+                if (errorMessage is { Length: > 300 }) errorMessage = errorMessage[..300];
+            }
+        }
+        catch (Exception ex) when (ex is JsonException or HttpRequestException or InvalidOperationException)
+        {
+            // Body is optional diagnostics only.
+        }
+
+        var kind = AiProviderException.KindFor(status);
+        _logger.LogError(
+            "AiCompletionService provider call failed status={Status} kind={Kind} errorType={ErrorType} providerMessage={ProviderMessage} model={ModelId} provider={Provider} keySource={KeySource}",
+            status, kind, errorType, errorMessage, config.ModelId, config.Provider, config.ApiKeySource);
+        throw new AiProviderException(kind, config.Provider, config.ApiKeySource, status);
+    }
+
+    /// <summary>
+    /// Network failures and HttpClient timeouts (a <see cref="TaskCanceledException"/> the caller did not
+    /// request) become <see cref="AiProviderFailureKind.Unavailable"/>; anything else returns null.
+    /// </summary>
+    internal static AiProviderException? TranslateTransportFailure(Exception ex, ModelConfig config, CancellationToken ct) => ex switch
+    {
+        AiProviderException => null,
+        HttpRequestException http => new AiProviderException(
+            http.StatusCode is { } code ? AiProviderException.KindFor((int)code) : AiProviderFailureKind.Unavailable,
+            config.Provider, config.ApiKeySource, http.StatusCode is { } c ? (int)c : null, http),
+        TaskCanceledException timeout when !ct.IsCancellationRequested => new AiProviderException(
+            AiProviderFailureKind.Unavailable, config.Provider, config.ApiKeySource, null, timeout),
+        _ => null,
+    };
 
     /// <summary>
     /// Stub only when explicitly enabled. With no key and stub not allowed, throw instead of returning

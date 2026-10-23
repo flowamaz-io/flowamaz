@@ -221,7 +221,7 @@ public sealed class NlYamlGenerationServiceTests
     }
 
     [Fact]
-    public async Task GenerateAsync_SimpleWorkflow_UsesHaikuModel()
+    public async Task GenerateAsync_SimpleWorkflow_UsesTheResolvedModel_NotAHardcodedHaiku()
     {
         var (sut, aiMock, _, _, validatorMock, _) = BuildSut();
         ModelConfig? capturedConfig = null;
@@ -231,10 +231,11 @@ public sealed class NlYamlGenerationServiceTests
         validatorMock.Setup(x => x.ValidateAsync(It.IsAny<string>(), WorkspaceId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ValidationResult(true, [], [], []));
 
-        // TestRequest has "Do one thing" as StepsDescription — complexity score = 1 → Haiku
+        // O7: a simple request (complexity 1) still uses what ResolveModelConfig returned for F2, the
+        // model Workspace settings display, instead of being silently swapped to claude-haiku-4-5.
         await sut.GenerateAsync(TestRequest, WorkspaceId);
 
-        capturedConfig!.ModelId.Should().Be("claude-haiku-4-5");
+        capturedConfig!.ModelId.Should().Be("claude-sonnet-4-6");
     }
 
     [Fact]

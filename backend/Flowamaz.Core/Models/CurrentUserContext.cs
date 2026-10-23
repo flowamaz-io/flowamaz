@@ -24,4 +24,7 @@ public sealed class CurrentUserContext
     public Guid? ApiKeyWorkspaceId { get; init; }
     public Guid? ApiKeyEnvironmentId { get; init; }
     public IReadOnlyList<string> ApiKeyScopes { get; init; } = [];
+
+    /// <summary>Non-secret label of the API key (name + display prefix) used as the audit actor.</summary>
+    public string? ApiKeyAuditLabel { get; init; }
 }

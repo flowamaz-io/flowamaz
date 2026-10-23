@@ -44,13 +44,24 @@ public sealed class AuditService : IAuditService
         var ip = request.IpAddress ?? _requestContext.GetIpAddress();
         var userAgent = request.UserAgent ?? _requestContext.GetUserAgent();
 
+        // O4: an action with no human actor taken during an API-key request (public API trigger or gate
+        // decision) is attributed to that key, not shown as an anonymous "A user"/"System".
+        var actorUserId = request.ActorUserId == Guid.Empty ? null : request.ActorUserId;
+        var actorType = request.ActorType;
+        var actorLabel = request.ActorLabel;
+        if (actorUserId is null && _requestContext.GetApiKeyAuditLabel() is { } apiKeyLabel)
+        {
+            actorType = "api_key";
+            actorLabel = string.IsNullOrWhiteSpace(actorLabel) ? apiKeyLabel : actorLabel;
+        }
+
         var record = new AuditEvent
         {
             OrgId = request.OrgId,
             WorkspaceId = request.WorkspaceId,
-            ActorUserId = request.ActorUserId,
-            ActorType = request.ActorType,
-            ActorLabel = request.ActorLabel,
+            ActorUserId = actorUserId,
+            ActorType = actorType,
+            ActorLabel = actorLabel,
             EventType = request.EventType,
             ResourceType = request.ResourceType,
             ResourceId = request.ResourceId,

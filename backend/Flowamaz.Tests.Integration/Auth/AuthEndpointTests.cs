@@ -132,7 +132,7 @@ public class AuthEndpointTests
         wrongPassword.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         wrongEmail.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         (await MessageAsync(wrongPassword)).Should().Be(await MessageAsync(wrongEmail));
-        (await MessageAsync(wrongPassword)).Should().Be("Invalid credentials");
+        (await MessageAsync(wrongPassword)).Should().Be(Flowamaz.Core.Exceptions.InvalidCredentialsException.ActionableMessage);
     }
 
     [Fact]

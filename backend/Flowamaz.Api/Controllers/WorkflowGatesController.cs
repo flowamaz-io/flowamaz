@@ -32,8 +32,9 @@ public sealed class WorkflowGatesController : ControllerBase
 
     [HttpGet]
     [RequireWorkspaceRole(WorkspaceRole.Operator)]
-    public async Task<ActionResult<IReadOnlyList<GateResponse>>> ListPending(Guid workspaceId, CancellationToken cancellationToken) =>
-        Ok(await _gates.ListPendingAsync(workspaceId, cancellationToken));
+    public async Task<ActionResult<IReadOnlyList<GateResponse>>> ListPending(
+        Guid workspaceId, [FromQuery] bool includeTest = false, CancellationToken cancellationToken = default) =>
+        Ok(await _gates.ListPendingAsync(workspaceId, includeTest, cancellationToken));
 
     [HttpGet("{instanceId:guid}/{nodeId}")]
     [RequireWorkspaceRole(WorkspaceRole.Operator)]

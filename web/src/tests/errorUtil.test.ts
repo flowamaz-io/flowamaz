@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { toUserFacingError } from '@/utils/error.util';
+import { copilotErrorMessage, toUserFacingError } from '@/utils/error.util';
 
 function axiosErrorWith(status: number, data: unknown): AxiosError {
   const response = {
@@ -30,5 +30,22 @@ describe('toUserFacingError', () => {
   it('falls back to an actionable HTTP message when the body has no text', () => {
     const e = axiosErrorWith(500, {});
     expect(toUserFacingError(e).message).toContain('HTTP 500');
+  });
+});
+
+describe('copilotErrorMessage', () => {
+  it('shows the server message verbatim and does not blame the connection', () => {
+    const e = axiosErrorWith(502, {
+      message: 'AI request failed: Anthropic rejected the platform AI key (HTTP 401). Set Ai__AnthropicPlatformKey.',
+      code: 'AI_PROVIDER_AUTH_FAILED',
+    });
+    const text = copilotErrorMessage(e);
+    expect(text).toContain('Anthropic rejected the platform AI key');
+    expect(text).not.toContain('Check your connection');
+  });
+
+  it('mentions the connection only for a real network failure', () => {
+    const e = new AxiosError('Network Error', 'ERR_NETWORK');
+    expect(copilotErrorMessage(e)).toContain('Check your connection');
   });
 });

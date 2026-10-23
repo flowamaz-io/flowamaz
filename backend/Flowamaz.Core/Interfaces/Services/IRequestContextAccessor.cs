@@ -11,4 +11,10 @@ public interface IRequestContextAccessor
     string? GetIpAddress();
 
     string? GetUserAgent();
+
+    /// <summary>
+    /// When the current request authenticated with a workspace API key: its non-secret audit label
+    /// (name + display prefix). Null for human (JWT) callers and outside a request.
+    /// </summary>
+    string? GetApiKeyAuditLabel() => null;
 }

@@ -68,7 +68,7 @@ function connectLive(): void {
 
 async function reload(): Promise<void> {
   if (!currentWorkspaceId.value) await loadWorkspaces();
-  const filters: InstanceListFilters = { includeTest: activeTab.value === 'test' };
+  const filters: InstanceListFilters = activeTab.value === 'test' ? { testOnly: true } : {};
   if (statusFilter.value) filters.status = statusFilter.value;
   if (from.value) filters.from = from.value;
   if (to.value) filters.to = to.value;

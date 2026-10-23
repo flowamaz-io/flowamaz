@@ -147,6 +147,33 @@ public class InstanceServiceTests
     }
 
     [Fact]
+    public async Task ListAsync_testOnly_returns_only_test_runs()
+    {
+        var test = new WorkflowInstance { Id = Guid.NewGuid(), WorkspaceId = _ws, Status = InstanceStatus.Completed, IsTest = true, CreatedAt = DateTime.UtcNow };
+        var prod = new WorkflowInstance { Id = Guid.NewGuid(), WorkspaceId = _ws, Status = InstanceStatus.Completed, IsTest = false, CreatedAt = DateTime.UtcNow };
+        _instances.Setup(r => r.GetForWorkspaceAsync(_ws, true, It.IsAny<CancellationToken>())).ReturnsAsync([test, prod]);
+
+        var list = await NewService().ListAsync(_ws, null, null, null, null, testOnly: true);
+
+        list.Should().ContainSingle().Which.Id.Should().Be(test.Id);
+        _instances.Verify(r => r.GetForWorkspaceAsync(_ws, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void InExecutionOrder_legacy_completed_nodes_without_StartedAt_sort_by_CompletedAt_not_save_time()
+    {
+        // O3: rows written before the fix have StartedAt = null on instantly-completed nodes and share
+        // the step's save-time CreatedAt, which put "Manager approval" above "Purchase requested".
+        var t0 = DateTime.UtcNow;
+        var saveTime = t0.AddMilliseconds(50);
+        var trigger = new WorkflowNodeState { NodeId = "purchase-requested", StartedAt = null, CompletedAt = t0, CreatedAt = saveTime };
+        var gate = new WorkflowNodeState { NodeId = "manager-approval", StartedAt = t0.AddMilliseconds(5), CreatedAt = saveTime };
+
+        InstanceService.InExecutionOrder([gate, trigger]).Select(s => s.NodeId)
+            .Should().Equal("purchase-requested", "manager-approval");
+    }
+
+    [Fact]
     public async Task GetTimelineAsync_OrdersNodesByStart_AndComputesOffsets()
     {
         var instance = Instance();

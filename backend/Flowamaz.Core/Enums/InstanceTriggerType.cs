@@ -7,4 +7,7 @@ public enum InstanceTriggerType
     Webhook,
     Schedule,
     SubWorkflow,
+
+    /// <summary>Triggered through the public REST API with a workspace API key.</summary>
+    Api,
 }

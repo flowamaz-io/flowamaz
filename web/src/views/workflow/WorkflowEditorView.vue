@@ -15,6 +15,7 @@ import { useWorkflowStore } from '../../stores/workflow.store';
 import { useToast } from '../../composables/useToast';
 import { useCanvasStore } from '../../stores/canvas.store';
 import { findNodeIdLine } from '../../utils/canvas.util';
+import { copilotErrorMessage } from '../../utils/error.util';
 
 const route = useRoute();
 const ws = useWorkspace();
@@ -145,8 +146,9 @@ async function onCopilotCommand(cmd: string) {
     const { patch, pattern } = await sendCopilotCommand(cmd);
     copilotPanelRef.value?.setResult(patch, pattern);
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Request failed';
-    copilotPanelRef.value?.setResult(null, null, `Co-pilot request failed: ${msg}. Check your connection and try again.`);
+    // Show the server's actionable message (e.g. a rejected AI key) verbatim; only a real network
+    // failure mentions the connection.
+    copilotPanelRef.value?.setResult(null, null, copilotErrorMessage(e));
   }
 }
 

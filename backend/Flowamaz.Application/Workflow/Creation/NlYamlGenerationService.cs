@@ -255,11 +255,11 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         if (!await _budget.IsBudgetAvailableAsync(workspaceId, cancellationToken))
             throw new PlanLimitException("workflow generation");
 
-        // FIX 3: Complexity routing — simple workflows use Haiku (~80% cheaper), complex use Sonnet
+        // O7: the model is exactly what ResolveModelConfig returns for F2 (the one Workspace settings show).
+        // A hardcoded "simple workflows use Haiku" swap used to override it silently (and broke CLAUDE.md
+        // rule 4). To use a cheaper model for F2, set it in Settings → Workspace → AI model configuration.
         var modelConfig = await _models.ResolveModelConfigAsync(AiFunctionIds.NlYaml, workspaceId, cancellationToken);
         var complexity = ComplexityScore(request);
-        if (complexity <= 5)
-            modelConfig = modelConfig with { ModelId = "claude-haiku-4-5" };
 
         // FIX 6: Cap output tokens based on estimated workflow size (nodes * 200, max 4096)
         var maxTokens = Math.Min(4096, estimatedNodes * 200);

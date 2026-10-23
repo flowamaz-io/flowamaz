@@ -129,6 +129,20 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public void InvalidCredentials_message_is_actionable_without_revealing_which_field_was_wrong()
+    {
+        var ex = new InvalidCredentialsException();
+
+        ex.Message.Should().NotBe("Invalid credentials");
+        ex.Message.Should().Contain("email").And.Contain("organisation URL").And.Contain("password");
+        ex.Message.Should().Contain("Forgot password");
+        ex.Message.Should().Contain("locked");
+        // Enumeration-safe: never says the email/account does or does not exist.
+        ex.Message.Should().NotContainAny("not found", "does not exist", "incorrect password", "wrong password");
+        ex.HttpStatusCode.Should().Be(401);
+    }
+
+    [Fact]
     public async Task LoginAsync_wrong_password_records_failed_attempt()
     {
         var user = UserWithPassword(GoodPassword);

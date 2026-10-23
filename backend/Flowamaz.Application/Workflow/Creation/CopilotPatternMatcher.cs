@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
+using YamlDotNet.Serialization;
 
 namespace Flowamaz.Application.Workflow.Creation;
 
@@ -36,6 +37,16 @@ public sealed partial class CopilotPatternMatcher : ICopilotPatternMatcher
 
     private static readonly IReadOnlyList<Pattern> Patterns =
     [
+        // First so "add a 24h timeout to <gate>" (the Co-pilot input's own example) never falls
+        // through to a broader pattern or to the paid AI call (B9).
+        new("set-gate-timeout",
+            SetTimeoutRegex(),
+            (m, _, yaml) => BuildGateTimeoutPatch(m, yaml)),
+
+        new("set-gate-timeout",
+            SetTimeoutOnNodeToRegex(),
+            (m, _, yaml) => BuildGateTimeoutPatch(m, yaml)),
+
         new("connect-nodes",
             ConnectNodesRegex(),
             (m, _, _) =>
@@ -348,6 +359,84 @@ public sealed partial class CopilotPatternMatcher : ICopilotPatternMatcher
                     "nodes:\n  - id: sop-parse-10\n    type: sub-workflow\n    label: \"Parse Document\"\n    config:\n      workflow_id: sop-parsing\n      input:\n        document: \"{{ variables.document }}\"",
                     "Add SOP document parsing sub-workflow node")),
     ];
+
+    // "add a 24h timeout to manager-approval", "add 2 day timeout on review", "set timeout of 2 days on review",
+    // "set a 48-hour timeout for the manager-approval node". Groups: value/unit (before or after "timeout"), node.
+    [GeneratedRegex(@"^\s*(?:add|set|put|apply|give)\s+(?:an?\s+|the\s+)?(?:(?<v1>\d+)\s*-?\s*(?<u1>h|hrs?|hours?|d|days?)\s+)?timeout(?:\s+(?:of\s+)?(?<v2>\d+)\s*-?\s*(?<u2>h|hrs?|hours?|d|days?))?\s+(?:to|on|for)\s+(?:the\s+)?(?:node\s+|gate\s+)?[""']?(?<node>[\w.-]+?)[""']?(?:\s+(?:node|gate|step))?\s*\.?\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex SetTimeoutRegex();
+
+    // "set the timeout on manager-approval to 48 hours", "set timeout for review to 2d".
+    [GeneratedRegex(@"^\s*(?:set|change|make)\s+(?:the\s+)?timeout\s+(?:on|for|of)\s+(?:the\s+)?(?:node\s+|gate\s+)?[""']?(?<node>[\w.-]+?)[""']?(?:\s+(?:node|gate|step))?\s+to\s+(?<v2>\d+)\s*-?\s*(?<u2>h|hrs?|hours?|d|days?)\s*\.?\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex SetTimeoutOnNodeToRegex();
+
+    private const int MaxGateTimeoutHours = 24 * 365;
+
+    private static readonly IDeserializer PatchYamlReader = new DeserializerBuilder().Build();
+    private static readonly ISerializer PatchYamlWriter = new SerializerBuilder().Build();
+
+    /// <summary>
+    /// Builds a "modify existing node" patch (spec.nodes[] with the COMPLETE node, matched by id — the
+    /// shape the editor merges) that sets <c>config.timeout_hours</c> on a human gate. Parsed and written
+    /// with YamlDotNet (CLAUDE.md rule 5). Returns null — letting the AI handle it — when the workflow YAML
+    /// is missing, the node is not found, or it is not a human gate.
+    /// </summary>
+    internal static PatternMatchResult? BuildGateTimeoutPatch(Match m, string? yamlContent)
+    {
+        var valueGroup = m.Groups["v1"].Success ? m.Groups["v1"] : m.Groups["v2"];
+        var unitGroup = m.Groups["u1"].Success ? m.Groups["u1"] : m.Groups["u2"];
+        if (!valueGroup.Success || !unitGroup.Success || string.IsNullOrWhiteSpace(yamlContent)) return null;
+        if (!int.TryParse(valueGroup.Value, out var value) || value <= 0) return null;
+
+        var hours = unitGroup.Value.StartsWith('d') || unitGroup.Value.StartsWith('D') ? value * 24L : value;
+        if (hours > MaxGateTimeoutHours) return null;
+
+        var nodeRef = m.Groups["node"].Value.Trim();
+        Dictionary<object, object>? root;
+        try
+        {
+            root = PatchYamlReader.Deserialize<Dictionary<object, object>>(yamlContent);
+        }
+        catch (YamlDotNet.Core.YamlException)
+        {
+            return null;
+        }
+        if (root is null) return null;
+
+        var nodes = (root.TryGetValue("spec", out var spec) && spec is Dictionary<object, object> specMap
+                ? specMap.GetValueOrDefault("nodes")
+                : null) as List<object>
+            ?? root.GetValueOrDefault("nodes") as List<object>;
+        if (nodes is null) return null;
+
+        var node = nodes.OfType<Dictionary<object, object>>()
+            .FirstOrDefault(n => string.Equals(n.GetValueOrDefault("id")?.ToString(), nodeRef, StringComparison.OrdinalIgnoreCase))
+            ?? nodes.OfType<Dictionary<object, object>>()
+                .FirstOrDefault(n => string.Equals(Slug(n.GetValueOrDefault("label")?.ToString()), Slug(nodeRef), StringComparison.Ordinal));
+        if (node is null) return null;
+
+        var type = node.GetValueOrDefault("type")?.ToString()?.Replace("-", "").Replace("_", "");
+        if (!string.Equals(type, "humangate", StringComparison.OrdinalIgnoreCase)) return null;
+
+        var updated = new Dictionary<object, object>(node);
+        var config = node.GetValueOrDefault("config") is Dictionary<object, object> existing
+            ? new Dictionary<object, object>(existing)
+            : new Dictionary<object, object>();
+        config["timeout_hours"] = hours;
+        updated["config"] = config;
+
+        var nodeId = updated.GetValueOrDefault("id")?.ToString() ?? nodeRef;
+        var patch = PatchYamlWriter.Serialize(new Dictionary<string, object>
+        {
+            ["spec"] = new Dictionary<string, object> { ["nodes"] = new List<object> { updated } },
+        });
+        return new PatternMatchResult("set-gate-timeout", patch, $"Set a {hours}h decision timeout on {nodeId}");
+    }
+
+    private static string Slug(string? text) =>
+        string.IsNullOrWhiteSpace(text) ? string.Empty : SlugRegex().Replace(text.Trim().ToLowerInvariant(), "-").Trim('-');
+
+    [GeneratedRegex(@"[^a-z0-9]+")]
+    private static partial Regex SlugRegex();
 
     [GeneratedRegex(@"connect\s+(\S+)\s+to\s+(\S+)", RegexOptions.IgnoreCase)]
     private static partial Regex ConnectNodesRegex();

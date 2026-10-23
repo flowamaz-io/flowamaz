@@ -52,3 +52,13 @@ export function toUserFacingError(error: unknown): UserFacingError {
     code: 'UNKNOWN',
   };
 }
+
+/**
+ * Co-pilot error text for the editor panel. A server message (e.g. "the platform AI key was rejected —
+ * set Ai__AnthropicPlatformKey…") is shown verbatim; "check your connection" only appears when the API
+ * really could not be reached.
+ */
+export function copilotErrorMessage(error: unknown): string {
+  const { message } = toUserFacingError(error);
+  return `Co-pilot request failed. ${message}`;
+}

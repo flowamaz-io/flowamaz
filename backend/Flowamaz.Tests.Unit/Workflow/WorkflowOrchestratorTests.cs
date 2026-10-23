@@ -449,4 +449,77 @@ public class WorkflowOrchestratorTests
     [InlineData("escalated", "escalated", true)]
     public void DecisionMatches_NormalisesCommonLabels(string via, string decision, bool expected) =>
         Flowamaz.Application.Workflow.Orchestrator.WorkflowOrchestrator.DecisionMatches(via, decision).Should().Be(expected);
+
+    [Fact]
+    public async Task CancelAsync_closes_in_flight_nodes_and_stamps_the_end_time()
+    {
+        // B6: a run cancelled while waiting at a gate must not leave the gate "Running" forever.
+        var instanceId = Guid.NewGuid();
+        var instance = new WorkflowInstance
+        {
+            Id = instanceId, WorkspaceId = _workspaceId, Status = InstanceStatus.Waiting,
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+        };
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(instance);
+        var gate = new WorkflowNodeState
+        {
+            WorkspaceId = _workspaceId, InstanceId = instanceId, NodeId = "manager-approval", NodeType = "HumanGate",
+            Status = NodeStatus.Running, StartedAt = DateTime.UtcNow.AddMinutes(-4),
+        };
+        var done = new WorkflowNodeState
+        {
+            WorkspaceId = _workspaceId, InstanceId = instanceId, NodeId = "start", NodeType = "Trigger",
+            Status = NodeStatus.Completed, StartedAt = DateTime.UtcNow.AddMinutes(-5), CompletedAt = DateTime.UtcNow.AddMinutes(-5),
+        };
+        var doneCompletedAt = done.CompletedAt;
+        _nodeStates.Setup(r => r.GetForInstanceAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync([done, gate]);
+        _events.Setup(r => r.GetNextSequenceNumberAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(7);
+        var appended = new List<WorkflowEvent>();
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowEvent, CancellationToken>((e, _) => appended.Add(e))
+            .Returns(Task.CompletedTask);
+
+        await NewOrchestrator().CancelAsync(instanceId, Guid.NewGuid());
+
+        instance.Status.Should().Be(InstanceStatus.Cancelled);
+        instance.CompletedAt.Should().NotBeNull().And.BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        gate.Status.Should().Be(NodeStatus.Cancelled);
+        gate.CompletedAt.Should().NotBeNull();
+        done.Status.Should().Be(NodeStatus.Completed);
+        done.CompletedAt.Should().Be(doneCompletedAt);
+        appended.Select(e => e.EventType).Should().Equal("NodeCancelled", "InstanceCancelled");
+        appended.Select(e => e.SequenceNumber).Should().Equal(7, 8);
+        _nodeStates.Verify(r => r.Update(gate), Times.Once);
+    }
+
+    [Fact]
+    public async Task StepAsync_instantly_completed_nodes_get_a_start_time_in_execution_order()
+    {
+        // O3: the trigger used to have StartedAt = null, so timelines sorted it after the gate.
+        const string yaml = """
+            workflow: { id: w, version: v1, name: W }
+            nodes:
+              - { id: start, type: Trigger }
+              - { id: gate, type: HumanGate }
+              - { id: done, type: End }
+            edges:
+              - { id: e1, from: start, to: gate }
+              - { id: e2, from: gate, to: done }
+            """;
+        var instanceId = SetupRunnableInstance(yaml);
+        AllConditionsTrue();
+        var added = new List<WorkflowNodeState>();
+        _nodeStates.Setup(r => r.AddAsync(It.IsAny<WorkflowNodeState>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowNodeState, CancellationToken>((n, _) => added.Add(n))
+            .Returns(Task.CompletedTask);
+
+        await NewOrchestrator().StepAsync(instanceId, "worker-1");
+
+        var trigger = added.Single(n => n.NodeId == "start");
+        var gate = added.Single(n => n.NodeId == "gate");
+        trigger.StartedAt.Should().NotBeNull();
+        trigger.StartedAt!.Value.Should().BeOnOrBefore(gate.StartedAt!.Value);
+        Flowamaz.Application.Workflow.Services.InstanceService.InExecutionOrder(new[] { gate, trigger })
+            .Select(n => n.NodeId).Should().Equal("start", "gate");
+    }
 }

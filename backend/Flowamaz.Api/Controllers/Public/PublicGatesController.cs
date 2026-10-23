@@ -23,7 +23,8 @@ public sealed class PublicGatesController : PublicApiController
         if (await GuardAsync(ApiKeyScope.InstancesRead, "read", DefaultHourlyLimit, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
-        var gates = await _gates.ListPendingAsync(ws, ct);
+        // Production approvals only — test-run gates never reach API integrations (O2).
+        var gates = await _gates.ListPendingAsync(ws, includeTest: false, ct);
         return Data(gates);
     }
 

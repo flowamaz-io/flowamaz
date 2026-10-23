@@ -30,6 +30,7 @@ public sealed class WorkflowAnalyticsRepository(FlowAmazDbContext db) : IWorkflo
         var rows = await db.WorkflowInstances.AsNoTracking()
             .Where(i => i.WorkspaceId == workspaceId
                         && i.WorkflowDefinitionId == workflowDefinitionId
+                        && !i.IsTest
                         && i.CreatedAt >= from && i.CreatedAt < to)
             .Select(i => new { i.Status, i.StartedAt, i.CompletedAt })
             .ToListAsync(cancellationToken);
@@ -49,6 +50,7 @@ public sealed class WorkflowAnalyticsRepository(FlowAmazDbContext db) : IWorkflo
         var matchingInstances = db.WorkflowInstances.AsNoTracking()
             .Where(i => i.WorkspaceId == workspaceId
                         && i.WorkflowDefinitionId == workflowDefinitionId
+                        && !i.IsTest
                         && i.CreatedAt >= from && i.CreatedAt < to);
 
         var rows = await db.WorkflowNodeStates.AsNoTracking()
@@ -81,5 +83,26 @@ public sealed class WorkflowAnalyticsRepository(FlowAmazDbContext db) : IWorkflo
             .CountAsync(i => i.WorkspaceId == workspaceId
                              && i.WorkflowDefinitionId == workflowDefinitionId
                              && i.Status == InstanceStatus.Failed
+                             && !i.IsTest
                              && i.CreatedAt >= since, cancellationToken);
+
+    public Task<int> GetProductionRunCountSinceAsync(Guid workspaceId, DateTime since, CancellationToken cancellationToken = default) =>
+        db.WorkflowInstances.AsNoTracking()
+            .CountAsync(i => i.WorkspaceId == workspaceId && !i.IsTest && i.CreatedAt >= since, cancellationToken);
+
+    public async Task<List<WorkflowRunCounts>> GetProductionRunCountsAsync(
+        Guid workspaceId, DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        var rows = await db.WorkflowInstances.AsNoTracking()
+            .Where(i => i.WorkspaceId == workspaceId && !i.IsTest && i.CreatedAt >= from && i.CreatedAt < to)
+            .GroupBy(i => i.WorkflowDefinitionId)
+            .Select(g => new
+            {
+                WorkflowDefinitionId = g.Key,
+                Runs = g.Count(),
+                Completed = g.Count(i => i.Status == InstanceStatus.Completed),
+            })
+            .ToListAsync(cancellationToken);
+        return rows.Select(r => new WorkflowRunCounts(r.WorkflowDefinitionId, r.Runs, r.Completed)).ToList();
+    }
 }

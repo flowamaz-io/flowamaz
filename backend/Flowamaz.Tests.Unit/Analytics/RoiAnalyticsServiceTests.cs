@@ -16,7 +16,7 @@ namespace Flowamaz.Tests.Unit.Analytics;
 public class RoiAnalyticsServiceTests
 {
     private readonly Mock<IWorkflowRoiConfigRepository> _configs = new();
-    private readonly Mock<IWorkflowMetricRepository> _metrics = new();
+    private readonly Mock<IWorkflowAnalyticsRepository> _analytics = new();
     private readonly Mock<IWorkflowDefinitionRepository> _definitions = new();
     private readonly Mock<IUnitOfWork> _uow = new();
 
@@ -24,12 +24,12 @@ public class RoiAnalyticsServiceTests
     private readonly Guid _wf = Guid.NewGuid();
 
     private RoiAnalyticsService NewService() =>
-        new(_configs.Object, _metrics.Object, _definitions.Object, _uow.Object, NullLogger<RoiAnalyticsService>.Instance);
+        new(_configs.Object, _analytics.Object, _definitions.Object, _uow.Object, NullLogger<RoiAnalyticsService>.Instance);
 
     private void Arrange(int runsTotal, int runsCompleted, int manualMinutes, decimal manualCost, decimal autoCost)
     {
-        _metrics.Setup(m => m.GetForWorkspaceInRangeAsync(_ws, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new WorkflowMetric { WorkspaceId = _ws, WorkflowDefinitionId = _wf, RunsTotal = runsTotal, RunsCompleted = runsCompleted }]);
+        _analytics.Setup(m => m.GetProductionRunCountsAsync(_ws, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WorkflowRunCounts(_wf, runsTotal, runsCompleted)]);
         _configs.Setup(c => c.GetForWorkspaceAsync(_ws, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new WorkflowRoiConfig
             {
@@ -71,8 +71,8 @@ public class RoiAnalyticsServiceTests
     [Fact]
     public async Task GetWorkspaceRoi_unconfigured_workflow_reports_zero_value_and_not_configured()
     {
-        _metrics.Setup(m => m.GetForWorkspaceInRangeAsync(_ws, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new WorkflowMetric { WorkspaceId = _ws, WorkflowDefinitionId = _wf, RunsTotal = 5, RunsCompleted = 5 }]);
+        _analytics.Setup(m => m.GetProductionRunCountsAsync(_ws, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WorkflowRunCounts(_wf, 5, 5)]);
         _configs.Setup(c => c.GetForWorkspaceAsync(_ws, It.IsAny<CancellationToken>())).ReturnsAsync([]);
         _definitions.Setup(d => d.GetForWorkspaceAsync(_ws, It.IsAny<CancellationToken>()))
             .ReturnsAsync([new WorkflowDefinition { Id = _wf, WorkspaceId = _ws, Name = "Unconfigured", Slug = "u" }]);
@@ -83,6 +83,19 @@ public class RoiAnalyticsServiceTests
         detail.Configured.Should().BeFalse();
         detail.CostAvoided.Should().Be(0m);
         summary.TotalCostAvoided.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task GetWorkspaceRoi_counts_live_runs_without_waiting_for_hourly_metrics()
+    {
+        // B11: runs created minutes ago (no workflow_metrics row yet) must already count.
+        Arrange(runsTotal: 5, runsCompleted: 3, manualMinutes: 10, manualCost: 0m, autoCost: 0m);
+
+        var summary = await NewService().GetWorkspaceRoiAsync(_ws, DateTime.UtcNow.AddDays(-30), DateTime.UtcNow);
+
+        summary.TotalRunsInPeriod.Should().Be(5);
+        summary.SuccessfulRuns.Should().Be(3);
+        _analytics.Verify(a => a.GetProductionRunCountsAsync(_ws, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

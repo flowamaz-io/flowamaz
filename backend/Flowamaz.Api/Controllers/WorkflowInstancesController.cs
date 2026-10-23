@@ -45,12 +45,13 @@ public sealed class WorkflowInstancesController : ControllerBase
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
         [FromQuery] bool includeTest = false,
+        [FromQuery] bool testOnly = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
         InstanceStatus? statusFilter = Enum.TryParse<InstanceStatus>(status, ignoreCase: true, out var parsed) ? parsed : null;
-        var items = await _instances.ListAsync(workspaceId, statusFilter, workflowDefinitionId, from, to, includeTest, cancellationToken);
+        var items = await _instances.ListAsync(workspaceId, statusFilter, workflowDefinitionId, from, to, includeTest, testOnly, cancellationToken);
         return Ok(PagedResult<InstanceListItem>.From(items, page, pageSize));
     }
 

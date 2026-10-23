@@ -205,4 +205,75 @@ public sealed class CopilotPatternMatcherTests
         result!.PatternName.Should().Be("schedule-cron");
         result.YamlPatch.Should().Contain("connector_id: schedule-cron");
     }
+
+    // ── B9: gate timeout (the Co-pilot input's own placeholder example) ──────────
+
+    private const string GateWorkflowYaml = """
+        apiVersion: flowamaz/v1
+        kind: Workflow
+        metadata: { id: purchase, name: Purchase }
+        spec:
+          trigger: { type: manual }
+          nodes:
+            - id: purchase-requested
+              type: trigger
+              label: Purchase requested
+            - id: manager-approval
+              type: human-gate
+              label: Manager approval
+              config:
+                assignee: manager@acme.test
+                on_timeout: escalate
+            - id: notify
+              type: action
+              label: Notify
+          edges:
+            - { id: e1, from: purchase-requested, to: manager-approval }
+            - { id: e2, from: manager-approval, to: notify }
+        """;
+
+    [Theory]
+    [InlineData("Add a 24h timeout to manager-approval", 24)]
+    [InlineData("add a 24 hour timeout to manager-approval", 24)]
+    [InlineData("add 48-hour timeout on the manager-approval node", 48)]
+    [InlineData("set timeout of 2 days on manager-approval", 48)]
+    [InlineData("Set a 3d timeout for manager-approval.", 72)]
+    [InlineData("set the timeout on manager-approval to 12 hours", 12)]
+    [InlineData("add a 1 day timeout to Manager-Approval", 24)]
+    public void SetGateTimeout_matches_and_patches_the_complete_gate_node(string command, int expectedHours)
+    {
+        var result = Create().TryMatch(command, GateWorkflowYaml);
+
+        result.Should().NotBeNull();
+        result!.PatternName.Should().Be("set-gate-timeout");
+
+        var patch = new YamlDotNet.Serialization.DeserializerBuilder().Build()
+            .Deserialize<Dictionary<object, object>>(result.YamlPatch);
+        var nodes = (List<object>)((Dictionary<object, object>)patch["spec"])["nodes"];
+        var node = (Dictionary<object, object>)nodes.Should().ContainSingle().Subject;
+        node["id"].Should().Be("manager-approval");
+        node["type"].Should().Be("human-gate");
+        node["label"].Should().Be("Manager approval");
+        var config = (Dictionary<object, object>)node["config"];
+        config["timeout_hours"].Should().Be(expectedHours.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        // Existing config is kept: the editor replaces the whole node by id.
+        config["assignee"].Should().Be("manager@acme.test");
+        config["on_timeout"].Should().Be("escalate");
+    }
+
+    [Fact]
+    public void SetGateTimeout_matches_a_node_by_its_label()
+    {
+        var result = Create().TryMatch("add a 24h timeout to manager_approval", GateWorkflowYaml);
+        result.Should().NotBeNull();
+        result!.YamlPatch.Should().Contain("id: manager-approval").And.Contain("timeout_hours: 24");
+    }
+
+    [Fact]
+    public void SetGateTimeout_falls_through_when_the_node_is_unknown_or_not_a_gate_or_yaml_missing()
+    {
+        Create().TryMatch("add a 24h timeout to no-such-node", GateWorkflowYaml).Should().BeNull();
+        Create().TryMatch("add a 24h timeout to notify", GateWorkflowYaml).Should().BeNull();
+        Create().TryMatch("add a 24h timeout to manager-approval", null).Should().BeNull();
+    }
 }

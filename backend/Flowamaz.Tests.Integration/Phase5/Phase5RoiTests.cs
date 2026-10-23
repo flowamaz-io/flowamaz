@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
-using Flowamaz.Core.Entities.Analytics;
+using Flowamaz.Core.Entities.Workflow;
+using Flowamaz.Core.Enums;
 using Flowamaz.Infrastructure.Persistence;
 using Flowamaz.Tests.Integration.Common;
 using FluentAssertions;
@@ -45,17 +46,28 @@ public class Phase5RoiTests : ApiTestBase
             new { manualProcessTimeMinutes = 30, manualProcessCostPerRunUsd = 20m, automationCostPerRunUsd = 2m, monthlyCurrency = "USD" });
         cfgResp.EnsureSuccessStatusCode();
 
-        // Seed a metric row: 10 runs, 8 completed this hour.
+        // Seed 10 production runs (8 completed) plus a completed test run that must not count. ROI reads
+        // live instance counts (B11), so no hourly workflow_metrics roll-up is needed.
         using (var scope = Fixture.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
-            db.WorkflowMetrics.Add(new WorkflowMetric
+            for (var i = 0; i < 10; i++)
+            {
+                db.WorkflowInstances.Add(new WorkflowInstance
+                {
+                    WorkspaceId = workspaceId,
+                    WorkflowDefinitionId = workflowId,
+                    WorkflowVersionId = Guid.NewGuid(),
+                    Status = i < 8 ? InstanceStatus.Completed : InstanceStatus.Failed,
+                });
+            }
+            db.WorkflowInstances.Add(new WorkflowInstance
             {
                 WorkspaceId = workspaceId,
                 WorkflowDefinitionId = workflowId,
-                PeriodHour = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, DateTime.UtcNow.Day, DateTime.UtcNow.Hour, 0, 0, DateTimeKind.Utc),
-                RunsTotal = 10,
-                RunsCompleted = 8,
+                WorkflowVersionId = Guid.NewGuid(),
+                Status = InstanceStatus.Completed,
+                IsTest = true,
             });
             await db.SaveChangesAsync();
         }
@@ -70,5 +82,7 @@ public class Phase5RoiTests : ApiTestBase
         data.GetProperty("totalTimeSavedMinutes").GetInt64().Should().Be(240);
         data.GetProperty("totalCostAvoided").GetDecimal().Should().Be(144m);
         data.GetProperty("roiPercentage").GetDecimal().Should().Be(900m);
+        data.GetProperty("totalRunsInPeriod").GetInt32().Should().Be(10, "the test run is excluded");
+        data.GetProperty("successfulRuns").GetInt32().Should().Be(8);
     }
 }

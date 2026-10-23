@@ -25,6 +25,11 @@ public sealed class HttpRequestContextAccessor(IHttpContextAccessor accessor) : 
         return context.Connection.RemoteIpAddress?.ToString();
     }
 
+    public string? GetApiKeyAuditLabel() =>
+        accessor.HttpContext?.Items[Core.Models.CurrentUserContext.HttpContextItemKey] is Core.Models.CurrentUserContext { IsApiKey: true } ctx
+            ? ctx.ApiKeyAuditLabel ?? "API key"
+            : null;
+
     public string? GetUserAgent()
     {
         var context = accessor.HttpContext;

@@ -1,7 +1,11 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
+using Flowamaz.Core.Configuration;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Flowamaz.Application.Health;
 
@@ -77,53 +81,115 @@ public sealed class StripeHealthCheck : IHealthCheck
     }
 }
 
-/// <summary>Lightweight reachability probe for the Anthropic API host. Non-critical.</summary>
+/// <summary>
+/// Anthropic probe (O6). Reachability alone said "healthy" while every AI call failed with 401, so the
+/// platform key itself is validated with the free <c>GET /v1/models?limit=1</c> call (no tokens spent),
+/// cached so /health never calls the provider more than once per <see cref="CacheTtl"/>. Non-critical:
+/// a missing/rejected key or an unreachable host reports Degraded (HTTP 200) with a detail line.
+/// </summary>
 public sealed class AnthropicHealthCheck : IHealthCheck
 {
     public const string HttpClientName = "health-anthropic";
-    // HEAD against the API host — avoids spending tokens / requiring a valid key for a liveness ping.
-    private const string PingUrl = "https://api.anthropic.com/v1/models";
+    private const string ModelsUrl = "https://api.anthropic.com/v1/models?limit=1";
+    private const string AnthropicVersion = "2023-06-01";
+
+    /// <summary>How long a key-validation result is reused before the next probe.</summary>
+    internal static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan FailureCacheTtl = TimeSpan.FromMinutes(1);
+
+    private static readonly object CacheLock = new();
+    private static (string KeyHash, HealthCheckResult Result, DateTime ExpiresAt)? _cache;
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IHostEnvironment _environment;
+    private readonly AiOptions _ai;
     private readonly ILogger<AnthropicHealthCheck> _logger;
 
     public AnthropicHealthCheck(
         IHttpClientFactory httpClientFactory,
         IHostEnvironment environment,
+        IOptions<AiOptions> aiOptions,
         ILogger<AnthropicHealthCheck> logger)
     {
         _httpClientFactory = httpClientFactory;
         _environment = environment;
+        _ai = aiOptions.Value;
         _logger = logger;
+    }
+
+    /// <summary>Test seam: forget the cached validation result.</summary>
+    internal static void ResetCache()
+    {
+        lock (CacheLock) _cache = null;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("AnthropicHealthCheck.CheckHealthAsync entry");
-        if (HealthProbeRuntime.ShouldStub(_environment))
+
+        // Integration tests never make live network calls.
+        if (_environment.IsEnvironment("Test"))
         {
-            _logger.LogDebug("AnthropicHealthCheck.CheckHealthAsync exit stubbed");
-            return HealthCheckResult.Healthy("Anthropic probe stubbed in non-production environment.");
+            _logger.LogDebug("AnthropicHealthCheck.CheckHealthAsync exit stubbed (Test)");
+            return HealthCheckResult.Healthy("Not checked: Anthropic probe is skipped in the Test environment.");
         }
 
+        if (_ai.UseStubCompletion)
+        {
+            _logger.LogDebug("AnthropicHealthCheck.CheckHealthAsync exit stub completions");
+            return HealthCheckResult.Healthy("Not checked: Ai__UseStubCompletion is on, so AI calls return local stub output.");
+        }
+
+        if (string.IsNullOrWhiteSpace(_ai.AnthropicPlatformKey))
+        {
+            _logger.LogDebug("AnthropicHealthCheck.CheckHealthAsync exit no platform key");
+            return _ai.AllowStubWithoutKey
+                ? HealthCheckResult.Healthy("No platform key configured: AI calls return local stub output (Ai__AllowStubWithoutKey).")
+                : HealthCheckResult.Degraded(
+                    "No platform key configured: set Ai__AnthropicPlatformKey (or a workspace BYOK key) to enable AI features.");
+        }
+
+        var keyHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_ai.AnthropicPlatformKey)));
+        lock (CacheLock)
+        {
+            if (_cache is { } cached && cached.KeyHash == keyHash && cached.ExpiresAt > DateTime.UtcNow)
+            {
+                _logger.LogDebug("AnthropicHealthCheck.CheckHealthAsync exit cached status={Status}", cached.Result.Status);
+                return cached.Result;
+            }
+        }
+
+        HealthCheckResult result;
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(HealthProbeRuntime.ProbeTimeout);
             var client = _httpClientFactory.CreateClient(HttpClientName);
-            // An unauthenticated 401/403 still proves the host is up — treat any HTTP response as reachable.
-            using var request = new HttpRequestMessage(HttpMethod.Head, PingUrl);
+            using var request = new HttpRequestMessage(HttpMethod.Get, ModelsUrl);
+            request.Headers.TryAddWithoutValidation("x-api-key", _ai.AnthropicPlatformKey);
+            request.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
             using var response = await client.SendAsync(request, cts.Token);
-            _logger.LogDebug("AnthropicHealthCheck.CheckHealthAsync exit status={Status}", response.StatusCode);
-            return HealthCheckResult.Healthy("Anthropic API host reachable.");
+            var status = (int)response.StatusCode;
+            result = response.IsSuccessStatusCode
+                ? HealthCheckResult.Healthy("Platform key accepted by Anthropic.")
+                : status is 401 or 403
+                    ? HealthCheckResult.Degraded(
+                        $"Platform key rejected by Anthropic (HTTP {status}): AI features will fail. Set a valid Ai__AnthropicPlatformKey and restart the API.")
+                    : HealthCheckResult.Degraded($"Anthropic API returned HTTP {status} when validating the platform key.");
+            _logger.LogDebug("AnthropicHealthCheck.CheckHealthAsync exit status={Status}", status);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            _logger.LogWarning(ex, "AnthropicHealthCheck.CheckHealthAsync error — reporting degraded");
-            return HealthCheckResult.Degraded("Anthropic API host unreachable.", ex);
+            _logger.LogWarning(ex, "AnthropicHealthCheck.CheckHealthAsync error, reporting degraded");
+            result = HealthCheckResult.Degraded("Anthropic API host unreachable: the platform key could not be validated.", ex);
         }
+
+        lock (CacheLock)
+        {
+            _cache = (keyHash, result, DateTime.UtcNow.Add(result.Status == HealthStatus.Healthy ? CacheTtl : FailureCacheTtl));
+        }
+        return result;
     }
 }
 

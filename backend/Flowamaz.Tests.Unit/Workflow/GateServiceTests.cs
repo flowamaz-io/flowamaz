@@ -38,9 +38,33 @@ public class GateServiceTests
     [Fact]
     public async Task ListPendingAsync_MapsGates()
     {
-        _gates.Setup(r => r.GetPendingForWorkspaceAsync(_ws, It.IsAny<CancellationToken>())).ReturnsAsync([Gate()]);
+        _gates.Setup(r => r.GetPendingForWorkspaceAsync(_ws, false, It.IsAny<CancellationToken>())).ReturnsAsync([Gate()]);
         var list = await NewService().ListPendingAsync(_ws);
         list.Should().ContainSingle().Which.NodeId.Should().Be(Node);
+        list[0].IsTest.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ListPendingAsync_includeTest_flags_test_run_gates()
+    {
+        // O2: test-run gates are opt-in and tagged so the queue can label them.
+        _gates.Setup(r => r.GetPendingForWorkspaceAsync(_ws, true, It.IsAny<CancellationToken>())).ReturnsAsync([Gate()]);
+        _gates.Setup(r => r.GetTestInstanceIdsAsync(_ws, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([_instanceId]);
+
+        var list = await NewService().ListPendingAsync(_ws, includeTest: true);
+
+        list.Should().ContainSingle().Which.IsTest.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ListPendingAsync_default_excludes_test_runs_at_the_repository()
+    {
+        _gates.Setup(r => r.GetPendingForWorkspaceAsync(_ws, It.IsAny<bool>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+
+        await NewService().ListPendingAsync(_ws);
+
+        _gates.Verify(r => r.GetPendingForWorkspaceAsync(_ws, false, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

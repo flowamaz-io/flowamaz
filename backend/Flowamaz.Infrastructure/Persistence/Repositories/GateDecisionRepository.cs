@@ -22,13 +22,26 @@ public sealed class GateDecisionRepository(FlowAmazDbContext db) : IGateDecision
             .Where(g => g.InstanceId == instanceId && g.WorkspaceId == workspaceId)
             .OrderBy(g => g.CreatedAt).ToListAsync(cancellationToken);
 
-    public Task<List<GateDecision>> GetPendingForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>
+    public Task<List<GateDecision>> GetPendingForWorkspaceAsync(Guid workspaceId, bool includeTest = false, CancellationToken cancellationToken = default) =>
         db.GateDecisions.AsNoTracking()
             .Where(g => g.WorkspaceId == workspaceId && g.Decision == GateDecisionStatus.Pending)
-            // A cancelled/failed/finished run's approval no longer needs anyone's attention.
-            .Where(g => db.WorkflowInstances.Any(i => i.Id == g.InstanceId
+            // A cancelled/failed/finished run's approval no longer needs anyone's attention; test-run
+            // gates stay out of the production queue unless asked for (O2).
+            .Where(g => db.WorkflowInstances.Any(i => i.Id == g.InstanceId && i.WorkspaceId == workspaceId
+                && (includeTest || !i.IsTest)
                 && (i.Status == InstanceStatus.Waiting || i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Pending)))
             .OrderBy(g => g.CreatedAt).ToListAsync(cancellationToken);
+
+    public async Task<HashSet<Guid>> GetTestInstanceIdsAsync(
+        Guid workspaceId, IReadOnlyCollection<Guid> instanceIds, CancellationToken cancellationToken = default)
+    {
+        if (instanceIds.Count == 0) return [];
+        var ids = await db.WorkflowInstances.AsNoTracking()
+            .Where(i => i.WorkspaceId == workspaceId && i.IsTest && instanceIds.Contains(i.Id))
+            .Select(i => i.Id)
+            .ToListAsync(cancellationToken);
+        return ids.ToHashSet();
+    }
 
     public Task<List<GateDecision>> GetExpiredAsync(DateTime asOf, CancellationToken cancellationToken = default) =>
         db.GateDecisions

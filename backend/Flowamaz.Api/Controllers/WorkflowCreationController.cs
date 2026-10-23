@@ -195,8 +195,14 @@ public sealed class WorkflowCreationController : ControllerBase
         catch (Exception ex) when (ex is not WorkflowSlugExistsException and not AppException
                                        and not OperationCanceledException and not ValidationException)
         {
+            // Provider failures (bad key, throttling, outage) arrive as AiProviderException (an AppException)
+            // with their own actionable message. Anything else is unexpected: log it, never echo ex.Message.
             _log.LogError(ex, "WorkflowCreationController.CreateWorkflow AI service error method={Method}", method);
-            return StatusCode(502, new { error = $"AI processing failed. {ex.Message} Please try again." });
+            return StatusCode(502, new
+            {
+                error = UnexpectedAiFailure("generate the workflow"),
+                code = "AI_PROCESSING_FAILED",
+            });
         }
 
         // Never persist a generated definition that does not validate. Saving invalid YAML produced
@@ -302,7 +308,11 @@ public sealed class WorkflowCreationController : ControllerBase
         catch (Exception ex) when (ex is not AppException and not OperationCanceledException)
         {
             _log.LogError(ex, "WorkflowCreationController.PreviewVisual AI service error workspaceId={WorkspaceId}", workspaceId);
-            return StatusCode(502, new { error = $"Diagram analysis failed. {ex.Message} Please try again in a moment." });
+            return StatusCode(502, new
+            {
+                error = UnexpectedAiFailure("analyse the diagram"),
+                code = "AI_PROCESSING_FAILED",
+            });
         }
 
         if (preview.Nodes.Count == 0)
@@ -338,10 +348,16 @@ public sealed class WorkflowCreationController : ControllerBase
         {
             result = await _copilot.ProcessCommandAsync(request.Command, request.YamlContent, workspaceId, userId, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not AppException and not OperationCanceledException)
         {
+            // AppExceptions (e.g. AiProviderException for a rejected AI key — B9) propagate to the global
+            // middleware with their own actionable message and status. Only the unexpected lands here.
             _log.LogError(ex, "WorkflowCreationController.Copilot service error workspaceId={WorkspaceId}", workspaceId);
-            return StatusCode(503, new { error = $"Co-pilot is temporarily unavailable. {ex.Message} Please try again in a moment." });
+            return StatusCode(502, new
+            {
+                error = UnexpectedAiFailure("process the Co-pilot command"),
+                code = "AI_PROCESSING_FAILED",
+            });
         }
 
         if (!result.Success)
@@ -435,6 +451,15 @@ public sealed class WorkflowCreationController : ControllerBase
         _log.LogInformation("WorkflowCreationController.FromConversation exit confidence={Confidence}", result.ConfidenceScore);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Actionable text for an unexpected (non-provider) AI pipeline failure. The raw exception is logged,
+    /// never returned — it can carry internal detail and tells the user nothing they can act on.
+    /// </summary>
+    internal static string UnexpectedAiFailure(string action) =>
+        $"AI processing failed: Flowamaz could not {action} because of an unexpected server error (details are in the server log). " +
+        "Nothing was saved. Try once more; if it fails again, start from the canvas instead and contact support@flowamaz.io " +
+        "with the time of the request.";
 
     private static readonly ISerializer YamlWriter = new SerializerBuilder().Build();
 

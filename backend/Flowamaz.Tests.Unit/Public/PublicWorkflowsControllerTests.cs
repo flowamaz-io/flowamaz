@@ -124,4 +124,22 @@ public class PublicWorkflowsControllerTests
         Serialize(json.Value).Should().Contain("rate_limited");
         controller.Response.Headers.Should().ContainKey("X-RateLimit-Reset");
     }
+
+    [Fact]
+    public async Task Trigger_records_the_run_with_the_Api_trigger_type()
+    {
+        // O1: public-API runs used to be recorded as "Manual".
+        var definition = new WorkflowDefinition { Id = Guid.NewGuid(), WorkspaceId = Workspace, Name = "Loan", Slug = "loan-approval", Status = WorkflowStatus.Published };
+        _definitions.Setup(d => d.GetBySlugForWorkspaceAsync(Workspace, "loan-approval", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(definition);
+        _orchestrator.Setup(o => o.TriggerAsync(Workspace, definition.Id, It.IsAny<string?>(), It.IsAny<string?>(),
+                InstanceTriggerType.Api, It.IsAny<string?>(), false, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance { Id = Guid.NewGuid(), WorkspaceId = Workspace, TriggerType = InstanceTriggerType.Api });
+
+        var result = await CreateController().Trigger("loan-approval", CancellationToken.None);
+
+        result.Should().BeOfType<JsonResult>().Which.StatusCode.Should().Be(202);
+        _orchestrator.Verify(o => o.TriggerAsync(Workspace, definition.Id, It.IsAny<string?>(), It.IsAny<string?>(),
+            InstanceTriggerType.Api, It.IsAny<string?>(), false, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

@@ -20,8 +20,14 @@ public interface IGateDecisionRepository
     Task<GateDecision?> GetByNodeAsync(Guid instanceId, string nodeId, CancellationToken cancellationToken = default);
     Task<List<GateDecision>> GetForInstanceAsync(Guid instanceId, Guid workspaceId, CancellationToken cancellationToken = default);
 
-    /// <summary>Pending gates across a workspace — backs the portal approval queue.</summary>
-    Task<List<GateDecision>> GetPendingForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Pending gates across a workspace — backs the portal approval queue. Gates of test runs are
+    /// excluded unless <paramref name="includeTest"/> is true (O2: they are not real approvals).
+    /// </summary>
+    Task<List<GateDecision>> GetPendingForWorkspaceAsync(Guid workspaceId, bool includeTest = false, CancellationToken cancellationToken = default);
+
+    /// <summary>Which of <paramref name="instanceIds"/> (in this workspace) are test runs.</summary>
+    Task<HashSet<Guid>> GetTestInstanceIdsAsync(Guid workspaceId, IReadOnlyCollection<Guid> instanceIds, CancellationToken cancellationToken = default);
 
     /// <summary>Pending gates whose <c>ExpiresAt</c> is at or before <paramref name="asOf"/> (timer scanner).</summary>
     Task<List<GateDecision>> GetExpiredAsync(DateTime asOf, CancellationToken cancellationToken = default);
