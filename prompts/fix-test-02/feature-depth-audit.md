@@ -52,3 +52,29 @@ Year 2/3 features (Twin, Memory, Negotiator, Archaeology, Consciousness): not pr
   (human scope decision), not test bugs.
 - Slack placeholder token, GitHub null auth, invalid-YAML save, dead voice tab: APP-BUG, High.
 - E2E must never depend on a live AI key; assert stub mode where AI is involved.
+
+---
+
+## Status after PR #2 (fix/audit-findings, 2026-10-23)
+
+Closed:
+- Connectors run as workflow steps (connector_id/operation/inputs/credential), vault credentials
+  resolved + decrypted per call, OAuth refresh for Microsoft. Slack/GitHub auth fixed; Teams via
+  Graph; MySQL, File system, Microsoft 365 implemented; Script/Shell implemented but OFF by default.
+- Schedule triggers fire (exactly-once per occurrence).
+- Invalid generated YAML is rejected (422); AI without a key fails loudly in production.
+- Voice tab works; credential wizard stores API keys; Settings → Credentials added.
+- Found and fixed beyond the audit: approval gates never ran in the real worker loop; routers took
+  every branch; numeric/boolean YAML config was read as strings; canvas AI/gate/trigger keys were
+  ignored; UI variable syntax (${x}) never resolved; trigger payload never became variables;
+  revoked credentials still decrypted; SSRF to internal addresses; Email HTML injection; YAML
+  injection in canvas skeleton; Microsoft OAuth URL missing redirect_uri/scope; build broken by
+  new NuGet advisories.
+
+Still open (scope decisions, not bugs):
+- Connector sandbox process isolation (§9.5) — in-process egress guard only; Script/Shell must stay
+  disabled on Cloud until this exists.
+- Workflow Economy (§8.9), canvas interactions (box select, clickable minimap, node→YAML jump, grid
+  snap), Visual input asking about low-confidence nodes, NL clarifying questions, gate onTimeout
+  auto-approve/auto-reject, a Slack channel field and Teams webhook field in the gate panel.
+- Rate limiting / abuse controls for the platform Email connector (sends from the platform domain).
