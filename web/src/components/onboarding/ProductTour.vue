@@ -62,7 +62,7 @@ const STEPS: TourStepDef[] = [
     primaryActionLabel: 'Start from template',
     onPrimaryAction: () => {
       void complete();
-      void router.push({ name: 'workflow-new', query: { method: 'template' } });
+      void router.push({ name: 'library', query: { tab: 'templates' } });
     },
   },
 ];

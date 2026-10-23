@@ -62,9 +62,17 @@ watch(selectedMethod, async (method) => {
   }
 });
 
+const CREATION_METHODS = ['nl', 'voice', 'visual', 'conversation', 'document', 'canvas'];
+
 onMounted(() => {
   const method = route.query.method as string | undefined;
-  if (method) selectedMethod.value = method;
+  // Templates live in the Library; any other unknown method shows the method picker
+  // instead of an empty page with only "Back to methods".
+  if (method === 'template') {
+    void router.replace({ name: 'library', query: { tab: 'templates' } });
+    return;
+  }
+  if (method && CREATION_METHODS.includes(method)) selectedMethod.value = method;
 });
 </script>
 
