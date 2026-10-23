@@ -68,6 +68,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'settings', name: 'settings', component: () => import('@/views/workspace/WorkspaceSettingsView.vue') },
       { path: 'settings/members', name: 'members', component: () => import('@/views/workspace/MembersView.vue') },
       { path: 'settings/api-keys', name: 'api-keys', component: () => import('@/views/workspace/ApiKeysView.vue') },
+      { path: 'settings/credentials', name: 'credentials', component: () => import('@/views/settings/CredentialsView.vue') },
       { path: 'settings/webhooks', name: 'webhooks', component: () => import('@/views/settings/WebhookSettingsView.vue') },
       { path: 'settings/sso', name: 'sso', component: () => import('@/views/settings/SsoSettingsView.vue') },
       { path: 'settings/billing', name: 'billing', component: () => import('@/views/settings/BillingSettingsView.vue') },

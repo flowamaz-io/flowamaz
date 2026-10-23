@@ -53,7 +53,7 @@ defineExpose({ addBranch, branches });
 <template>
   <div class="space-y-3">
     <p class="text-xs text-gray-500">
-      Each branch routes the workflow when its condition is true. Use <code>${'{'}variable{'}'}</code> in expressions.
+      Each branch routes the workflow when its condition is true. Use <code v-pre>{{ variable }}</code> with ==, !=, &gt;, &gt;=, &lt;, &lt;= in expressions.
     </p>
     <div
       v-for="(branch, index) in branches"
@@ -81,7 +81,7 @@ defineExpose({ addBranch, branches });
         v-if="!branch.isDefault"
         :model-value="branch.condition"
         :variables="variables"
-        placeholder="e.g. ${amount} > 1000"
+        placeholder="e.g. {{ amount }} > 1000"
         @update:model-value="setCondition(index, $event)"
       />
       <p

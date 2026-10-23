@@ -104,7 +104,7 @@ function toggleChannel(key: string): void {
         v-else
         :value="assignee"
         type="text"
-        :placeholder="assigneeType === 'user' ? 'Search members by email' : '${approver_email}'"
+        :placeholder="assigneeType === 'user' ? 'Search members by email' : 'approver_email (a workflow variable)'"
         class="w-full rounded-md border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 focus:border-indigo-400 focus:outline-none"
         @input="patch({ assignee: ($event.target as HTMLInputElement).value })"
       >

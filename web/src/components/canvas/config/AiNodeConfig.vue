@@ -84,7 +84,7 @@ const models = computed(() => MODELS[provider.value] ?? []);
         :model-value="userPrompt"
         :variables="variables"
         multiline
-        placeholder="Summarise ${invoice_data}…"
+        placeholder="Summarise {{ invoice_data }}…"
         @update:model-value="patch({ userPrompt: $event })"
       />
     </div>

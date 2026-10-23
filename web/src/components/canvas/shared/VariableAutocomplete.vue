@@ -21,15 +21,16 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 
 const focused = ref(false);
 
-// The "open" interpolation fragment is the text after the last `${` that has not
-// yet been closed by a `}`. When present we offer matching variables.
+// The "open" interpolation fragment is the text after the last `{{` that has not yet been
+// closed by `}}`. When present we offer matching variables. The engine resolves `{{ name }}`
+// (also `{{ variables.name }}` and `{{ node-id.output.field }}`), so that is what we insert.
 const openFragment = computed<string | null>(() => {
   const value = props.modelValue;
-  const open = value.lastIndexOf('${');
+  const open = value.lastIndexOf('{{');
   if (open === -1) return null;
   const after = value.slice(open + 2);
-  if (after.includes('}')) return null;
-  return after;
+  if (after.includes('}}')) return null;
+  return after.trim();
 });
 
 const suggestions = computed<WorkflowVariable[]>(() => {
@@ -47,9 +48,8 @@ function onInput(event: Event): void {
 
 function insert(variable: WorkflowVariable): void {
   const value = props.modelValue;
-  const open = value.lastIndexOf('${');
-  const next = `${value.slice(0, open)}\${${variable.name}}`;
-  emit('update:modelValue', next);
+  const open = value.lastIndexOf('{{');
+  emit('update:modelValue', `${value.slice(0, open)}{{ ${variable.name} }}`);
 }
 </script>
 
