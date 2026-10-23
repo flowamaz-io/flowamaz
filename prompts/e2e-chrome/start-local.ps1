@@ -28,7 +28,15 @@ $env:GIT_REPOS_BASE_PATH = Join-Path $Root "prompts\e2e-chrome\results\git-repos
 $env:CREDENTIAL_MASTER_KEY = "e2e-local-only-credential-master-key-0123456789abcdef"   # dev only
 $env:GATE_SIGNING_KEY = "e2e-local-only-gate-signing-key-0123456789abcdef0123"          # dev only
 $env:Ai__AllowStubWithoutKey = "true"
-if ($env:ANTHROPIC_KEY) { $env:Ai__AnthropicPlatformKey = $env:ANTHROPIC_KEY; Write-Host "    (real Anthropic key set - AI journeys enabled)" }
+if ($env:ANTHROPIC_KEY) {
+  try {
+    Invoke-WebRequest https://api.anthropic.com/v1/models -UseBasicParsing -TimeoutSec 10 `
+      -Headers @{ "x-api-key" = $env:ANTHROPIC_KEY; "anthropic-version" = "2023-06-01" } | Out-Null
+    $env:Ai__AnthropicPlatformKey = $env:ANTHROPIC_KEY; Write-Host "    (Anthropic key verified - AI journeys enabled)"
+  } catch {
+    Write-Host "    WARNING: Anthropic rejected ANTHROPIC_KEY. Starting in AI stub mode; J11-J13 will be BLOCKED. Fix the key and re-run."
+  }
+}
 $api = Start-Process dotnet -ArgumentList "run","--project","Flowamaz.Api","--no-launch-profile" -WorkingDirectory "$Root\backend" `
   -RedirectStandardOutput "$Logs\api.log" -RedirectStandardError "$Logs\api.err.log" -PassThru -WindowStyle Hidden
 $api.Id | Out-File "$Logs\api.pid"

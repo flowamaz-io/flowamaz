@@ -240,7 +240,9 @@ never enter card details and never complete a Stripe page.
    **Expect:** the signing secret is shown once ("Copy your signing secret now — it won't be shown
    again."). Copy the secret and the endpoint id or URL into the results file **as a redacted
    placeholder only**, keeping the real values in your working memory for the next step.
-2. In a shell, send a signed request (replace `<ID>` and `<SECRET>`):
+2. In a shell, send a signed request (replace `<ID>` and `<SECRET>`). If the extension won't let
+   you read the secret off the page, compute the signature and send the request from inside the
+   page with `javascript_tool` (Web Crypto HMAC-SHA256, then `fetch`). That's equally valid.
    ```bash
    BODY='{"amount":2500,"requester":"Webhook Tester"}'
    SIG=$(node -e "console.log(require('crypto').createHmac('sha256',process.argv[1]).update(process.argv[2]).digest('hex'))" "<SECRET>" "$BODY")
@@ -344,7 +346,9 @@ docker exec -i flowamaz-dev-db psql -U flowamaz -d flowamaz < prompts/e2e-chrome
 
 ## J16 — Small screen
 
-1. Resize the window to 390×844 with `resize_window`.
+1. Resize the window to 390×844 with `resize_window`. If the window is full-screen or maximised,
+   it can't be resized. Ask the user to exit full screen, or open a new non-maximised window
+   (`tabs_create_mcp`). If it still can't be resized, record BLOCKED (tooling).
 2. **Expect:** the sidebar collapses behind a menu button ("Open menu"). Open it and navigate to
    Instances. **Expect:** the page fits without horizontal scrolling. Take a screenshot.
 3. Restore the window to 1440×900.
@@ -380,7 +384,7 @@ with the Read tool.
 4. Click **"Validate"**. **Expect:** "Workflow is valid — ready to publish" with no warnings.
    Click **"Save changes"**. **Expect:** toast "YAML saved."
 5. Click **"Edit in Canvas"**. **Expect:**
-   - 21 nodes, connected top to bottom: Loan application submitted → Credit review → … →
+   - 20 nodes, connected top to bottom: Loan application submitted → Credit review → … →
      Create Letter of Offer → Customer accepts Letter of Offer → Offer accepted? → the two notify
      steps → the three end nodes ("Loan accepted", "Offer declined", "Application rejected").
    - Every "… approved?" router has a line to **"Notify: application rejected"**.

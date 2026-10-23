@@ -28,7 +28,16 @@ export GIT_REPOS_BASE_PATH="$ROOT/prompts/e2e-chrome/results/git-repos"
 export CREDENTIAL_MASTER_KEY="e2e-local-only-credential-master-key-0123456789abcdef"   # dev only
 export GATE_SIGNING_KEY="e2e-local-only-gate-signing-key-0123456789abcdef0123"          # dev only
 export Ai__AllowStubWithoutKey=true                 # non-generation AI features answer with canned text
-if [[ -n "${ANTHROPIC_KEY:-}" ]]; then export Ai__AnthropicPlatformKey="$ANTHROPIC_KEY"; echo "    (real Anthropic key set — AI journeys enabled)"; fi
+if [[ -n "${ANTHROPIC_KEY:-}" ]]; then
+  code=$(curl -s -o /dev/null -w "%{http_code}" https://api.anthropic.com/v1/models \
+    -H "x-api-key: $ANTHROPIC_KEY" -H "anthropic-version: 2023-06-01" || echo 000)
+  if [[ "$code" == "200" ]]; then
+    export Ai__AnthropicPlatformKey="$ANTHROPIC_KEY"; echo "    (Anthropic key verified — AI journeys enabled)"
+  else
+    echo "    WARNING: Anthropic rejected ANTHROPIC_KEY (HTTP $code). Starting in AI stub mode; J11–J13 will be BLOCKED."
+    echo "             Fix the key and re-run this script to test AI creation."
+  fi
+fi
 ( cd "$ROOT/backend" && nohup dotnet run --project Flowamaz.Api --no-launch-profile > "$LOGS/api.log" 2>&1 & echo $! > "$LOGS/api.pid" )
 for i in {1..90}; do curl -sf http://localhost:8307/health >/dev/null 2>&1 && break; sleep 3; done
 curl -sf http://localhost:8307/health >/dev/null || { echo "API did not come up — see $LOGS/api.log"; exit 1; }
