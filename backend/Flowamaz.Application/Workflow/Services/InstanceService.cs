@@ -52,10 +52,16 @@ public sealed class InstanceService
 
     public async Task<List<InstanceListItem>> ListAsync(
         Guid workspaceId, InstanceStatus? status, Guid? workflowDefinitionId,
-        DateTime? from, DateTime? to, bool includeTest = false, CancellationToken ct = default)
+        DateTime? from, DateTime? to, bool includeTest = false, bool testOnly = false, CancellationToken ct = default)
     {
-        var instances = await _instances.GetForWorkspaceAsync(workspaceId, includeTest, ct);
-        return instances
+        _logger.LogDebug("InstanceService.ListAsync entry workspaceId={WorkspaceId} includeTest={IncludeTest} testOnly={TestOnly}",
+            workspaceId, includeTest, testOnly);
+        // testOnly (the "Test" tab) needs the test rows loaded and then production rows dropped;
+        // includeTest alone means "production + test" (B5: the Test tab used to send includeTest
+        // and so also listed production runs).
+        var instances = await _instances.GetForWorkspaceAsync(workspaceId, includeTest || testOnly, ct);
+        var result = instances
+            .Where(i => !testOnly || i.IsTest)
             .Where(i => status is null || i.Status == status)
             .Where(i => workflowDefinitionId is null || i.WorkflowDefinitionId == workflowDefinitionId)
             .Where(i => from is null || i.CreatedAt >= from)
@@ -64,6 +70,8 @@ public sealed class InstanceService
                 i.Id, i.WorkflowDefinitionId, i.Status.ToString(), i.TriggerType.ToString(),
                 i.StartedAt, i.CompletedAt, i.CreatedAt, i.IsTest, i.TestExpiresAt))
             .ToList();
+        _logger.LogDebug("InstanceService.ListAsync exit workspaceId={WorkspaceId} count={Count}", workspaceId, result.Count);
+        return result;
     }
 
     public async Task<InstanceDetailResponse?> GetDetailAsync(Guid workspaceId, Guid id, CancellationToken ct = default)
@@ -71,7 +79,7 @@ public sealed class InstanceService
         var instance = await _instances.GetByIdForWorkspaceAsync(id, workspaceId, ct);
         if (instance is null) return null;
 
-        var states = await _nodeStates.GetForInstanceAsync(id, ct);
+        var states = InExecutionOrder(await _nodeStates.GetForInstanceAsync(id, ct));
         var variables = await _variables.GetForInstanceAsync(id, ct);
         var events = await _events.GetForInstanceAsync(id, ct);
 
@@ -113,9 +121,7 @@ public sealed class InstanceService
         var instance = await _instances.GetByIdForWorkspaceAsync(id, workspaceId, ct);
         if (instance is null) return null;
 
-        var states = (await _nodeStates.GetForInstanceAsync(id, ct))
-            .OrderBy(s => s.StartedAt ?? s.CreatedAt)
-            .ToList();
+        var states = InExecutionOrder(await _nodeStates.GetForInstanceAsync(id, ct));
 
         // Node labels come from the pinned version's graph (best-effort — fall back to node id).
         var labels = await TryLoadLabelsAsync(instance, ct);
@@ -197,6 +203,17 @@ public sealed class InstanceService
         _logger.LogInformation("InstanceService.RetryAsync exit newInstance={InstanceId}", retry.Id);
         return new TriggerInstanceResponse(retry.Id, retry.Status.ToString(), retry.CreatedAt);
     }
+
+    /// <summary>
+    /// O3: node states in the order they executed. Instantly-completed nodes recorded before the fix
+    /// have no StartedAt, so fall back to CompletedAt (stamped in memory when the node ran) before the
+    /// save-time CreatedAt, which is identical for every node saved in the same step.
+    /// </summary>
+    internal static List<WorkflowNodeState> InExecutionOrder(IEnumerable<WorkflowNodeState> states) =>
+        states
+            .OrderBy(s => s.StartedAt ?? s.CompletedAt ?? s.CreatedAt)
+            .ThenBy(s => s.CreatedAt)
+            .ToList();
 
     private static NodeStateResponse ToNodeState(WorkflowNodeState s) => new(
         s.NodeId, s.NodeType, s.Status.ToString(), s.StartedAt, s.CompletedAt, s.RetryCount, s.ErrorMessage);

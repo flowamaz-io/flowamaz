@@ -11,4 +11,16 @@ public interface IRequestContextAccessor
     string? GetIpAddress();
 
     string? GetUserAgent();
+
+    /// <summary>
+    /// When the current request authenticated with a workspace API key: its non-secret audit label
+    /// (name + display prefix). Null for human (JWT) callers and outside a request.
+    /// </summary>
+    string? GetApiKeyAuditLabel() => null;
+
+    /// <summary>"Name (email)" of the signed-in user for audit rows, or null outside a user request.</summary>
+    string? GetUserAuditLabel() => null;
+
+    /// <summary>Org user id of the signed-in human caller, or null (API key, background job, no request).</summary>
+    Guid? GetUserId() => null;
 }

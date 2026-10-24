@@ -1306,13 +1306,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"http-rest\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"http-rest\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"optional\",\"credential_types\":[\"BearerToken\",\"ApiKey\",\"BasicAuth\"]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":true},\"operations\":[{\"id\":\"GET\",\"name\":\"HTTP GET\",\"description\":\"Send an HTTP GET request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"POST\",\"name\":\"HTTP POST\",\"description\":\"Send an HTTP POST request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"PUT\",\"name\":\"HTTP PUT\",\"description\":\"Send an HTTP PUT request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"PATCH\",\"name\":\"HTTP PATCH\",\"description\":\"Send an HTTP PATCH request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"DELETE\",\"name\":\"HTTP DELETE\",\"description\":\"Send an HTTP DELETE request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"HEAD\",\"name\":\"HTTP HEAD\",\"description\":\"Send an HTTP HEAD request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"http\",\"rest\",\"api\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1328,13 +1328,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"postgresql\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"postgresql\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"connection-string\",\"credential_types\":[\"ConnectionString\"]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"query\",\"name\":\"Run query\",\"description\":\"Run a SELECT and return rows\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"sql\"],\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL with @named parameters \\u2014 never concatenate values into the SQL\"},\"parameters\":{\"type\":\"object\",\"description\":\"Parameter values by name\"}}}},{\"id\":\"execute\",\"name\":\"Execute statement\",\"description\":\"Run INSERT/UPDATE/DELETE and return affected rows\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"sql\"],\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL with @named parameters \\u2014 never concatenate values into the SQL\"},\"parameters\":{\"type\":\"object\",\"description\":\"Parameter values by name\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"database\",\"sql\",\"postgres\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1350,13 +1350,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"mysql\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"mysql\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"connection-string\",\"credential_types\":[\"ConnectionString\"]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"query\",\"name\":\"Run query\",\"description\":\"Run a SELECT and return rows\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"sql\"],\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL with @named parameters \\u2014 never concatenate values into the SQL\"},\"parameters\":{\"type\":\"object\",\"description\":\"Parameter values by name\"}}}},{\"id\":\"execute\",\"name\":\"Execute statement\",\"description\":\"Run INSERT/UPDATE/DELETE and return affected rows\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"sql\"],\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL with @named parameters \\u2014 never concatenate values into the SQL\"},\"parameters\":{\"type\":\"object\",\"description\":\"Parameter values by name\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"database\",\"sql\",\"mysql\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1372,13 +1372,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"slack\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"slack\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"oauth2-auth-code\",\"credential_types\":[\"OAuth2AuthCode\",\"BearerToken\"]},\"triggers\":[],\"network\":{\"allowed_domains\":[\"slack.com\"],\"sandboxed\":true},\"operations\":[{\"id\":\"send-message\",\"name\":\"Send message\",\"description\":\"Post a message to a channel\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"channel\",\"text\"],\"properties\":{\"channel\":{\"type\":\"string\",\"description\":\"Channel name or id, e.g. #approvals\"},\"text\":{\"type\":\"string\",\"description\":\"Message text\"},\"blocks\":{\"type\":\"array\",\"description\":\"Optional Block Kit blocks\"}}}},{\"id\":\"send-dm\",\"name\":\"Send direct message\",\"description\":\"Send a direct message to a user\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"user_id\",\"text\"],\"properties\":{\"user_id\":{\"type\":\"string\",\"description\":\"Slack user id, e.g. U0123\"},\"text\":{\"type\":\"string\",\"description\":\"Message text\"}}}},{\"id\":\"post-approval-message\",\"name\":\"Post approval message\",\"description\":\"Approval card for a human gate\",\"requires_credential\":true,\"internal\":true,\"input_schema\":{\"type\":\"object\",\"required\":[\"channel\",\"gate_decision_id\"],\"properties\":{\"channel\":{\"type\":\"string\",\"description\":\"Channel\"},\"gate_decision_id\":{\"type\":\"string\",\"description\":\"Gate id\"},\"workflow_name\":{\"type\":\"string\",\"description\":\"Workflow\"},\"gate_summary\":{\"type\":\"string\",\"description\":\"Summary\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"messaging\",\"slack\",\"notifications\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1394,13 +1394,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"microsoft-teams\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"microsoft-teams\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"oauth2-auth-code\",\"credential_types\":[\"OAuth2AuthCode\"]},\"triggers\":[],\"network\":{\"allowed_domains\":[\"graph.microsoft.com\",\"webhook.office.com\",\"logic.azure.com\",\"powerplatform.com\"],\"sandboxed\":true},\"operations\":[{\"id\":\"send-message\",\"name\":\"Send channel message\",\"description\":\"Post a message to a Teams channel (Microsoft Graph)\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"team_id\",\"channel_id\",\"text\"],\"properties\":{\"team_id\":{\"type\":\"string\",\"description\":\"Team id\"},\"channel_id\":{\"type\":\"string\",\"description\":\"Channel id\"},\"text\":{\"type\":\"string\",\"description\":\"Message text (HTML allowed)\"}}}},{\"id\":\"send-webhook-message\",\"name\":\"Send via incoming webhook\",\"description\":\"Post to a channel through an incoming-webhook URL\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"webhook_url\",\"text\"],\"properties\":{\"webhook_url\":{\"type\":\"string\",\"description\":\"Incoming webhook URL\"},\"text\":{\"type\":\"string\",\"description\":\"Message text\"}}}},{\"id\":\"post-adaptive-card\",\"name\":\"Post approval card\",\"description\":\"Adaptive Card for a human gate\",\"requires_credential\":false,\"internal\":true,\"input_schema\":{\"type\":\"object\",\"required\":[\"webhook_url\",\"gate_id\"],\"properties\":{\"webhook_url\":{\"type\":\"string\",\"description\":\"Webhook\"},\"gate_id\":{\"type\":\"string\",\"description\":\"Gate id\"},\"gate_summary\":{\"type\":\"string\",\"description\":\"Summary\"},\"platform_url\":{\"type\":\"string\",\"description\":\"Platform URL\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"messaging\",\"teams\",\"microsoft\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1416,13 +1416,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"email-smtp\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"email-smtp\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"platform\",\"credential_types\":[]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"send-email\",\"name\":\"Send email\",\"description\":\"Send a transactional email from the platform sender\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"to\",\"subject\",\"body\"],\"properties\":{\"to\":{\"type\":\"string\",\"description\":\"Recipient address\"},\"subject\":{\"type\":\"string\",\"description\":\"Subject\"},\"body\":{\"type\":\"string\",\"description\":\"Body\"},\"is_html\":{\"type\":\"boolean\",\"description\":\"Body is HTML (default false)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"email\",\"smtp\",\"resend\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1438,13 +1438,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"webhook-emit\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"webhook-emit\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"hmac\",\"credential_types\":[\"HmacSecret\"]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":true},\"operations\":[{\"id\":\"send-webhook\",\"name\":\"Send webhook\",\"description\":\"POST a JSON payload, HMAC-signed when a credential is set\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\",\"payload\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Destination https URL\"},\"payload\":{\"type\":\"object\",\"description\":\"JSON payload\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"webhook\",\"http\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1460,13 +1460,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"webhook-receive\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"webhook-receive\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"hmac\",\"credential_types\":[\"HmacSecret\"]},\"triggers\":[\"webhook\"],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"webhook\",\"trigger\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1482,13 +1482,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"file-system\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"file-system\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"none\",\"credential_types\":[]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"read-file\",\"name\":\"Read file\",\"description\":\"Read a text file from the workspace file area\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"path\"],\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Path relative to the workspace file area\"}}}},{\"id\":\"write-file\",\"name\":\"Write file\",\"description\":\"Write a text file to the workspace file area\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"path\",\"content\"],\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Path relative to the workspace file area\"},\"content\":{\"type\":\"string\",\"description\":\"Text content\"},\"overwrite\":{\"type\":\"boolean\",\"description\":\"Replace an existing file (default false)\"}}}},{\"id\":\"list-files\",\"name\":\"List files\",\"description\":\"List files in a folder of the workspace file area\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[],\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Folder (default: root)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"files\",\"filesystem\",\"local\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1504,13 +1504,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"schedule-cron\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"schedule-cron\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"none\",\"credential_types\":[]},\"triggers\":[\"schedule\"],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"validate-cron\",\"name\":\"Validate cron\",\"description\":\"Check a cron expression and return its next run times\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"expression\"],\"properties\":{\"expression\":{\"type\":\"string\",\"description\":\"Cron expression (5 or 6 fields)\"},\"timezone\":{\"type\":\"string\",\"description\":\"IANA time zone (default UTC)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"schedule\",\"cron\",\"timer\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1526,13 +1526,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"script-shell\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"script-shell\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"none\",\"credential_types\":[]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":true},\"operations\":[{\"id\":\"run-script\",\"name\":\"Run script\",\"description\":\"Run a bash or python script (self-hosted only; disabled on Cloud)\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"interpreter\",\"script\"],\"properties\":{\"interpreter\":{\"type\":\"string\",\"description\":\"bash or python3\"},\"script\":{\"type\":\"string\",\"description\":\"Script text (passed on stdin, never through a shell string)\"},\"args\":{\"type\":\"array\",\"description\":\"Arguments\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout (default 30, max 300)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"script\",\"shell\",\"bash\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1548,13 +1548,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"github\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"github\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"oauth2-auth-code\",\"credential_types\":[\"OAuth2AuthCode\",\"BearerToken\"]},\"triggers\":[],\"network\":{\"allowed_domains\":[\"api.github.com\"],\"sandboxed\":true},\"operations\":[{\"id\":\"create-issue\",\"name\":\"Create issue\",\"description\":\"Open an issue\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"owner\",\"repo\",\"title\"],\"properties\":{\"owner\":{\"type\":\"string\",\"description\":\"Owner\"},\"repo\":{\"type\":\"string\",\"description\":\"Repository\"},\"title\":{\"type\":\"string\",\"description\":\"Title\"},\"body\":{\"type\":\"string\",\"description\":\"Body\"},\"labels\":{\"type\":\"array\",\"description\":\"Labels\"}}}},{\"id\":\"get-issue\",\"name\":\"Get issue\",\"description\":\"Fetch an issue\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"owner\",\"repo\",\"issue_number\"],\"properties\":{\"owner\":{\"type\":\"string\",\"description\":\"Owner\"},\"repo\":{\"type\":\"string\",\"description\":\"Repository\"},\"issue_number\":{\"type\":\"integer\",\"description\":\"Issue number\"}}}},{\"id\":\"create-pr\",\"name\":\"Create pull request\",\"description\":\"Open a pull request\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"owner\",\"repo\",\"title\",\"head\",\"base\"],\"properties\":{\"owner\":{\"type\":\"string\",\"description\":\"Owner\"},\"repo\":{\"type\":\"string\",\"description\":\"Repository\"},\"title\":{\"type\":\"string\",\"description\":\"Title\"},\"head\":{\"type\":\"string\",\"description\":\"Source branch\"},\"base\":{\"type\":\"string\",\"description\":\"Target branch\"},\"body\":{\"type\":\"string\",\"description\":\"Description\"}}}},{\"id\":\"add-comment\",\"name\":\"Add comment\",\"description\":\"Comment on an issue or pull request\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"owner\",\"repo\",\"issue_number\",\"body\"],\"properties\":{\"owner\":{\"type\":\"string\",\"description\":\"Owner\"},\"repo\":{\"type\":\"string\",\"description\":\"Repository\"},\"issue_number\":{\"type\":\"integer\",\"description\":\"Issue or PR number\"},\"body\":{\"type\":\"string\",\"description\":\"Comment\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"github\",\"devops\",\"git\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         },
                         new
                         {
@@ -1570,13 +1570,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsInstalled = false,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            ManifestJson = "{\"id\":\"microsoft-365\",\"version\":\"1.0.0\",\"operations\":[]}",
+                            ManifestJson = "{\"id\":\"microsoft-365\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"oauth2-auth-code\",\"credential_types\":[\"OAuth2AuthCode\"]},\"triggers\":[],\"network\":{\"allowed_domains\":[\"graph.microsoft.com\"],\"sandboxed\":true},\"operations\":[{\"id\":\"send-mail\",\"name\":\"Send email\",\"description\":\"Send email from the connected mailbox (Microsoft Graph)\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"to\",\"subject\",\"body\"],\"properties\":{\"to\":{\"type\":\"string\",\"description\":\"Recipients, comma-separated\"},\"subject\":{\"type\":\"string\",\"description\":\"Subject\"},\"body\":{\"type\":\"string\",\"description\":\"Body\"},\"is_html\":{\"type\":\"boolean\",\"description\":\"Body is HTML (default false)\"}}}},{\"id\":\"create-calendar-event\",\"name\":\"Create calendar event\",\"description\":\"Create an event in the connected calendar\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"subject\",\"start\",\"end\"],\"properties\":{\"subject\":{\"type\":\"string\",\"description\":\"Title\"},\"start\":{\"type\":\"string\",\"description\":\"Start, ISO 8601\"},\"end\":{\"type\":\"string\",\"description\":\"End, ISO 8601\"},\"timezone\":{\"type\":\"string\",\"description\":\"IANA or Windows time zone (default UTC)\"},\"attendees\":{\"type\":\"string\",\"description\":\"Attendee emails, comma-separated\"},\"body\":{\"type\":\"string\",\"description\":\"Description\"}}}},{\"id\":\"upload-file\",\"name\":\"Upload file to OneDrive\",\"description\":\"Create or replace a text file in the connected OneDrive\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"path\",\"content\"],\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"OneDrive path, e.g. Reports/summary.txt\"},\"content\":{\"type\":\"string\",\"description\":\"Text content\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
                             Tags = "[\"microsoft\",\"office365\",\"sharepoint\"]",
                             Tier = "Official",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Version = "1.0.0"
+                            Version = "1.1.0"
                         });
                 });
 
@@ -1749,6 +1749,298 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.ToTable("workspace_credentials");
                 });
 
+            modelBuilder.Entity("Flowamaz.Core.Entities.Economy.PublisherAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("ChargesEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("charges_enabled");
+
+                    b.Property<string>("Country")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasColumnName("country");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("DetailsSubmitted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("details_submitted");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<bool>("PayoutsEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("payouts_enabled");
+
+                    b.Property<string>("RequirementsDue")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("requirements_due");
+
+                    b.Property<DateTime?>("StatusRefreshedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("status_refreshed_at");
+
+                    b.Property<string>("StripeAccountId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("stripe_account_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_publisher_accounts");
+
+                    b.HasIndex("OrgId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_publisher_accounts_org_id");
+
+                    b.HasIndex("StripeAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_publisher_accounts_stripe_account_id");
+
+                    b.ToTable("publisher_accounts");
+                });
+
+            modelBuilder.Entity("Flowamaz.Core.Entities.Economy.PublisherEarning", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("FeeCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("fee_cents");
+
+                    b.Property<int>("GrossCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("gross_cents");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("NetCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("net_cents");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<Guid>("PublisherOrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("publisher_org_id");
+
+                    b.Property<Guid>("PurchaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("purchase_id");
+
+                    b.Property<string>("StripeObjectId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("stripe_object_id");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_publisher_earnings");
+
+                    b.HasIndex("PublisherOrgId", "OccurredAt")
+                        .HasDatabaseName("ix_publisher_earnings_publisher_org_id_occurred_at");
+
+                    b.HasIndex("StripeObjectId", "Type")
+                        .IsUnique()
+                        .HasDatabaseName("ix_publisher_earnings_stripe_object_id_type");
+
+                    b.ToTable("publisher_earnings");
+                });
+
+            modelBuilder.Entity("Flowamaz.Core.Entities.Economy.TemplatePurchase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AmountCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("amount_cents");
+
+                    b.Property<bool>("CancelAtPeriodEnd")
+                        .HasColumnType("boolean")
+                        .HasColumnName("cancel_at_period_end");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime?>("CurrentPeriodEnd")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("current_period_end");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("FeeCents")
+                        .HasColumnType("integer")
+                        .HasColumnName("fee_cents");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("PricingModel")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("pricing_model");
+
+                    b.Property<Guid>("PublisherOrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("publisher_org_id");
+
+                    b.Property<DateTime?>("PurchasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("purchased_at");
+
+                    b.Property<Guid?>("PurchasedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("purchased_by_user_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StripeCheckoutSessionId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("stripe_checkout_session_id");
+
+                    b.Property<string>("StripePaymentIntentId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("stripe_payment_intent_id");
+
+                    b.Property<string>("StripeSubscriptionId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("stripe_subscription_id");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_template_purchases");
+
+                    b.HasIndex("PublisherOrgId")
+                        .HasDatabaseName("ix_template_purchases_publisher_org_id");
+
+                    b.HasIndex("StripeCheckoutSessionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_template_purchases_stripe_checkout_session_id")
+                        .HasFilter("stripe_checkout_session_id IS NOT NULL");
+
+                    b.HasIndex("StripePaymentIntentId")
+                        .HasDatabaseName("ix_template_purchases_stripe_payment_intent_id")
+                        .HasFilter("stripe_payment_intent_id IS NOT NULL");
+
+                    b.HasIndex("StripeSubscriptionId")
+                        .HasDatabaseName("ix_template_purchases_stripe_subscription_id")
+                        .HasFilter("stripe_subscription_id IS NOT NULL");
+
+                    b.HasIndex("WorkspaceId", "TemplateId")
+                        .HasDatabaseName("ix_template_purchases_workspace_id_template_id");
+
+                    b.ToTable("template_purchases");
+                });
+
             modelBuilder.Entity("Flowamaz.Core.Entities.Library.ConnectorRating", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1885,6 +2177,14 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("usd")
+                        .HasColumnName("currency");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -1925,6 +2225,20 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("preview_image_url");
+
+                    b.Property<int>("PriceCents")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("price_cents");
+
+                    b.Property<string>("PricingModel")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("free")
+                        .HasColumnName("pricing_model");
 
                     b.Property<string>("ReviewStatus")
                         .IsRequired()
@@ -1984,12 +2298,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Finance",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Two-level purchase approval with a resubmission loop for rejected requests.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Purchase Approval",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "purchase-approval",
                             Tags = "[\"finance\",\"approval\",\"purchase\"]",
@@ -2003,12 +2320,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "HR",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Multi-step new-hire onboarding checklist with HR approval gates.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Employee Onboarding",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "employee-onboarding",
                             Tags = "[\"hr\",\"onboarding\",\"checklist\"]",
@@ -2022,12 +2342,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "HR",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Manager-approved leave request with a calendar update step.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Leave Request",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "leave-request",
                             Tags = "[\"hr\",\"leave\",\"approval\"]",
@@ -2041,12 +2364,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "IT",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Triage, assign, resolve and close an IT support ticket.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "IT Support Ticket",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "it-support-ticket",
                             Tags = "[\"it\",\"support\",\"ticket\"]",
@@ -2060,12 +2386,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Legal",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Legal review gate followed by an e-signature placeholder step.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Contract Review",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "contract-review",
                             Tags = "[\"legal\",\"contract\",\"review\"]",
@@ -2079,12 +2408,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Finance",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Receipt upload, manager approval, then finance approval.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Expense Claim",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "expense-claim",
                             Tags = "[\"finance\",\"expense\",\"approval\"]",
@@ -2098,12 +2430,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Operations",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Procurement workflow with three sequential approval levels.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Vendor Onboarding",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "vendor-onboarding",
                             Tags = "[\"operations\",\"vendor\",\"procurement\"]",
@@ -2117,12 +2452,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "IT",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Detect, triage, escalate, resolve and run a post-mortem.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Incident Response",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "incident-response",
                             Tags = "[\"it\",\"incident\",\"response\"]",
@@ -2136,12 +2474,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Finance",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Customer-support review, finance approval, then payment trigger.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Customer Refund",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "customer-refund",
                             Tags = "[\"finance\",\"refund\",\"approval\"]",
@@ -2155,18 +2496,21 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             AverageRating = 0m,
                             Category = "Operations",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "usd",
                             Description = "Periodic compliance review workflow driven by due dates.",
                             InstallCount = 0,
                             IsActive = true,
                             IsDeleted = false,
                             IsOfficial = true,
                             Name = "Compliance Checklist",
+                            PriceCents = 0,
+                            PricingModel = "free",
                             ReviewStatus = "approved",
                             Slug = "compliance-checklist",
                             Tags = "[\"operations\",\"compliance\",\"review\"]",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Version = "1.0.0",
-                            YamlContent = "apiVersion: flowamaz/v1\nkind: Workflow\nmetadata:\n  id: compliance-checklist\n  name: \"Compliance Checklist\"\n  description: \"Periodic compliance review workflow driven by due dates.\"\n  version: \"1.0.0\"\nspec:\n  trigger:\n    type: schedule\n  variables:\n    period:\n      type: string\n      required: true\n  nodes:\n    - id: start\n      type: trigger\n      label: \"Review period starts\"\n    - id: gather-evidence\n      type: action\n      label: \"Gather evidence\"\n    - id: reviewer-sign-off\n      type: human-gate\n      label: \"Reviewer sign-off\"\n    - id: file-report\n      type: action\n      label: \"File compliance report\"\n    - id: done\n      type: end\n      label: \"Complete\"\n  edges:\n    - id: e1\n      from: start\n      to: gather-evidence\n    - id: e2\n      from: gather-evidence\n      to: reviewer-sign-off\n    - id: e3\n      from: reviewer-sign-off\n      to: file-report\n    - id: e4\n      from: file-report\n      to: done"
+                            YamlContent = "apiVersion: flowamaz/v1\nkind: Workflow\nmetadata:\n  id: compliance-checklist\n  name: \"Compliance Checklist\"\n  description: \"Periodic compliance review workflow driven by due dates.\"\n  version: \"1.0.0\"\nspec:\n  trigger:\n    type: schedule\n    config:\n      cron: \"0 9 1 * *\"   # 09:00 on the 1st of every month — edit after installing\n      timezone: \"UTC\"\n  variables:\n    period:\n      type: string\n      required: true\n  nodes:\n    - id: start\n      type: trigger\n      label: \"Review period starts\"\n    - id: gather-evidence\n      type: action\n      label: \"Gather evidence\"\n    - id: reviewer-sign-off\n      type: human-gate\n      label: \"Reviewer sign-off\"\n    - id: file-report\n      type: action\n      label: \"File compliance report\"\n    - id: done\n      type: end\n      label: \"Complete\"\n  edges:\n    - id: e1\n      from: start\n      to: gather-evidence\n    - id: e2\n      from: gather-evidence\n      to: reviewer-sign-off\n    - id: e3\n      from: reviewer-sign-off\n      to: file-report\n    - id: e4\n      from: file-report\n      to: done"
                         });
                 });
 
@@ -2849,9 +3193,18 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("delivery_status");
 
+                    b.Property<string>("EscalateToEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("escalate_to_email");
+
                     b.Property<Guid?>("EscalatedTo")
                         .HasColumnType("uuid")
                         .HasColumnName("escalated_to");
+
+                    b.Property<int>("EscalationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("escalation_count");
 
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
@@ -2870,6 +3223,18 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("node_id");
+
+                    b.Property<string>("OnTimeout")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("fail")
+                        .HasColumnName("on_timeout");
+
+                    b.Property<int?>("TimeoutHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("timeout_hours");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

@@ -51,7 +51,16 @@ export const webhookService = {
   },
 };
 
-/** Public receive URL for an endpoint, shown in the UI and curl examples. */
-export function webhookUrl(endpointId: string): string {
-  return `https://app.flowamaz.io/webhooks/${endpointId}`;
+/**
+ * Public receive URL for an endpoint, shown in the UI and curl examples. Built from the deployment the
+ * app is served from: the configured API base URL, else this page's origin (the dev server and nginx
+ * both forward /webhooks to the API), so a local or self-hosted install never shows app.flowamaz.io.
+ */
+export function webhookUrl(
+  endpointId: string,
+  apiBaseUrl: string = import.meta.env.VITE_API_BASE_URL ?? '',
+  origin: string = typeof window !== 'undefined' ? window.location.origin : '',
+): string {
+  const base = (apiBaseUrl || origin || 'https://app.flowamaz.io').replace(/\/+$/, '');
+  return `${base}/webhooks/${endpointId}`;
 }

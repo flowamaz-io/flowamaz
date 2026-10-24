@@ -8,7 +8,9 @@ using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Models;
 using Flowamaz.Core.Workflow;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
+using YamlDotNet.Serialization;
 
 namespace Flowamaz.Api.Controllers;
 
@@ -21,8 +23,13 @@ public sealed class WorkflowCreationController : ControllerBase
     private readonly IVisualInputService _visualInput;
     private readonly IConversationImportService _conversationImport;
     private readonly ISopParsingService _sopParsing;
+    private readonly IWorkflowValidator _validator;
     private readonly WorkflowService _workflows;
     private readonly ICurrentUserService _currentUser;
+    private readonly INlClarificationService _clarification;
+    private readonly IValidator<NlWorkflowRequest> _nlValidator;
+    private readonly IValidator<ConfirmedVisualGraph> _graphValidator;
+    private readonly IValidator<VisualPreviewRequest> _previewValidator;
     private readonly ILogger<WorkflowCreationController> _log;
 
     private const long MaxImageBytes = 10 * 1024 * 1024;
@@ -43,15 +50,25 @@ public sealed class WorkflowCreationController : ControllerBase
         IVisualInputService visualInput,
         IConversationImportService conversationImport,
         ISopParsingService sopParsing,
+        IWorkflowValidator validator,
         WorkflowService workflows,
         ICurrentUserService currentUser,
+        INlClarificationService clarification,
+        IValidator<NlWorkflowRequest> nlValidator,
+        IValidator<ConfirmedVisualGraph> graphValidator,
+        IValidator<VisualPreviewRequest> previewValidator,
         ILogger<WorkflowCreationController> log)
     {
+        _clarification = clarification;
+        _nlValidator = nlValidator;
+        _graphValidator = graphValidator;
+        _previewValidator = previewValidator;
         _generator = generator;
         _copilot = copilot;
         _visualInput = visualInput;
         _conversationImport = conversationImport;
         _sopParsing = sopParsing;
+        _validator = validator;
         _workflows = workflows;
         _currentUser = currentUser;
         _log = log;
@@ -68,13 +85,16 @@ public sealed class WorkflowCreationController : ControllerBase
     {
         _log.LogInformation("WorkflowCreationController.CreateWorkflow entry workspaceId={WorkspaceId} method={Method}", workspaceId, request.Method);
 
-        if (string.IsNullOrWhiteSpace(request.Name))
+        // Generated workflows may leave the name to the AI: run 4 showed conversation and photo workflows
+        // saved as "Untitled Workflow" although the AI had named them. Canvas still needs a name.
+        var givenName = IsPlaceholderName(request.Name) ? null : request.Name.Trim();
+        if (givenName is null && request.Method == "canvas")
             return BadRequest(new { error = "Provide a workflow name to continue." });
 
         if (!ValidMethods.Contains(request.Method))
             return BadRequest(new { error = $"Unknown method '{request.Method}'. Use: nl, voice, visual, conversation, document, or canvas." });
 
-        var slug = UniqueSlug(request.Name);
+        var slug = UniqueSlug(givenName ?? "untitled");
         string yamlContent;
         ValidationResult? validationResult = null;
         int tokensUsed = 0;
@@ -91,6 +111,7 @@ public sealed class WorkflowCreationController : ControllerBase
                     if (request.NlRequest is null)
                         return BadRequest(new { error = "Provide nlRequest fields (purpose, steps, trigger) to generate a workflow." });
 
+                    await _nlValidator.ValidateAndThrowAsync(request.NlRequest, cancellationToken);
                     var gen = await _generator.GenerateAsync(request.NlRequest, workspaceId, cancellationToken);
                     yamlContent = gen.YamlContent;
                     validationResult = gen.ValidationResult;
@@ -101,6 +122,17 @@ public sealed class WorkflowCreationController : ControllerBase
 
                 case "visual":
                 {
+                    // Review path: the user confirmed the graph from POST /visual/preview. No AI call —
+                    // YAML is built from exactly what they kept/renamed, then validated below.
+                    if (request.VisualGraph is not null)
+                    {
+                        await _graphValidator.ValidateAndThrowAsync(request.VisualGraph, cancellationToken);
+                        yamlContent = _visualInput.BuildYamlFromConfirmedGraph(request.VisualGraph, slug, givenName ?? "Visual Workflow");
+                        break;
+                    }
+
+                    // One-shot path (API clients that skip review): low-confidence nodes are kept and
+                    // marked config.review_needed: true rather than dropped.
                     if (string.IsNullOrWhiteSpace(request.ImageBase64))
                         return BadRequest(new { error = "Provide an imageBase64 value for visual workflow creation." });
 
@@ -159,26 +191,54 @@ public sealed class WorkflowCreationController : ControllerBase
                 }
 
                 default: // "canvas"
-                    yamlContent = $"""
-                                  apiVersion: flowamaz/v1
-                                  kind: Workflow
-                                  metadata:
-                                    id: {slug}
-                                    name: "{request.Name}"
-                                  spec:
-                                    trigger:
-                                      type: manual
-                                    nodes: []
-                                    edges: []
-                                  """;
+                    yamlContent = BuildCanvasSkeleton(slug, givenName!);
                     break;
             }
         }
-        catch (Exception ex) when (ex is not WorkflowSlugExistsException)
+        catch (Exception ex) when (ex is not WorkflowSlugExistsException and not AppException
+                                       and not OperationCanceledException and not ValidationException)
         {
+            // Provider failures (bad key, throttling, outage) arrive as AiProviderException (an AppException)
+            // with their own actionable message. Anything else is unexpected: log it, never echo ex.Message.
             _log.LogError(ex, "WorkflowCreationController.CreateWorkflow AI service error method={Method}", method);
-            return StatusCode(502, new { error = $"AI processing failed. {ex.Message} Please try again." });
+            return StatusCode(502, new
+            {
+                error = UnexpectedAiFailure("generate the workflow"),
+                code = "AI_PROCESSING_FAILED",
+            });
         }
+
+        // Never persist a generated definition that does not validate. Saving invalid YAML produced
+        // drafts that could not be opened, published or run, and hid AI misconfiguration.
+        if (method != "canvas")
+        {
+            validationResult ??= await _validator.ValidateAsync(yamlContent, workspaceId, cancellationToken);
+            if (!validationResult.IsValid)
+            {
+                var first = validationResult.Errors.FirstOrDefault()?.Message ?? "The generated definition could not be parsed.";
+                _log.LogWarning("WorkflowCreationController.CreateWorkflow rejected invalid generated YAML method={Method} errors={Count}",
+                    method, validationResult.Errors.Count);
+                return UnprocessableEntity(new
+                {
+                    // Run 3: the old advice ("add more detail") blamed the user's input when the AI output was
+                    // at fault. Say what failed, that retrying helps, and the fallbacks.
+                    error = $"The AI's workflow draft failed validation, so nothing was saved ({validationResult.Errors.Count} problem(s); first: {first}). " +
+                            "Results vary between attempts, so try again. If it keeps failing, write one step per line in Steps, " +
+                            "or start from a template or Draw on canvas.",
+                    code = "WORKFLOW_GENERATION_INVALID",
+                    validation = validationResult,
+                });
+            }
+        }
+
+        var name = givenName ?? NameFromYaml(yamlContent) ?? method switch
+        {
+            "visual" => "Workflow from photo",
+            "conversation" => "Workflow from conversation",
+            "document" => "Workflow from document",
+            _ => "Generated workflow",
+        };
+        if (givenName is null) slug = UniqueSlug(name);
 
         var createdByMethod = method switch
         {
@@ -193,7 +253,7 @@ public sealed class WorkflowCreationController : ControllerBase
         try
         {
             var definition = await _workflows.CreateAsync(workspaceId, _currentUser.UserId!.Value,
-                new CreateWorkflowDefinitionRequest(request.Name, slug, yamlContent, null, createdByMethod),
+                new CreateWorkflowDefinitionRequest(name, slug, yamlContent, null, createdByMethod),
                 cancellationToken);
 
             _log.LogInformation("WorkflowCreationController.CreateWorkflow exit workflowId={WorkflowId} method={Method} tokens={Tokens}", definition.Id, method, tokensUsed);
@@ -201,7 +261,7 @@ public sealed class WorkflowCreationController : ControllerBase
         }
         catch (WorkflowSlugExistsException)
         {
-            return Conflict(new { error = $"A workflow named '{request.Name}' already exists in this workspace. Choose a different name." });
+            return Conflict(new { error = $"A workflow named '{name}' already exists in this workspace. Choose a different name." });
         }
     }
 
@@ -217,6 +277,73 @@ public sealed class WorkflowCreationController : ControllerBase
         var result = await _generator.GenerateAsync(request, workspaceId, cancellationToken);
         _log.LogInformation("WorkflowCreationController.GenerateWorkflow exit workspaceId={WorkspaceId} tokens={Tokens} cached={Cached}", workspaceId, result.TokensUsed, result.Cached);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// NL creation step 1 (optional): returns up to 3 clarifying questions about missing essentials
+    /// (trigger, approver, rejection path, systems). Empty list = generate straight away. Answers go
+    /// back in <c>nlRequest.clarifications</c> on POST /create. Heuristics first; AI only for very thin input.
+    /// </summary>
+    [HttpPost("clarify")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    public async Task<ActionResult<ClarificationResult>> Clarify(
+        Guid workspaceId, [FromBody] NlWorkflowRequest request, CancellationToken cancellationToken)
+    {
+        _log.LogInformation("WorkflowCreationController.Clarify entry workspaceId={WorkspaceId}", workspaceId);
+        await _nlValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        var result = await _clarification.GetQuestionsAsync(request, workspaceId, cancellationToken);
+
+        _log.LogInformation("WorkflowCreationController.Clarify exit questions={Count} usedAi={UsedAi}", result.Questions.Count, result.UsedAi);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Visual creation step 1: parse the image and return the full detected graph for review. Nodes under
+    /// the confidence threshold are flagged (<c>reviewNeeded</c>) with the AI's reason. Nothing is saved;
+    /// POST /create with method=visual and <c>visualGraph</c> creates the workflow from the confirmed graph.
+    /// </summary>
+    [HttpPost("visual/preview")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    [RequestSizeLimit(15 * 1024 * 1024)]
+    public async Task<ActionResult<VisualPreviewResult>> PreviewVisual(
+        Guid workspaceId, [FromBody] VisualPreviewRequest request, CancellationToken cancellationToken)
+    {
+        _log.LogInformation("WorkflowCreationController.PreviewVisual entry workspaceId={WorkspaceId}", workspaceId);
+        await _previewValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        var imageBytes = Convert.FromBase64String(request.ImageBase64);
+        var mimeType = (request.ImageMimeType ?? "image/jpeg").ToLowerInvariant();
+
+        VisualPreviewResult preview;
+        try
+        {
+            preview = await _visualInput.PreviewImageAsync(imageBytes, mimeType, workspaceId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not AppException and not OperationCanceledException)
+        {
+            _log.LogError(ex, "WorkflowCreationController.PreviewVisual AI service error workspaceId={WorkspaceId}", workspaceId);
+            return StatusCode(502, new
+            {
+                error = UnexpectedAiFailure("analyse the diagram"),
+                code = "AI_PROCESSING_FAILED",
+            });
+        }
+
+        if (preview.Nodes.Count == 0)
+        {
+            _log.LogWarning("WorkflowCreationController.PreviewVisual nothing detected workspaceId={WorkspaceId}", workspaceId);
+            return UnprocessableEntity(new
+            {
+                error = "We couldn't find any workflow steps in that image. Use a clearer, well-lit photo where boxes and arrows " +
+                        "are visible, crop out the background, then upload again — or start from the canvas.",
+                code = "VISUAL_NOTHING_DETECTED",
+            });
+        }
+
+        _log.LogInformation("WorkflowCreationController.PreviewVisual exit nodes={Nodes} reviewNeeded={Review}",
+            preview.Nodes.Count, preview.Nodes.Count(n => n.ReviewNeeded));
+        return Ok(preview);
     }
 
     /// <summary>
@@ -236,10 +363,16 @@ public sealed class WorkflowCreationController : ControllerBase
         {
             result = await _copilot.ProcessCommandAsync(request.Command, request.YamlContent, workspaceId, userId, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not AppException and not OperationCanceledException)
         {
+            // AppExceptions (e.g. AiProviderException for a rejected AI key — B9) propagate to the global
+            // middleware with their own actionable message and status. Only the unexpected lands here.
             _log.LogError(ex, "WorkflowCreationController.Copilot service error workspaceId={WorkspaceId}", workspaceId);
-            return StatusCode(503, new { error = $"Co-pilot is temporarily unavailable. {ex.Message} Please try again in a moment." });
+            return StatusCode(502, new
+            {
+                error = UnexpectedAiFailure("process the Co-pilot command"),
+                code = "AI_PROCESSING_FAILED",
+            });
         }
 
         if (!result.Success)
@@ -334,6 +467,63 @@ public sealed class WorkflowCreationController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Actionable text for an unexpected (non-provider) AI pipeline failure. The raw exception is logged,
+    /// never returned — it can carry internal detail and tells the user nothing they can act on.
+    /// </summary>
+    internal static string UnexpectedAiFailure(string action) =>
+        $"AI processing failed: Flowamaz could not {action} because of an unexpected server error (details are in the server log). " +
+        "Nothing was saved. Try once more; if it fails again, start from the canvas instead and contact support@flowamaz.io " +
+        "with the time of the request.";
+
+    private static readonly ISerializer YamlWriter = new SerializerBuilder().DisableAliases().Build();
+
+    /// <summary>Empty canvas definition, serialised via YamlDotNet (CLAUDE.md rule 5) so the
+    /// user-supplied name can never break or inject into the YAML document.</summary>
+    internal static string BuildCanvasSkeleton(string slug, string name)
+    {
+        var doc = new Dictionary<string, object>
+        {
+            ["apiVersion"] = "flowamaz/v1",
+            ["kind"] = "Workflow",
+            ["metadata"] = new Dictionary<string, object> { ["id"] = slug, ["name"] = name },
+            ["spec"] = new Dictionary<string, object>
+            {
+                ["trigger"] = new Dictionary<string, object> { ["type"] = "manual" },
+                ["nodes"] = new List<object>(),
+                ["edges"] = new List<object>(),
+            },
+        };
+        return YamlWriter.Serialize(doc);
+    }
+
+    private static readonly HashSet<string> GenericNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Untitled Workflow", "Untitled", "Visual Workflow", "Imported Workflow", "Workflow",
+    };
+
+    internal static bool IsPlaceholderName(string? name) => string.IsNullOrWhiteSpace(name) || GenericNames.Contains(name.Trim());
+
+    /// <summary>metadata.name from generated YAML, unless it is empty or a generic placeholder.</summary>
+    internal static string? NameFromYaml(string? yaml)
+    {
+        if (string.IsNullOrWhiteSpace(yaml)) return null;
+        try
+        {
+            var doc = new DeserializerBuilder().Build().Deserialize<Dictionary<object, object?>>(yaml);
+            var name = doc?.GetValueOrDefault("metadata") is Dictionary<object, object?> metadata
+                ? metadata.GetValueOrDefault("name") as string
+                : null;
+            if (IsPlaceholderName(name)) return null;
+            var trimmed = name!.Trim();
+            return trimmed.Length > 120 ? trimmed[..120] : trimmed;
+        }
+        catch (YamlDotNet.Core.YamlException)
+        {
+            return null;
+        }
+    }
+
     private static string UniqueSlug(string name)
     {
         var base_ = Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
@@ -351,8 +541,12 @@ public sealed record UnifiedWorkflowCreateRequest(
     string? ConversationText = null,
     string? SourceType = null,
     string? DocumentBase64 = null,
-    string? DocumentMimeType = null
+    string? DocumentMimeType = null,
+    ConfirmedVisualGraph? VisualGraph = null
 );
+
+/// <summary>Body of POST /workflows/visual/preview.</summary>
+public sealed record VisualPreviewRequest(string ImageBase64, string? ImageMimeType = null);
 
 public sealed record WorkflowCreationResult(
     Guid WorkflowId,

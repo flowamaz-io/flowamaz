@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
 import FmAlert from '@/components/common/FmAlert.vue';
@@ -9,8 +9,10 @@ import { isOnboardingComplete } from '@/composables/useOnboarding';
 import { toUserFacingError } from '@/utils/error.util';
 import { APP_NAME } from '@/utils/constants';
 import { ssoService } from '@/services/sso.service';
+import { postLoginTarget } from '@/utils/redirect.util';
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuth();
 
 const email = ref('');
@@ -68,7 +70,7 @@ async function submit(): Promise<void> {
   try {
     await auth.login({ email: email.value.trim(), password: password.value, orgSlug: orgSlug.value.trim() });
     const orgId = auth.user.value?.orgId ?? '';
-    router.push(isOnboardingComplete(orgId) ? '/' : '/onboarding');
+    await router.push(postLoginTarget(route.query.redirect, isOnboardingComplete(orgId)));
   } catch (e) {
     error.value = toUserFacingError(e).message;
   } finally {

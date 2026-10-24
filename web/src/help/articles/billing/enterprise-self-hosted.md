@@ -58,6 +58,4 @@ For a feature-by-feature view of all tiers, see
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/billing/enterprise-self-hosted.md)

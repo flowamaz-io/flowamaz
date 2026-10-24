@@ -40,16 +40,57 @@ public sealed class GateService
         _audit = audit;
     }
 
-    public async Task<List<GateResponse>> ListPendingAsync(Guid workspaceId, CancellationToken ct = default)
+    /// <summary>
+    /// Pending gates for the approval queue. Test-run gates are excluded by default (O2) and, when
+    /// <paramref name="includeTest"/> is set, returned with <c>IsTest = true</c> so the UI can tag them.
+    /// </summary>
+    public async Task<List<GateResponse>> ListPendingAsync(Guid workspaceId, bool includeTest = false, CancellationToken ct = default)
     {
-        var gates = await _gates.GetPendingForWorkspaceAsync(workspaceId, ct);
-        return gates.Select(ToResponse).ToList();
+        _logger.LogDebug("GateService.ListPendingAsync entry workspace={WorkspaceId} includeTest={IncludeTest}", workspaceId, includeTest);
+        try
+        {
+            var gates = await _gates.GetPendingForWorkspaceAsync(workspaceId, includeTest, ct);
+            var testIds = includeTest && gates.Count > 0
+                ? await _gates.GetTestInstanceIdsAsync(workspaceId, gates.Select(g => g.InstanceId).Distinct().ToList(), ct) ?? []
+                : [];
+            var result = gates.Select(g => ToResponse(g) with { IsTest = testIds.Contains(g.InstanceId) }).ToList();
+            _logger.LogDebug("GateService.ListPendingAsync exit workspace={WorkspaceId} count={Count}", workspaceId, result.Count);
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "GateService.ListPendingAsync error workspace={WorkspaceId}", workspaceId);
+            throw;
+        }
+    }
+
+    /// <summary>Gates for the "All" tab: decided ones plus actionable pending ones, newest first (max 200).</summary>
+    public async Task<List<GateResponse>> ListRecentAsync(Guid workspaceId, bool includeTest = false, CancellationToken ct = default)
+    {
+        _logger.LogDebug("GateService.ListRecentAsync entry workspace={WorkspaceId} includeTest={IncludeTest}", workspaceId, includeTest);
+        try
+        {
+            var gates = await _gates.GetRecentForWorkspaceAsync(workspaceId, includeTest, 200, ct);
+            var testIds = includeTest && gates.Count > 0
+                ? await _gates.GetTestInstanceIdsAsync(workspaceId, gates.Select(g => g.InstanceId).Distinct().ToList(), ct) ?? []
+                : [];
+            var result = gates.Select(g => ToResponse(g) with { IsTest = testIds.Contains(g.InstanceId) }).ToList();
+            _logger.LogDebug("GateService.ListRecentAsync exit workspace={WorkspaceId} count={Count}", workspaceId, result.Count);
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "GateService.ListRecentAsync error workspace={WorkspaceId}", workspaceId);
+            throw;
+        }
     }
 
     public async Task<GateResponse?> GetAsync(Guid workspaceId, Guid instanceId, string nodeId, CancellationToken ct = default)
     {
         var gate = await _gates.GetByNodeAsync(instanceId, nodeId, ct);
-        return gate is null || gate.WorkspaceId != workspaceId ? null : ToResponse(gate);
+        if (gate is null || gate.WorkspaceId != workspaceId) return null;
+        var testIds = await _gates.GetTestInstanceIdsAsync(workspaceId, [instanceId], ct) ?? [];
+        return ToResponse(gate) with { IsTest = testIds.Contains(instanceId) };
     }
 
     /// <summary>
@@ -75,10 +116,13 @@ public sealed class GateService
         var gate = await _gates.GetByNodeAsync(instanceId, nodeId, ct);
         if (gate is null || gate.WorkspaceId != workspaceId) return null;
         if (gate.Decision != GateDecisionStatus.Pending) throw new GateAlreadyDecidedException(nodeId);
+        if (await _gates.IsInstanceFinishedAsync(instanceId, ct)) throw new GateRunEndedException(nodeId);
 
         var approved = string.Equals(decision, "approved", StringComparison.OrdinalIgnoreCase);
         gate.Decision = approved ? GateDecisionStatus.Approved : GateDecisionStatus.Rejected;
-        gate.DecidedBy = decidedBy;
+        // Public-API decisions pass Guid.Empty (no human); the audit row is attributed to the API key (O4).
+        Guid? decider = decidedBy == Guid.Empty ? null : decidedBy;
+        gate.DecidedBy = decider;
         gate.DecidedAt = DateTime.UtcNow;
         gate.DecisionNote = note;
         _gates.Update(gate);
@@ -101,16 +145,22 @@ public sealed class GateService
         {
             await _orchestrator.CompleteNodeAsync(instanceId, nodeId, $$"""{"decision":"approved"}""", "gate", ct);
         }
+        else if (await _orchestrator.HasDecisionRouteAsync(instanceId, nodeId, "rejected", ct))
+        {
+            // The workflow handles rejection (e.g. "Approved?" router → notify requester): continue down that path.
+            await _orchestrator.CompleteNodeAsync(instanceId, nodeId, $$"""{"decision":"rejected"}""", "gate", ct);
+        }
         else
         {
-            await _orchestrator.FailNodeAsync(instanceId, nodeId, $"Gate rejected{(string.IsNullOrWhiteSpace(note) ? "" : $": {note}")}", "gate", ct);
+            await _orchestrator.FailNodeAsync(instanceId, nodeId, $"Gate rejected{(string.IsNullOrWhiteSpace(note) ? "" : $": {note}")}", "gate", ct,
+                retryable: false);
         }
 
         _audit?.RecordAsync(new Core.Models.AuditEventRequest
         {
             WorkspaceId = workspaceId,
-            ActorUserId = decidedBy,
-            ActorType = "user",
+            ActorUserId = decider,
+            ActorType = decider.HasValue ? "user" : "system",
             EventType = approved ? "gate.approved" : "gate.rejected",
             ResourceType = "gate",
             ResourceId = gate.Id,

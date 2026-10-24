@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
@@ -96,10 +97,10 @@ public sealed class OAuthService : IOAuthService
         {
             "slack" => await ExchangeSlackAsync(httpClient, code, redirectUri, ct),
             "github" => await ExchangeGitHubAsync(httpClient, code, ct),
-            "microsoft-teams" => await ExchangeMicrosoftAsync(httpClient, code, redirectUri, ct),
+            "microsoft-teams" or "microsoft-365" => await ExchangeMicrosoftAsync(httpClient, connectorId, code, redirectUri, ct),
             _ => throw new NotSupportedException(
                 $"OAuth token exchange is not supported for connector '{connectorId}'. " +
-                "Supported connectors: slack, github, microsoft-teams.")
+                "Supported connectors: slack, github, microsoft-teams, microsoft-365.")
         };
     }
 
@@ -173,16 +174,9 @@ public sealed class OAuthService : IOAuthService
     }
 
     private async Task<string> ExchangeMicrosoftAsync(
-        HttpClient httpClient, string code, string redirectUri, CancellationToken ct)
+        HttpClient httpClient, string connectorId, string code, string redirectUri, CancellationToken ct)
     {
-        var clientId = _configuration["MICROSOFT_CLIENT_ID"]
-            ?? _configuration["Connectors:MicrosoftTeams:ClientId"]
-            ?? throw new InvalidOperationException(
-                "Microsoft OAuth is not configured. Set MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET.");
-        var clientSecret = _configuration["MICROSOFT_CLIENT_SECRET"]
-            ?? throw new InvalidOperationException(
-                "Microsoft OAuth client secret is not configured. Set MICROSOFT_CLIENT_SECRET.");
-        var tenantId = _configuration["MICROSOFT_TENANT_ID"] ?? "common";
+        var (clientId, clientSecret, tenantId) = MicrosoftAppConfig();
 
         var response = await httpClient.PostAsync(
             $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token",
@@ -193,18 +187,72 @@ public sealed class OAuthService : IOAuthService
                 ["client_secret"] = clientSecret,
                 ["redirect_uri"] = redirectUri,
                 ["grant_type"] = "authorization_code",
-                ["scope"] = "https://graph.microsoft.com/.default offline_access"
+                ["scope"] = MicrosoftScopes(connectorId)
             }), ct);
 
+        var bundle = await ReadMicrosoftBundleAsync(response, ct);
+        // Stored as a JSON bundle so the refresh token survives; Graph access tokens expire in ~1h.
+        return bundle.ToJson();
+    }
+
+    public async Task<OAuthTokenBundle?> RefreshAsync(string connectorId, string refreshToken, CancellationToken ct = default)
+    {
+        _logger.LogInformation("[OAuthService] RefreshAsync entry connector={ConnectorId}", connectorId);
+        if (connectorId is not ("microsoft-teams" or "microsoft-365") || string.IsNullOrEmpty(refreshToken))
+        {
+            _logger.LogInformation("[OAuthService] RefreshAsync exit — refresh not supported for {ConnectorId}", connectorId);
+            return null;
+        }
+
+        var (clientId, clientSecret, tenantId) = MicrosoftAppConfig();
+        var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+        var response = await httpClient.PostAsync(
+            $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
+                ["grant_type"] = "refresh_token",
+                ["refresh_token"] = refreshToken,
+                ["scope"] = MicrosoftScopes(connectorId)
+            }), ct);
+
+        var bundle = await ReadMicrosoftBundleAsync(response, ct);
+        // Microsoft may omit a new refresh token; keep the old one in that case.
+        var result = bundle with { RefreshToken = bundle.RefreshToken ?? refreshToken };
+        _logger.LogInformation("[OAuthService] RefreshAsync exit connector={ConnectorId}", connectorId);
+        return result;
+    }
+
+    private static async Task<OAuthTokenBundle> ReadMicrosoftBundleAsync(HttpResponseMessage response, CancellationToken ct)
+    {
         var msTokens = await response.Content.ReadFromJsonAsync<MicrosoftOAuthResponse>(ct)
-            ?? throw new OAuthException("Microsoft token exchange returned an empty response.");
+            ?? throw new OAuthException("Microsoft token endpoint returned an empty response.");
 
         if (string.IsNullOrEmpty(msTokens.AccessToken))
             throw new OAuthException(
-                "Microsoft token exchange succeeded but returned no access_token. Check the requested scopes.");
+                $"Microsoft sign-in failed ({msTokens.Error ?? "no access_token"}). Reconnect the account and approve the requested permissions.");
 
-        return msTokens.AccessToken;
+        var expires = msTokens.ExpiresIn > 0 ? DateTime.UtcNow.AddSeconds(msTokens.ExpiresIn) : (DateTime?)null;
+        return new OAuthTokenBundle(msTokens.AccessToken, msTokens.RefreshToken, expires);
     }
+
+    private (string ClientId, string ClientSecret, string TenantId) MicrosoftAppConfig()
+    {
+        var clientId = _configuration["MICROSOFT_CLIENT_ID"]
+            ?? _configuration["Connectors:MicrosoftTeams:ClientId"]
+            ?? throw new InvalidOperationException(
+                "Microsoft OAuth is not configured. Set MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET.");
+        var clientSecret = _configuration["MICROSOFT_CLIENT_SECRET"]
+            ?? throw new InvalidOperationException(
+                "Microsoft OAuth client secret is not configured. Set MICROSOFT_CLIENT_SECRET.");
+        return (clientId, clientSecret, _configuration["MICROSOFT_TENANT_ID"] ?? "common");
+    }
+
+    /// <summary>Delegated Graph scopes per connector (must match the Entra app registration).</summary>
+    internal static string MicrosoftScopes(string connectorId) => connectorId == "microsoft-365"
+        ? "offline_access User.Read Mail.Send Calendars.ReadWrite Files.ReadWrite.All Sites.ReadWrite.All"
+        : "offline_access User.Read ChannelMessage.Send Team.ReadBasic.All Channel.ReadBasic.All";
 
     private string BuildAuthorizationUrl(string connectorId, string state, string platformUrl)
     {
@@ -214,10 +262,10 @@ public sealed class OAuthService : IOAuthService
         {
             "slack" => BuildSlackUrl(state, redirectUri),
             "github" => BuildGitHubUrl(state, redirectUri),
-            "microsoft-teams" => BuildTeamsUrl(state),
+            "microsoft-teams" or "microsoft-365" => BuildMicrosoftUrl(connectorId, state, redirectUri),
             _ => throw new NotSupportedException(
                 $"Connector '{connectorId}' does not support OAuth. " +
-                "Supported connectors: slack, github, microsoft-teams.")
+                "Supported connectors: slack, github, microsoft-teams, microsoft-365.")
         };
     }
 
@@ -226,7 +274,7 @@ public sealed class OAuthService : IOAuthService
         var clientId = _configuration["SLACK_CLIENT_ID"]
             ?? _configuration["Connectors:Slack:ClientId"]
             ?? throw new InvalidOperationException("Slack:ClientId is not configured. Set SLACK_CLIENT_ID.");
-        return $"https://slack.com/oauth/v2/authorize?client_id={clientId}&scope=channels:read,chat:write&state={state}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
+        return $"https://slack.com/oauth/v2/authorize?client_id={clientId}&scope=chat:write,chat:write.public,im:write,channels:read&state={state}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
     }
 
     private string BuildGitHubUrl(string state, string redirectUri)
@@ -234,15 +282,18 @@ public sealed class OAuthService : IOAuthService
         var clientId = _configuration["GITHUB_CLIENT_ID"]
             ?? _configuration["Connectors:GitHub:ClientId"]
             ?? throw new InvalidOperationException("GitHub:ClientId is not configured. Set GITHUB_CLIENT_ID.");
-        return $"https://github.com/login/oauth/authorize?client_id={clientId}&state={state}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
+        return $"https://github.com/login/oauth/authorize?client_id={clientId}&scope=repo&state={state}&redirect_uri={Uri.EscapeDataString(redirectUri)}";
     }
 
-    private string BuildTeamsUrl(string state)
+    private string BuildMicrosoftUrl(string connectorId, string state, string redirectUri)
     {
         var clientId = _configuration["MICROSOFT_CLIENT_ID"]
             ?? _configuration["Connectors:MicrosoftTeams:ClientId"]
             ?? throw new InvalidOperationException("Microsoft:ClientId is not configured. Set MICROSOFT_CLIENT_ID.");
-        return $"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id={clientId}&response_type=code&state={state}";
+        var tenantId = _configuration["MICROSOFT_TENANT_ID"] ?? "common";
+        return $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/authorize?client_id={clientId}" +
+               $"&response_type=code&response_mode=query&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+               $"&scope={Uri.EscapeDataString(MicrosoftScopes(connectorId))}&state={state}";
     }
 
     private sealed record OAuthStateData(Guid WorkspaceId, string ConnectorId);
@@ -290,4 +341,7 @@ internal sealed class MicrosoftOAuthResponse
 
     [JsonPropertyName("token_type")]
     public string? TokenType { get; init; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; init; }
 }

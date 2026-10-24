@@ -53,6 +53,4 @@ regenerate from a revised description if the shape is off.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/ai/nl-workflow-creation.md)

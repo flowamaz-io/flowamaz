@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { Download, Eye } from 'lucide-vue-next';
 import type { TemplateListItem } from '@/services/template.service';
+import TemplatePriceBadge from './TemplatePriceBadge.vue';
 
 const props = defineProps<{ template: TemplateListItem }>();
 const emit = defineEmits<{ preview: [id: string]; install: [id: string] }>();
@@ -66,9 +67,20 @@ const installLabel = computed<string>(() => {
       {{ template.description }}
     </p>
 
-    <span class="w-fit rounded-full bg-slate-100 px-2 py-0.5 text-xs capitalize text-slate-600">
-      {{ template.category }}
-    </span>
+    <div class="flex flex-wrap items-center gap-2">
+      <TemplatePriceBadge
+        :pricing-model="template.pricingModel"
+        :price-cents="template.priceCents"
+        :currency="template.currency"
+      />
+      <span class="w-fit rounded-full bg-slate-100 px-2 py-0.5 text-xs capitalize text-slate-600">
+        {{ template.category }}
+      </span>
+      <span
+        v-if="template.publisherName"
+        class="truncate text-xs text-slate-400"
+      >by {{ template.publisherName }}</span>
+    </div>
 
     <!-- Footer: installs + actions -->
     <div class="mt-auto flex items-center justify-between pt-1">

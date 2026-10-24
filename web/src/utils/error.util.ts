@@ -16,9 +16,15 @@ const codeToArticle: Record<string, string> = {
 export function toUserFacingError(error: unknown): UserFacingError {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as Partial<ApiErrorEnvelope> | undefined;
-    if (data && typeof data.message === 'string' && data.message.length > 0) {
+    // Controllers that return BadRequest/UnprocessableEntity({ error, code }) bypass the global
+    // exception envelope, so accept `error` as well as `message`.
+    const serverMessage =
+      (data && typeof data.message === 'string' && data.message) ||
+      (data && typeof (data as { error?: unknown }).error === 'string' && (data as { error: string }).error) ||
+      '';
+    if (data && serverMessage.length > 0) {
       return {
-        message: data.message,
+        message: serverMessage,
         code: data.code,
         helpArticle: data.code ? codeToArticle[data.code] : undefined,
         correlationId: data.correlationId,
@@ -29,6 +35,12 @@ export function toUserFacingError(error: unknown): UserFacingError {
         message:
           'Could not reach the Flowamaz API. Check your connection and that the backend is running, then try again.',
         code: 'NETWORK_ERROR',
+      };
+    }
+    if (error.response?.status === 404) {
+      return {
+        message: "That item wasn't found (HTTP 404). It may have been deleted, or the link or ID is wrong. Go back to the list and open it from there.",
+        code: 'NOT_FOUND',
       };
     }
     return {
@@ -45,4 +57,14 @@ export function toUserFacingError(error: unknown): UserFacingError {
     message: 'An unexpected error occurred. Please try again — if it keeps happening, contact support@flowamaz.io.',
     code: 'UNKNOWN',
   };
+}
+
+/**
+ * Co-pilot error text for the editor panel. A server message (e.g. "the platform AI key was rejected —
+ * set Ai__AnthropicPlatformKey…") is shown verbatim; "check your connection" only appears when the API
+ * really could not be reached.
+ */
+export function copilotErrorMessage(error: unknown): string {
+  const { message } = toUserFacingError(error);
+  return `Co-pilot request failed. ${message}`;
 }

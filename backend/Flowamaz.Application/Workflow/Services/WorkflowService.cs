@@ -89,6 +89,7 @@ public sealed class WorkflowService
             SlaThresholdMs = request.SlaThresholdMs,
             CreatedBy = createdBy,
         };
+        SyncFromYaml(definition);
 
         await _definitions.AddAsync(definition, ct);
 
@@ -131,6 +132,7 @@ public sealed class WorkflowService
 
         definition.YamlContent = yamlContent;
         definition.SlaThresholdMs = slaThresholdMs;
+        SyncFromYaml(definition);
 
         var commit = await _git.CommitWorkflowAsync(
             workspaceId, definition.Id, yamlContent ?? string.Empty,
@@ -140,6 +142,17 @@ public sealed class WorkflowService
         _definitions.Update(definition);
         await _unitOfWork.SaveChangesAsync(ct);
         return ToResponse(definition);
+    }
+
+    /// <summary>
+    /// Keeps the overview's trigger type and description in step with the YAML on every save (they were
+    /// only set at publish / never). Schedule validity is still enforced at publish.
+    /// </summary>
+    private static void SyncFromYaml(WorkflowDefinition definition)
+    {
+        definition.TriggerType = Scheduling.WorkflowTriggerReader.Read(definition.YamlContent).Type;
+        var description = Scheduling.WorkflowTriggerReader.ReadDescription(definition.YamlContent);
+        if (description is not null) definition.Description = description;
     }
 
     public async Task<bool> SoftDeleteAsync(Guid workspaceId, Guid id, CancellationToken ct = default)
@@ -219,6 +232,14 @@ public sealed class WorkflowService
         if (definition is null) return null;
 
         await _parser.ParseAsync(definition.YamlContent, ct); // never publish an invalid graph
+
+        // Record the trigger type so the schedule job can find scheduled workflows, and refuse to
+        // publish a schedule that could never fire.
+        var trigger = Scheduling.WorkflowTriggerReader.Read(definition.YamlContent);
+        if (trigger.Type == WorkflowTriggerType.Schedule
+            && !Scheduling.CronSchedule.TryParse(trigger.Cron, trigger.TimeZone, out _, out var scheduleError))
+            throw new InvalidScheduleException(scheduleError);
+        definition.TriggerType = trigger.Type;
 
         // Demote the current production version, if any.
         var current = await _versions.GetProductionAsync(id, workspaceId, ct);

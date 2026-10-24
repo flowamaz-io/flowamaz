@@ -43,6 +43,4 @@ workflow works, publish it and trigger production instances the normal way.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/instances/test-runs.md)

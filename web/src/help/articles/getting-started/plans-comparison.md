@@ -57,6 +57,4 @@ Upgrades take effect immediately and are prorated. See the
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/getting-started/plans-comparison.md)

@@ -98,4 +98,23 @@ describe('WorkflowList empty state', () => {
     expect(buttons.length).toBe(CREATION_METHODS.length);
     expect(wrapper.text()).toContain(CREATION_METHODS[0].label);
   });
+
+  it('"Start from template" on the last step opens the Templates tab of the Library', async () => {
+    getMock.mockResolvedValue(null);
+    const wrapper = mountTour();
+    await flushPromises();
+
+    // Move to the last step (4 advances), then use its primary action.
+    for (let i = 0; i < 4; i += 1) {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+      await flushPromises();
+    }
+    const button = wrapper.findAll('button').find((b) => b.text().includes('Start from template'));
+    expect(button).toBeDefined();
+    await button!.trigger('click');
+    await flushPromises();
+
+    expect(pushMock).toHaveBeenCalledWith({ name: 'library', query: { tab: 'templates' } });
+    expect(setMock).toHaveBeenCalledWith('tour_completed_ws-1', true);
+  });
 });

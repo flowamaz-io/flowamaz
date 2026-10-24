@@ -59,6 +59,4 @@ To manage a workspace, open **Settings**. To add people, see
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/workspaces/what-is-a-workspace.md)

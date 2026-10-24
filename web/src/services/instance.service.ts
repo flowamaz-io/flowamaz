@@ -23,7 +23,10 @@ export interface InstanceListFilters {
   workflowDefinitionId?: string;
   from?: string;
   to?: string;
+  /** Production + test runs together. */
   includeTest?: boolean;
+  /** Only test runs (the Instances "Test" tab). */
+  testOnly?: boolean;
   page?: number;
   pageSize?: number;
 }

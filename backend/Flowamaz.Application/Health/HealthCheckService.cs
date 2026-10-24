@@ -3,7 +3,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 namespace Flowamaz.Application.Health;
 
 /// <summary>One dependency's status plus how long its probe took.</summary>
-public sealed record DependencyHealth(string Status, double ResponseMs);
+/// <summary>One dependency on /health. <c>Detail</c> says what was actually verified (e.g. "Platform key rejected").</summary>
+public sealed record DependencyHealth(string Status, double ResponseMs, string? Detail = null);
 
 /// <summary>The full /health response body — status, build metadata, and per-dependency probes.</summary>
 public sealed record HealthSummary(
@@ -31,7 +32,8 @@ public static class HealthCheckService
         {
             dependencies[name] = new DependencyHealth(
                 ToWireStatus(entry.Status),
-                Math.Round(entry.Duration.TotalMilliseconds, 2));
+                Math.Round(entry.Duration.TotalMilliseconds, 2),
+                entry.Description);
         }
 
         return new HealthSummary(

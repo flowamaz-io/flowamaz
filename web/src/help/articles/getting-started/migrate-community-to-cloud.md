@@ -53,6 +53,4 @@ a little longer while history uploads, but you can keep working during the trans
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/getting-started/migrate-community-to-cloud.md)

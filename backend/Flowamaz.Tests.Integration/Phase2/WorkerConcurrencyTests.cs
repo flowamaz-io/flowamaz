@@ -14,8 +14,7 @@ namespace Flowamaz.Tests.Integration.Phase2;
 /// </summary>
 public class WorkerConcurrencyTests : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
         .WithDatabase("flowamaz_concurrency_test")
         .WithUsername("flowamaz")
         .WithPassword("flowamaz_test_pw")

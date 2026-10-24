@@ -44,6 +44,4 @@ definition, so the timeline stays complete and auditable.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/workflows/workflow-versioning.md)

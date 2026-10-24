@@ -31,6 +31,8 @@ const creating = ref(false);
 
 const newPlainKey = ref<string | null>(null);
 const copied = ref(false);
+/** Inline validation message shown inside the create modal (toasts are easy to miss there). */
+const formError = ref('');
 
 const revokeTarget = ref<ApiKeyResponse | null>(null);
 const revoking = ref(false);
@@ -61,19 +63,33 @@ function toggleScope(scope: string): void {
   selectedScopes.value = selectedScopes.value.includes(scope)
     ? selectedScopes.value.filter((s) => s !== scope)
     : [...selectedScopes.value, scope];
+  if (selectedScopes.value.length > 0 && formError.value.startsWith('Pick at least one scope')) {
+    formError.value = '';
+  }
+}
+
+function openCreate(): void {
+  formError.value = '';
+  createOpen.value = true;
+}
+
+function dismissNewKey(): void {
+  newPlainKey.value = null;
+  copied.value = false;
 }
 
 async function submitCreate(): Promise<void> {
+  formError.value = '';
   if (!keyName.value.trim()) {
-    toast.error('Give your key a recognisable name, e.g. "CI pipeline".');
+    formError.value = 'Give your key a recognisable name, e.g. "CI pipeline".';
     return;
   }
   if (!environmentId.value.trim()) {
-    toast.error('Select or paste the environment ID this key belongs to.');
+    formError.value = 'Select the environment this key belongs to.';
     return;
   }
   if (selectedScopes.value.length === 0) {
-    toast.error('Pick at least one scope so the key can do something.');
+    formError.value = 'Pick at least one scope (e.g. "Read workflows") so the key can do something.';
     return;
   }
   creating.value = true;
@@ -84,12 +100,13 @@ async function submitCreate(): Promise<void> {
       scopes: selectedScopes.value,
       expiresAt: null,
     });
+    copied.value = false;
     newPlainKey.value = created.plainKey;
     createOpen.value = false;
     keyName.value = '';
     selectedScopes.value = ['workflows:read'];
   } catch (e) {
-    toast.error(toUserFacingError(e).message);
+    formError.value = toUserFacingError(e).message;
   } finally {
     creating.value = false;
   }
@@ -97,7 +114,12 @@ async function submitCreate(): Promise<void> {
 
 async function copyKey(): Promise<void> {
   if (!newPlainKey.value) return;
-  await navigator.clipboard.writeText(newPlainKey.value);
+  try {
+    await navigator.clipboard.writeText(newPlainKey.value);
+  } catch {
+    toast.error('Your browser blocked clipboard access. Select the key text and copy it manually.');
+    return;
+  }
   copied.value = true;
   toast.success('API key copied to clipboard.');
   window.setTimeout(() => (copied.value = false), 2000);
@@ -133,7 +155,7 @@ async function confirmRevoke(): Promise<void> {
           Programmatic access for triggering workflows and reading instances.
         </p>
       </div>
-      <FmButton @click="createOpen = true">
+      <FmButton @click="openCreate">
         <template #icon-left>
           <KeyRound class="h-4 w-4" />
         </template>
@@ -143,14 +165,20 @@ async function confirmRevoke(): Promise<void> {
 
     <FmAlert
       v-if="newPlainKey"
+      :key="newPlainKey"
       type="warning"
       dismissible
+      data-testid="new-api-key-banner"
+      @dismiss="dismissNewKey"
     >
       <p class="font-medium">
         Copy your new API key now — it won't be shown again.
       </p>
       <div class="mt-2 flex items-center gap-2">
-        <code class="flex-1 break-all rounded bg-white/70 px-2 py-1 text-xs">{{ newPlainKey }}</code>
+        <code
+          class="flex-1 break-all rounded bg-white/70 px-2 py-1 text-xs"
+          data-testid="new-api-key-value"
+        >{{ newPlainKey }}</code>
         <button
           type="button"
           class="rounded-lg border border-amber-300 bg-white p-1.5 hover:bg-amber-50"
@@ -191,7 +219,7 @@ async function confirmRevoke(): Promise<void> {
       title="No API keys yet"
       description="Create a key to call the Flowamaz API from your CI pipeline, scripts, or other systems."
       cta-label="Create your first API key"
-      @cta="createOpen = true"
+      @cta="openCreate"
     />
 
     <div
@@ -326,6 +354,14 @@ async function confirmRevoke(): Promise<void> {
             </label>
           </div>
         </div>
+        <p
+          v-if="formError"
+          class="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-700"
+          role="alert"
+          data-testid="api-key-form-error"
+        >
+          {{ formError }}
+        </p>
       </div>
       <template #footer>
         <FmButton

@@ -72,6 +72,4 @@ requires the Admin role.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/workspaces/api-keys.md)

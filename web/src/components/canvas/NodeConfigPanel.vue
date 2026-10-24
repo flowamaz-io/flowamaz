@@ -26,8 +26,10 @@ const props = withDefaults(
     workspaceId: string;
     variables?: WorkflowVariable[];
     webhookUrl?: string;
+    /** spec.trigger.type of the workflow, shown on trigger nodes that don't set their own. */
+    workflowTriggerType?: string;
   }>(),
-  { variables: () => [], webhookUrl: '' },
+  { variables: () => [], webhookUrl: '', workflowTriggerType: '' },
 );
 
 const emit = defineEmits<{
@@ -45,12 +47,15 @@ const ICONS: Record<string, typeof Zap> = {
 
 const workingLabel = ref('');
 const workingConfig = ref<Record<string, unknown>>({});
+/** Rows being edited for a map-shaped `inputs` (keeps half-typed rows with no field name yet). */
+const mapInputRows = ref<Mapping[] | null>(null);
 
 watch(
   () => props.node,
   (node) => {
     workingLabel.value = node?.label ?? '';
     workingConfig.value = node ? JSON.parse(JSON.stringify(node.config ?? {})) : {};
+    mapInputRows.value = null;
     activeTab.value = 'Basic';
   },
   { immediate: true },
@@ -61,15 +66,53 @@ const icon = computed(() => ICONS[nodeType.value] ?? Settings);
 const hasOutputs = computed(() => nodeType.value === 'action' || nodeType.value === 'ai');
 const visibleTabs = computed(() => TABS.filter((t) => t !== 'Outputs' || hasOutputs.value));
 
-const inputMappings = computed<Mapping[]>(() => (workingConfig.value.inputs as Mapping[]) ?? []);
-const outputMappings = computed<Mapping[]>(() => (workingConfig.value.outputs as Mapping[]) ?? []);
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// Action inputs are a map in the flowamaz/v1 spec (`inputs: { url: …, body: … }`, edited by
+// ActionConfig); other node types keep the canvas row list. Never turn one into the other.
+const inputsAsMap = computed(
+  () => isPlainObject(workingConfig.value.inputs) || (nodeType.value === 'action' && !Array.isArray(workingConfig.value.inputs)),
+);
+
+const inputMappings = computed<Mapping[]>(() => {
+  const raw = workingConfig.value.inputs;
+  if (!inputsAsMap.value) return Array.isArray(raw) ? (raw as Mapping[]) : [];
+  if (mapInputRows.value) return mapInputRows.value;
+  return Object.entries(isPlainObject(raw) ? raw : {}).map(([field, value]) => ({
+    field,
+    value: typeof value === 'string' ? value : JSON.stringify(value),
+  }));
+});
+const outputMappings = computed<Mapping[]>(() => {
+  const raw = workingConfig.value.outputs;
+  return Array.isArray(raw) ? (raw as Mapping[]) : [];
+});
 
 function updateConfig(next: Record<string, unknown>): void {
   workingConfig.value = next;
+  // ActionConfig may rewrite the inputs map; re-derive the rows from it.
+  mapInputRows.value = null;
 }
 
 function setInputs(rows: Mapping[]): void {
-  workingConfig.value = { ...workingConfig.value, inputs: rows };
+  if (!inputsAsMap.value) {
+    workingConfig.value = { ...workingConfig.value, inputs: rows };
+    return;
+  }
+  mapInputRows.value = rows;
+  const previous = isPlainObject(workingConfig.value.inputs) ? workingConfig.value.inputs : {};
+  const next: Record<string, unknown> = {};
+  for (const row of rows) {
+    const field = row.field.trim();
+    if (!field) continue;
+    const prev = previous[field];
+    // Keep non-string YAML values (numbers, objects) as they were unless the text was edited.
+    const unchanged = prev !== undefined && (typeof prev === 'string' ? prev : JSON.stringify(prev)) === row.value;
+    next[field] = unchanged ? prev : row.value;
+  }
+  workingConfig.value = { ...workingConfig.value, inputs: next };
 }
 
 function setOutputs(rows: Mapping[]): void {
@@ -158,15 +201,19 @@ function onKeydown(event: KeyboardEvent): void {
 
       <!-- Content -->
       <div class="flex-1 overflow-y-auto p-4">
+        <!-- Keyed by node id so per-node UI state (e.g. the gate's timeout unit) never leaks between nodes. -->
         <template v-if="activeTab === 'Basic'">
           <TriggerConfig
             v-if="nodeType === 'trigger'"
+            :key="`trigger-${node.id}`"
             :config="workingConfig"
             :webhook-url="webhookUrl"
+            :workflow-trigger-type="workflowTriggerType"
             @update="updateConfig"
           />
           <ActionConfig
             v-else-if="nodeType === 'action'"
+            :key="`action-${node.id}`"
             :config="workingConfig"
             :workspace-id="workspaceId"
             :variables="variables"
@@ -174,7 +221,9 @@ function onKeydown(event: KeyboardEvent): void {
           />
           <HumanGateConfig
             v-else-if="nodeType === 'human-gate'"
+            :key="`gate-${node.id}`"
             :config="workingConfig"
+            :workspace-id="workspaceId"
             @update="updateConfig"
           />
           <RouterConditionBuilder
@@ -322,6 +371,7 @@ function onKeydown(event: KeyboardEvent): void {
         </button>
         <button
           type="button"
+          data-test="save-node"
           class="rounded-md bg-indigo-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-400"
           @click="save"
         >

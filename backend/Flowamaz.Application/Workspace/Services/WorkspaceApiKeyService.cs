@@ -132,7 +132,7 @@ public sealed class WorkspaceApiKeyService : IWorkspaceApiKeyService
             _logger.LogDebug(
                 "WorkspaceApiKeyService.ValidateApiKeyAsync exit valid=true keyId={KeyId} workspaceId={WorkspaceId}",
                 key!.Id, key.WorkspaceId);
-            return new WorkspaceApiKeyValidationResult(key.Id, key.WorkspaceId, key.EnvironmentId, key.Scopes);
+            return new WorkspaceApiKeyValidationResult(key.Id, key.WorkspaceId, key.EnvironmentId, key.Scopes, key.Name, key.KeyPrefix);
         }
         catch (Exception ex)
         {

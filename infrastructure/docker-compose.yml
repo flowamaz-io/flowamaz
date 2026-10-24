@@ -27,6 +27,10 @@ services:
       ASPNETCORE_URLS: "http://+:8307"
       DB_CONNECTION_STRING: "Host=db;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}"
       REDIS_CONNECTION_STRING: "redis:6379"
+      # Run third-party connectors and Script/Shell in the sandbox container.
+      Connectors__Sandbox__Url: "http://connector-runner:8080"
+      CONNECTOR_RUNNER_SECRET: ${CONNECTOR_RUNNER_SECRET:?set CONNECTOR_RUNNER_SECRET (32+ chars)}
+    networks: [default, sandbox]
     depends_on:
       db:
         condition: service_healthy
@@ -75,6 +79,67 @@ services:
       - redisdata:/data
     command: redis-server --appendonly yes
     restart: unless-stopped
+
+  # ── Connector sandbox (FUNCTIONAL.md §9.5) ─────────────────────────────────────────────
+  # Third-party connector calls and Script/Shell steps run here, not in the API. The runner sits
+  # only on the internal "sandbox" network (no route to the internet, db or redis); its sole way
+  # out is the egress proxy, which refuses private/loopback/metadata addresses and non-80/443 ports.
+  connector-runner:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.runner
+    container_name: flowamaz-connector-runner
+    environment:
+      CONNECTOR_RUNNER_SECRET: ${CONNECTOR_RUNNER_SECRET:?set CONNECTOR_RUNNER_SECRET (32+ chars) in ../.env}
+      HTTPS_PROXY: http://egress-proxy:3128
+      HTTP_PROXY: http://egress-proxy:3128
+      NO_PROXY: ""
+      Connectors__ScriptShell__Enabled: "true"
+      Runner__MaxConcurrency: "16"
+    networks: [sandbox]
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    depends_on:
+      - egress-proxy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+
+  egress-proxy:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.egress-proxy
+    container_name: flowamaz-egress-proxy
+    environment:
+      Proxy__Port: "3128"
+      Proxy__AllowedPorts: "443,80"
+      Proxy__AllowPrivateNetworks: "false"
+    networks: [sandbox, egress]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  default: {}
+  # Internal only: no gateway to the outside world. API ↔ runner ↔ egress proxy.
+  sandbox:
+    internal: true
+  # The egress proxy's route out.
+  egress: {}
 
 volumes:
   pgdata:

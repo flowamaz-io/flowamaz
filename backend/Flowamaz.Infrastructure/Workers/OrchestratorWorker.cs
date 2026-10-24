@@ -134,7 +134,9 @@ public sealed class OrchestratorWorker : BackgroundService
                 "OrchestratorWorker {WorkerId} stepped instance={InstanceId} next={Next} complete={Complete} gate={Gate}",
                 _workerId, instanceId, result.NextNodes.Count, result.IsComplete, result.NeedsHumanGate);
 
-            if (!result.IsComplete && !result.NeedsHumanGate && result.NextNodes.Count > 0)
+            // Gate nodes are executed too: HumanGateNodeWorker creates the approval record and
+            // delivers it; the instance is then parked until the decision arrives.
+            if (!result.IsComplete && result.NextNodes.Count > 0)
             {
                 await ExecuteNodesAsync(services, orchestrator, workspaceId, instanceId, result.NextNodes, cancellationToken);
             }
@@ -164,7 +166,7 @@ public sealed class OrchestratorWorker : BackgroundService
         var version = await versions.GetByIdForWorkspaceAsync(instance.WorkflowVersionId, workspaceId, cancellationToken);
         if (version is null) return;
         var graph = await parser.ParseAsync(version.YamlContent, cancellationToken);
-        var emptyVariables = new Dictionary<string, JsonElement>();
+        var variables = await LoadVariablesAsync(services, instanceId, cancellationToken);
 
         foreach (var nodeId in nodeIds)
         {
@@ -175,16 +177,21 @@ public sealed class OrchestratorWorker : BackgroundService
 
             try
             {
-                var context = new NodeExecutionContext(instanceId, workspaceId, node, graph, emptyVariables, _workerId);
+                var context = new NodeExecutionContext(instanceId, workspaceId, node, graph, variables, _workerId);
                 var result = await nodeWorker.ExecuteAsync(context, cancellationToken);
                 if (result.Success)
                 {
                     var output = result.Output?.RootElement.GetRawText() ?? "{}";
                     await orchestrator.CompleteNodeAsync(instanceId, nodeId, output, _workerId, cancellationToken);
                 }
+                else if (result.IsGateWaiting && Guid.TryParse(result.GateDecisionId, out var gateId))
+                {
+                    await orchestrator.ParkAtGateAsync(instanceId, nodeId, gateId, cancellationToken);
+                }
                 else
                 {
-                    await orchestrator.FailNodeAsync(instanceId, nodeId, result.ErrorMessage ?? "Node execution failed.", _workerId, cancellationToken);
+                    await orchestrator.FailNodeAsync(instanceId, nodeId, result.ErrorMessage ?? "Node execution failed.", _workerId,
+                        cancellationToken, retryable: result.ShouldRetry);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -193,6 +200,28 @@ public sealed class OrchestratorWorker : BackgroundService
                 await orchestrator.FailNodeAsync(instanceId, nodeId, $"Node executor error: {ex.Message}", _workerId, cancellationToken);
             }
         }
+    }
+
+    /// <summary>Current instance variables as JSON values (workers read e.g. a gate's assignee from here).</summary>
+    private static async Task<IReadOnlyDictionary<string, JsonElement>> LoadVariablesAsync(
+        IServiceProvider services, Guid instanceId, CancellationToken cancellationToken)
+    {
+        var repo = services.GetRequiredService<IWorkflowVariableRepository>();
+        var rows = await repo.GetForInstanceAsync(instanceId, cancellationToken);
+        var result = new Dictionary<string, JsonElement>(rows.Count, StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(row.Value) ? "null" : row.Value);
+                result[row.Name] = doc.RootElement.Clone();
+            }
+            catch (JsonException)
+            {
+                result[row.Name] = JsonSerializer.SerializeToElement(row.Value);
+            }
+        }
+        return result;
     }
 
     private async Task RenewLeaseLoopAsync(Guid instanceId, CancellationToken cancellationToken)

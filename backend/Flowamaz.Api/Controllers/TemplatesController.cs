@@ -76,7 +76,9 @@ public sealed class TemplatesController : ControllerBase
 
         var result = await _templates.PublishTemplateAsync(
             request.WorkflowId, workspaceId, userId, orgId,
-            new PublishTemplateDetails(request.Name, request.Description, request.Category, request.Tags ?? [], request.PreviewImageUrl),
+            new PublishTemplateDetails(request.Name, request.Description, request.Category, request.Tags ?? [], request.PreviewImageUrl,
+                request.PricingModel is null ? null
+                    : new TemplatePricingRequest(request.PricingModel, request.PriceCents ?? 0, request.Currency ?? "usd")),
             ct);
         return Ok(result);
     }
@@ -92,4 +94,7 @@ public sealed record PublishTemplateRequest(
     string Description,
     string Category,
     string[]? Tags,
-    string? PreviewImageUrl);
+    string? PreviewImageUrl,
+    string? PricingModel = null,
+    int? PriceCents = null,
+    string? Currency = null);

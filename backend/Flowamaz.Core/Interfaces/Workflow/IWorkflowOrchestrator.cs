@@ -33,8 +33,26 @@ public interface IWorkflowOrchestrator
     /// <summary>Marks a node Completed, stores its output as a variable, and appends a NodeCompleted event.</summary>
     Task CompleteNodeAsync(Guid instanceId, string nodeId, string output, string leaseId, CancellationToken cancellationToken = default);
 
-    /// <summary>Marks a node Failed; re-queues with backoff if retries remain, else begins compensation if configured.</summary>
-    Task FailNodeAsync(Guid instanceId, string nodeId, string error, string leaseId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Marks a node Failed; re-queues with backoff if <paramref name="retryable"/> and retries remain,
+    /// else begins compensation if configured. Permanent failures (bad input, rejected credential,
+    /// gate rejection/timeout) pass <c>retryable: false</c> so the RetryPolicy is not consumed.
+    /// </summary>
+    Task FailNodeAsync(Guid instanceId, string nodeId, string error, string leaseId, CancellationToken cancellationToken = default,
+        bool retryable = true);
+
+    /// <summary>
+    /// Parks the instance at a human gate: the node stays Running, the instance becomes Waiting and a
+    /// GateWaiting event is appended. The decision later calls Complete/FailNodeAsync to resume.
+    /// </summary>
+    Task ParkAtGateAsync(Guid instanceId, string nodeId, Guid gateId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// True when the workflow routes <paramref name="decision"/> (e.g. "rejected") onward from this gate —
+    /// a <c>via</c>-labelled edge on the gate itself or on a router directly after it. A gate decision with
+    /// a route completes the node; without one a rejection fails the run as before.
+    /// </summary>
+    Task<bool> HasDecisionRouteAsync(Guid instanceId, string nodeId, string decision, CancellationToken cancellationToken = default);
 
     /// <summary>Cancels the instance, appends the event, and releases any worker lease.</summary>
     Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default);

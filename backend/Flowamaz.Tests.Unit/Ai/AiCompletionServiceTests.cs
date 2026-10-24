@@ -3,6 +3,7 @@ using System.Text;
 using FluentAssertions;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Core.Enums;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Models;
 using Flowamaz.Infrastructure.Services;
 using Microsoft.Extensions.Logging;
@@ -22,8 +23,8 @@ public class AiCompletionServiceTests
     private static ModelConfig Config(string? apiKey) =>
         new("claude-haiku-4-5", "anthropic", AiKeySource.Platform, apiKey, false, 200_000, true, true);
 
-    private static IOptions<AiOptions> Options(bool useStub = false) =>
-        Microsoft.Extensions.Options.Options.Create(new AiOptions { UseStubCompletion = useStub });
+    private static IOptions<AiOptions> Options(bool useStub = false, bool allowStubWithoutKey = false) =>
+        Microsoft.Extensions.Options.Options.Create(new AiOptions { UseStubCompletion = useStub, AllowStubWithoutKey = allowStubWithoutKey });
 
     private static (Mock<IHttpClientFactory> factory, RecordingHandler handler) FactoryReturning(
         HttpStatusCode status, string body)
@@ -35,11 +36,11 @@ public class AiCompletionServiceTests
     }
 
     [Fact]
-    public async Task NoPlatformKey_ReturnsStubAndLogsWarning()
+    public async Task NoPlatformKey_StubAllowed_ReturnsStubAndLogsWarning()
     {
         var factory = new Mock<IHttpClientFactory>();
         var logger = new Mock<ILogger<AiCompletionService>>();
-        var service = new AiCompletionService(factory.Object, Options(), logger.Object);
+        var service = new AiCompletionService(factory.Object, Options(allowStubWithoutKey: true), logger.Object);
 
         var result = await service.CompleteAsync(Config(apiKey: ""), "system", "Order total is 47500.");
 
@@ -49,6 +50,23 @@ public class AiCompletionServiceTests
             l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception>(),
                 (Func<It.IsAnyType, Exception?, string>)It.IsAny<object>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task NoPlatformKey_StubNotAllowed_ThrowsAiNotConfigured_AndCallsNoProvider()
+    {
+        var factory = new Mock<IHttpClientFactory>();
+        var service = new AiCompletionService(factory.Object, Options(), NullLogger());
+
+        var complete = () => service.CompleteAsync(Config(apiKey: ""), "system", "prompt");
+        var image = () => service.CompleteWithImageAsync(Config(apiKey: ""), "system", "aGk=", "image/png", "");
+        var batch = () => service.SubmitBatchAsync(Config(apiKey: ""), "system", "prompt");
+
+        (await complete.Should().ThrowAsync<Flowamaz.Core.Exceptions.AiNotConfiguredException>())
+            .Which.HttpStatusCode.Should().Be(503);
+        await image.Should().ThrowAsync<Flowamaz.Core.Exceptions.AiNotConfiguredException>();
+        await batch.Should().ThrowAsync<Flowamaz.Core.Exceptions.AiNotConfiguredException>();
+        factory.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -72,14 +90,87 @@ public class AiCompletionServiceTests
     }
 
     [Fact]
-    public async Task ProviderReturnsError_PropagatesException()
+    public async Task ProviderReturnsError_ThrowsActionableAiProviderException()
     {
         var (factory, _) = FactoryReturning(HttpStatusCode.InternalServerError, "{\"error\":\"overloaded\"}");
         var service = new AiCompletionService(factory.Object, Options(), NullLogger());
 
         var act = async () => await service.CompleteAsync(Config("sk-ant-test"), "system", "user");
 
-        await act.Should().ThrowAsync<HttpRequestException>();
+        var ex = (await act.Should().ThrowAsync<AiProviderException>()).Which;
+        ex.Kind.Should().Be(AiProviderFailureKind.Unavailable);
+        ex.HttpStatusCode.Should().Be(503);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, AiProviderFailureKind.AuthenticationFailed, 502, "AI_PROVIDER_AUTH_FAILED")]
+    [InlineData(HttpStatusCode.Forbidden, AiProviderFailureKind.AuthenticationFailed, 502, "AI_PROVIDER_AUTH_FAILED")]
+    [InlineData(HttpStatusCode.TooManyRequests, AiProviderFailureKind.RateLimited, 429, "AI_PROVIDER_RATE_LIMITED")]
+    [InlineData(HttpStatusCode.BadGateway, AiProviderFailureKind.Unavailable, 503, "AI_PROVIDER_UNAVAILABLE")]
+    [InlineData(HttpStatusCode.NotFound, AiProviderFailureKind.Rejected, 502, "AI_PROVIDER_REJECTED")]
+    public async Task ProviderStatus_maps_to_kind_status_and_code(
+        HttpStatusCode status, AiProviderFailureKind kind, int httpStatus, string code)
+    {
+        const string body = """{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}""";
+        var (factory, _) = FactoryReturning(status, body);
+        var service = new AiCompletionService(factory.Object, Options(), NullLogger());
+
+        var text = async () => await service.CompleteAsync(Config("sk-ant-test"), "system", "user");
+        var image = async () => await service.CompleteWithImageAsync(Config("sk-ant-test"), "system", "aGk=", "image/png", "");
+
+        var ex = (await text.Should().ThrowAsync<AiProviderException>()).Which;
+        ex.Kind.Should().Be(kind);
+        ex.HttpStatusCode.Should().Be(httpStatus);
+        ex.ErrorCode.Should().Be(code);
+        ex.ProviderStatusCode.Should().Be((int)status);
+        // Raw HTTP exception text and provider internals never reach the user-facing message.
+        ex.Message.Should().NotContain("Response status code does not indicate success");
+        ex.Message.Should().NotContain("invalid x-api-key");
+        ex.Message.Should().NotContain("sk-ant-test");
+        (await image.Should().ThrowAsync<AiProviderException>()).Which.Kind.Should().Be(kind);
+    }
+
+    [Fact]
+    public async Task Unauthorized_platform_key_message_names_the_setting_and_says_retry_wont_help()
+    {
+        var (factory, _) = FactoryReturning(HttpStatusCode.Unauthorized, "{}");
+        var service = new AiCompletionService(factory.Object, Options(), NullLogger());
+
+        var ex = (await service.Invoking(s => s.CompleteAsync(Config("sk-ant-test"), "system", "user"))
+            .Should().ThrowAsync<AiProviderException>()).Which;
+
+        ex.Message.Should().Contain("Ai__AnthropicPlatformKey")
+            .And.Contain("Settings → Workspace → AI model configuration")
+            .And.Contain("Retrying won't help");
+    }
+
+    [Fact]
+    public async Task Unauthorized_byok_key_message_points_at_the_workspace_key()
+    {
+        var (factory, _) = FactoryReturning(HttpStatusCode.Unauthorized, "{}");
+        var service = new AiCompletionService(factory.Object, Options(), NullLogger());
+        var byok = new ModelConfig("claude-sonnet-4-6", "anthropic", AiKeySource.Byok, "sk-ant-byok", false, 200_000, true, true);
+
+        var ex = (await service.Invoking(s => s.CompleteAsync(byok, "system", "user"))
+            .Should().ThrowAsync<AiProviderException>()).Which;
+
+        ex.Message.Should().Contain("BYOK").And.NotContain("Ai__AnthropicPlatformKey");
+    }
+
+    [Fact]
+    public void Transport_failures_and_timeouts_map_to_unavailable()
+    {
+        var config = Config("sk-ant-test");
+        AiCompletionService.TranslateTransportFailure(new HttpRequestException("connection refused"), config, CancellationToken.None)!
+            .Kind.Should().Be(AiProviderFailureKind.Unavailable);
+        AiCompletionService.TranslateTransportFailure(new TaskCanceledException("timeout"), config, CancellationToken.None)!
+            .Kind.Should().Be(AiProviderFailureKind.Unavailable);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        AiCompletionService.TranslateTransportFailure(new TaskCanceledException("caller cancelled"), config, cts.Token)
+            .Should().BeNull();
+        AiCompletionService.TranslateTransportFailure(new InvalidOperationException("other"), config, CancellationToken.None)
+            .Should().BeNull();
     }
 
     [Fact]

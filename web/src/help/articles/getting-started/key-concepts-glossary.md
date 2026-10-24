@@ -97,6 +97,4 @@ generated from plain English.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/getting-started/key-concepts-glossary.md)

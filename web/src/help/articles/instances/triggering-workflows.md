@@ -60,6 +60,4 @@ watch its timeline, inspect variables, and see its status in real time.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/instances/triggering-workflows.md)

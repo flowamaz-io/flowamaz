@@ -61,6 +61,4 @@ a workflow indefinitely.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/gates/configuring-gates.md)

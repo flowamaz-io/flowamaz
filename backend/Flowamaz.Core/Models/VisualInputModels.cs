@@ -11,7 +11,8 @@ public sealed record LowConfidenceElement(
     string Label,
     string DetectedType,
     double Confidence,
-    IReadOnlyList<string> Annotations);
+    IReadOnlyList<string> Annotations,
+    string? Reason = null);
 
 public sealed record ConversationImportResult(
     string YamlContent,

@@ -283,6 +283,31 @@ public class ModelResolutionServiceTests
         ex.ErrorCode.Should().Be("AI_PLATFORM_KEY_MISSING");
     }
 
+    [Fact]
+    public async Task Anthropic_platform_key_missing_in_stub_mode_resolves_with_no_key()
+    {
+        await using var db = NewDb(nameof(Anthropic_platform_key_missing_in_stub_mode_resolves_with_no_key));
+        db.ModelCatalogue.Add(HaikuModel());
+        db.PlatformAiConfigs.Add(new PlatformAiConfig
+        {
+            FunctionId = AiFunctionIds.Copilot,
+            Provider = AiProviders.Anthropic,
+            ModelId = "claude-haiku-4-5",
+            KeySource = AiKeySource.Platform,
+            IsEnabled = true,
+        });
+        await db.SaveChangesAsync();
+        // Development / E2E: stub explicitly allowed → no throw, empty key → AiCompletionService stubs.
+        var service = new ModelResolutionService(db,
+            Options.Create(new AiOptions { AnthropicPlatformKey = "", AllowStubWithoutKey = true }),
+            NullLogger<ModelResolutionService>.Instance);
+
+        var config = await service.ResolveModelConfigAsync(AiFunctionIds.Copilot, Guid.NewGuid());
+
+        config.ApiKey.Should().BeNullOrEmpty();
+        config.ModelId.Should().Be("claude-haiku-4-5");
+    }
+
     // ── Malformed override JSON surfaces as ConfigViolation, never a raw parse crash ──
 
     [Fact]

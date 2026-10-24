@@ -51,6 +51,4 @@ fully reversible.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/ai/copilot.md)

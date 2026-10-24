@@ -72,14 +72,19 @@ watch(
          (collapsed) — content fills the remainder with no margin needed and no layout jump.
          On mobile the Sidebar is a fixed slide-in overlay, so content is full-width. -->
     <div class="flex min-w-0 flex-1 flex-col transition-all duration-200 ease-in-out">
-      <!-- Mobile hamburger — opens the slide-in sidebar overlay. -->
-      <button
-        class="absolute left-3 top-3 z-20 rounded-lg bg-sidebar-bg p-2 text-white shadow-lg md:hidden"
-        aria-label="Open menu"
-        @click="ui.setSidebar(false)"
-      >
-        <Menu class="h-5 w-5" />
-      </button>
+      <!-- Mobile top bar with the hamburger that opens the slide-in sidebar overlay. It sits in
+           normal flow (not floating), so it can never cover page headings or toolbars. -->
+      <div class="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 md:hidden">
+        <button
+          type="button"
+          class="rounded-lg bg-sidebar-bg p-2 text-white"
+          aria-label="Open menu"
+          @click="ui.setSidebar(false)"
+        >
+          <Menu class="h-5 w-5" />
+        </button>
+        <span class="text-sm font-semibold text-slate-900">Flowamaz</span>
+      </div>
       <main
         id="main-content"
         :class="isFullScreen ? 'flex-1 overflow-hidden flex flex-col' : 'flex-1 overflow-y-auto bg-slate-50'"

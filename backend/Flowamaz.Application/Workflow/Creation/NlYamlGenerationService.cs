@@ -19,53 +19,70 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
     private readonly IAiBudgetService _budget;
     private readonly ILogger<NlYamlGenerationService> _log;
 
-    private const string SystemPrompt = """
-        You are an expert workflow automation engineer. Your task is to generate a valid Flowamaz workflow YAML from a structured description.
+    // Every rule and example below must match workflow-v1.schema.json and the engine. The prompt used to
+    // teach keys the validator rejects (trigger type "event", "${var}" references, node-level gate timeouts),
+    // so live generation failed. NlYamlPromptTests validates each example in this prompt.
+    internal const string SystemPrompt = """
+        You are an expert workflow automation engineer. Generate a valid Flowamaz workflow definition (YAML)
+        from a structured description.
 
-        RULES:
-        - Output ONLY the YAML. No explanation, no markdown fences, no commentary.
-        - Use only declared variable names in ${variable} references.
-        - Every workflow MUST have exactly one trigger node.
-        - Every workflow MUST have exactly one end node.
-        - Use only these node types: trigger, action, ai, human-gate, router, end, foreach, parallel, try-catch, wait, sub-workflow, annotation.
-        - If you cannot model a step precisely, add an annotation node with a clear note.
-        - All IDs must be kebab-case, unique, and descriptive.
+        OUTPUT
+        - Output ONLY the YAML document. No explanation, no markdown fences, no commentary.
 
-        SCHEMA SUMMARY:
+        DOCUMENT SHAPE (no other top-level keys)
         apiVersion: flowamaz/v1
         kind: Workflow
         metadata:
           id: <kebab-case-id>
           name: "<human name>"
-          description: "<description>"
+          description: "<one sentence>"
           version: "1.0.0"
         spec:
           trigger:
-            type: <manual|webhook|schedule|event>
-          sla_threshold_ms: <optional ms>
+            type: <form|webhook|schedule|manual>
           variables:
-            <name>:
-              type: <string|number|boolean|object>
+            <snake_case_name>:
+              type: <string|number|boolean|object|array>
               required: <true|false>
-              sensitive: <true|false>
-          nodes:
-            - id: <kebab-id>
-              type: <node-type>
-              label: "<label>"
-              config: {}
-              retry:
-                max_attempts: 3
-                backoff_seconds: 5
-                backoff_multiplier: 2
-              timeout:
-                seconds: 30
-              compensate:
-                strategy: <backward|forward|pivot>
-          edges:
-            - id: <edge-id>
-              from: <source-node-id>
-              to: <target-node-id>
-              via: <optional condition expression>
+          nodes: [...]
+          edges: [...]
+
+        TRIGGER TYPE — pick exactly one of these values (anything else is invalid):
+        - form: a person submits a request or form (expense claim, leave request, application).
+        - webhook: another system sends an event (new order, new hire created in HR system).
+        - schedule: runs on a timetable (daily report, monthly close).
+        - manual: someone starts it by hand.
+
+        NODES — each node has ONLY these keys: id, type, label, config. Nothing else at node level.
+        - id: lowercase letters, numbers and hyphens only, unique (e.g. manager-approval).
+        - type: trigger | action | ai | human-gate | router | wait | end | annotation
+        - Exactly one node of type trigger (first node). At least one node of type end.
+        - action: a system step (send email, create record, update ERP). Use config: {}.
+        - ai: an AI step (classify, summarise, extract). config: { prompt: "<instruction using {{ variable }}>" }
+        - human-gate: a person approves or rejects. config:
+            delivery_channel: Portal
+            gate_label: "<what the approver is asked>"
+            timeout_hours: <whole number>
+            on_timeout: <fail|auto-approve|auto-reject|escalate>
+          Use on_timeout: escalate ONLY when the description names who to escalate to, and then also set
+          escalate_to: <their email>. Otherwise use fail (or auto-reject when a missed deadline means no).
+        - router: a decision. Two kinds:
+            a) After a human-gate, a router with NO config whose outgoing edges use via: approved and via: rejected.
+            b) A rule on data: config.branches lists one entry per exit:
+                 config:
+                   branches:
+                     - { label: "Over 1000", condition: "{{ amount }} > 1000" }
+                     - { label: "Up to 1000", condition: "{{ amount }} <= 1000" }
+               Each branch needs exactly one outgoing edge whose via equals the branch label.
+        - annotation: a note for anything you cannot model precisely. Add content: "<note>" (annotation only).
+
+        VARIABLES
+        - Declare every input the steps use under spec.variables. Reference them with double curly braces: {{ name }}.
+
+        EDGES — each edge has ONLY: id, from, to, and optionally via.
+        - Every node except end nodes needs at least one outgoing edge; every node must be reachable from the trigger.
+        - A router always has at least two outgoing edges (one per decision outcome or branch).
+        - Rejections usually lead to a notification action and then an end node.
 
         EXAMPLE 1 — Purchase Approval:
         apiVersion: flowamaz/v1
@@ -73,77 +90,80 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         metadata:
           id: purchase-approval
           name: "Purchase Approval"
-          description: "Routes purchase requests for manager approval"
+          description: "Manager approves every purchase request; Finance also approves requests over 1000."
           version: "1.0.0"
         spec:
           trigger:
-            type: webhook
-          sla_threshold_ms: 172800000
+            type: form
           variables:
             amount:
               type: number
               required: true
-              sensitive: false
-            requester:
+            requester_email:
               type: string
               required: true
-              sensitive: false
+            item:
+              type: string
+              required: true
           nodes:
-            - id: start
+            - id: request-submitted
               type: trigger
-              label: "Purchase Request Received"
-              config: {}
-            - id: validate-request
-              type: action
-              label: "Validate Request"
-              config: {}
-            - id: amount-router
-              type: router
-              label: "Amount Router"
-              config: {}
+              label: "Purchase request submitted"
             - id: manager-approval
               type: human-gate
-              label: "Manager Approval"
-              config: {}
-              timeout:
-                seconds: 172800
-                on_timeout: reject
-            - id: auto-approve
+              label: "Manager approval"
+              config:
+                delivery_channel: Portal
+                gate_label: "Approve purchase of {{ item }} for {{ amount }}"
+                timeout_hours: 48
+                on_timeout: auto-reject
+            - id: manager-decision
+              type: router
+              label: "Manager approved?"
+            - id: amount-check
+              type: router
+              label: "Over 1000?"
+              config:
+                branches:
+                  - { label: "Over 1000", condition: "{{ amount }} > 1000" }
+                  - { label: "Up to 1000", condition: "{{ amount }} <= 1000" }
+            - id: finance-approval
+              type: human-gate
+              label: "Finance approval"
+              config:
+                delivery_channel: Portal
+                gate_label: "Finance sign-off for {{ amount }}"
+                timeout_hours: 24
+                on_timeout: fail
+            - id: finance-decision
+              type: router
+              label: "Finance approved?"
+            - id: create-purchase-order
               type: action
-              label: "Auto Approve"
+              label: "Create purchase order"
               config: {}
-            - id: reject
+            - id: notify-rejected
               type: action
-              label: "Reject Request"
+              label: "Notify requester of rejection"
               config: {}
-            - id: end
+            - id: done
               type: end
-              label: "Done"
-              config: {}
+              label: "Purchase order created"
+            - id: rejected
+              type: end
+              label: "Request rejected"
           edges:
-            - id: e1
-              from: start
-              to: validate-request
-            - id: e2
-              from: validate-request
-              to: amount-router
-            - id: e3
-              from: amount-router
-              to: manager-approval
-              via: "${amount} > 1000"
-            - id: e4
-              from: amount-router
-              to: auto-approve
-              via: "${amount} <= 1000"
-            - id: e5
-              from: manager-approval
-              to: end
-            - id: e6
-              from: auto-approve
-              to: end
-            - id: e7
-              from: reject
-              to: end
+            - { id: e1, from: request-submitted, to: manager-approval }
+            - { id: e2, from: manager-approval, to: manager-decision }
+            - { id: e3, from: manager-decision, to: amount-check, via: approved }
+            - { id: e4, from: manager-decision, to: notify-rejected, via: rejected }
+            - { id: e5, from: amount-check, to: finance-approval, via: "Over 1000" }
+            - { id: e6, from: amount-check, to: create-purchase-order, via: "Up to 1000" }
+            - { id: e7, from: finance-approval, to: finance-decision }
+            - { id: e8, from: finance-decision, to: create-purchase-order, via: approved }
+            - { id: e9, from: finance-decision, to: notify-rejected, via: rejected }
+            - { id: e10, from: create-purchase-order, to: done }
+            - { id: e11, from: notify-rejected, to: rejected }
 
         EXAMPLE 2 — Employee Onboarding:
         apiVersion: flowamaz/v1
@@ -151,66 +171,52 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         metadata:
           id: employee-onboarding
           name: "Employee Onboarding"
-          description: "Automates new hire setup across HR, IT, and Finance"
+          description: "Sets up a new hire's accounts and hardware, then HR confirms orientation."
           version: "1.0.0"
         spec:
           trigger:
-            type: event
+            type: webhook
           variables:
-            employee_id:
+            employee_name:
               type: string
               required: true
-              sensitive: false
             department:
               type: string
               required: true
-              sensitive: false
           nodes:
-            - id: start
+            - id: new-hire-created
               type: trigger
-              label: "New Hire Created"
-              config: {}
-            - id: setup-accounts
-              type: parallel
-              label: "Setup Accounts"
+              label: "New hire created in HR system"
+            - id: create-accounts
+              type: action
+              label: "Create email and system accounts"
               config: {}
             - id: send-welcome-email
               type: action
-              label: "Send Welcome Email"
+              label: "Send welcome email"
               config: {}
             - id: provision-hardware
               type: action
-              label: "Provision Hardware"
+              label: "Order laptop for {{ department }}"
               config: {}
             - id: hr-orientation
               type: human-gate
-              label: "HR Orientation Sign-off"
-              config: {}
-              timeout:
-                seconds: 86400
-            - id: end
+              label: "HR confirms orientation done"
+              config:
+                delivery_channel: Portal
+                gate_label: "Confirm {{ employee_name }} completed orientation"
+                timeout_hours: 120
+                on_timeout: escalate
+                escalate_to: hr-manager@example.com
+            - id: onboarding-complete
               type: end
-              label: "Onboarding Complete"
-              config: {}
+              label: "Onboarding complete"
           edges:
-            - id: e1
-              from: start
-              to: setup-accounts
-            - id: e2
-              from: setup-accounts
-              to: send-welcome-email
-            - id: e3
-              from: setup-accounts
-              to: provision-hardware
-            - id: e4
-              from: send-welcome-email
-              to: hr-orientation
-            - id: e5
-              from: provision-hardware
-              to: hr-orientation
-            - id: e6
-              from: hr-orientation
-              to: end
+            - { id: e1, from: new-hire-created, to: create-accounts }
+            - { id: e2, from: create-accounts, to: send-welcome-email }
+            - { id: e3, from: send-welcome-email, to: provision-hardware }
+            - { id: e4, from: provision-hardware, to: hr-orientation }
+            - { id: e5, from: hr-orientation, to: onboarding-complete }
 
         Now generate a complete workflow YAML from the structured description provided.
         """;
@@ -255,14 +261,16 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         if (!await _budget.IsBudgetAvailableAsync(workspaceId, cancellationToken))
             throw new PlanLimitException("workflow generation");
 
-        // FIX 3: Complexity routing — simple workflows use Haiku (~80% cheaper), complex use Sonnet
+        // O7: the model is exactly what ResolveModelConfig returns for F2 (the one Workspace settings show).
+        // A hardcoded "simple workflows use Haiku" swap used to override it silently (and broke CLAUDE.md
+        // rule 4). To use a cheaper model for F2, set it in Settings → Workspace → AI model configuration.
         var modelConfig = await _models.ResolveModelConfigAsync(AiFunctionIds.NlYaml, workspaceId, cancellationToken);
+        AiNotConfiguredException.ThrowIfNoKey(modelConfig, "Generating a workflow from plain English");
         var complexity = ComplexityScore(request);
-        if (complexity <= 5)
-            modelConfig = modelConfig with { ModelId = "claude-haiku-4-5" };
 
-        // FIX 6: Cap output tokens based on estimated workflow size (nodes * 200, max 4096)
-        var maxTokens = Math.Min(4096, estimatedNodes * 200);
+        // Output budget. "nodes × 200" gave a one-line description 600 tokens, which cut the YAML off
+        // mid-document (a 10-node workflow is ~2,000 tokens). Tokens are billed as used, not as allowed.
+        var maxTokens = Math.Clamp(estimatedNodes * 400, 4096, 8192);
 
         var userPrompt = BuildUserPrompt(request);
 
@@ -271,7 +279,7 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
 
         var result = await _ai.CompleteAsync(modelConfig, SystemPrompt, userPrompt, cancellationToken, maxTokens);
 
-        var yaml = ExtractYaml(result.Text);
+        var yaml = GeneratedYamlRepair.Repair(ExtractYaml(result.Text));
         var validation = await _validator.ValidateAsync(yaml, workspaceId, cancellationToken);
 
         // One self-correction attempt on validation failure
@@ -280,7 +288,7 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
             _log.LogWarning("NlYamlGenerationService.GenerateAsync validation_failed errors={Count} attempting self-correction", validation.Errors.Count);
             var correctionPrompt = BuildCorrectionPrompt(userPrompt, yaml, validation);
             var corrected = await _ai.CompleteAsync(modelConfig, SystemPrompt, correctionPrompt, cancellationToken, maxTokens);
-            var correctedYaml = ExtractYaml(corrected.Text);
+            var correctedYaml = GeneratedYamlRepair.Repair(ExtractYaml(corrected.Text));
             var correctedValidation = await _validator.ValidateAsync(correctedYaml, workspaceId, cancellationToken);
 
             var totalTokens = result.TokensInput + result.TokensOutput + corrected.TokensInput + corrected.TokensOutput;
@@ -341,8 +349,19 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
     private static string BuildCacheInput(NlWorkflowRequest r)
     {
         static string N(string? s) => (s ?? string.Empty).Trim().ToLowerInvariant();
-        return $"{N(r.WorkflowName)}|{N(r.Purpose)}|{N(r.TriggerDescription)}|{N(r.StepsDescription)}|{N(r.RulesAndConstraints)}|{N(r.SystemsAndAi)}|{N(r.ExistingContext)}";
+        var key = $"{N(r.WorkflowName)}|{N(r.Purpose)}|{N(r.TriggerDescription)}|{N(r.StepsDescription)}|{N(r.RulesAndConstraints)}|{N(r.SystemsAndAi)}|{N(r.ExistingContext)}";
+        var answers = AnsweredClarifications(r);
+        // Unanswered requests keep the pre-clarification key so existing cache entries stay valid.
+        return answers.Count == 0
+            ? key
+            : key + "|" + string.Join("|", answers.Select(a => $"{N(a.Topic)}={N(a.Answer)}"));
     }
+
+    /// <summary>Clarification answers the user actually gave (skipped/blank answers are ignored).</summary>
+    internal static IReadOnlyList<ClarificationAnswer> AnsweredClarifications(NlWorkflowRequest r) =>
+        (r.Clarifications ?? [])
+            .Where(a => !string.IsNullOrWhiteSpace(a.Answer))
+            .ToList();
 
     private static string BuildUserPrompt(NlWorkflowRequest r)
     {
@@ -365,6 +384,14 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
             sb.AppendLine();
             sb.AppendLine($"**Existing Context:** {r.ExistingContext}");
         }
+        var answers = AnsweredClarifications(r);
+        if (answers.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("**Clarifications (answers from the user — treat as authoritative):**");
+            foreach (var a in answers)
+                sb.AppendLine($"- Q: {(a.Question ?? string.Empty).Trim()} A: {a.Answer.Trim()}");
+        }
         sb.AppendLine();
         sb.AppendLine("Output ONLY the YAML. No explanation.");
         return sb.ToString();
@@ -372,13 +399,22 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
 
     private static string BuildCorrectionPrompt(string originalPrompt, string invalidYaml, Core.Workflow.ValidationResult validation)
     {
+        // The model needs its own output to fix it; without it the "correction" was a fresh, equally wrong attempt.
         var errors = string.Join("\n", validation.Errors.Select(e => $"- [{e.Code}] {e.Message}"));
-        return $"{originalPrompt}\n\nYour previous response had validation errors:\n{errors}\n\nCorrected YAML:\n\n";
+        return $"{originalPrompt}\n\nYour previous YAML was:\n{invalidYaml}\n\nIt failed validation:\n{errors}\n\n" +
+               "Return the complete corrected YAML only, following every rule in the instructions.";
     }
 
-    private static string ExtractYaml(string text)
+    internal static string ExtractYaml(string text)
     {
-        // Strip markdown code fences if present
+        // A fenced block anywhere wins (models sometimes add a sentence before it); otherwise start at apiVersion.
+        var fence = System.Text.RegularExpressions.Regex.Match(text, "```(?:ya?ml)?\\s*\\n(.*?)(?:```|$)",
+            System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (fence.Success && fence.Groups[1].Value.Contains("apiVersion", StringComparison.Ordinal))
+            return fence.Groups[1].Value.Trim();
+        var at = text.IndexOf("apiVersion:", StringComparison.Ordinal);
+        if (at > 0) text = text[at..];
+
         var trimmed = text.Trim();
         if (trimmed.StartsWith("```yaml", StringComparison.OrdinalIgnoreCase))
             trimmed = trimmed[7..].Trim();

@@ -11,6 +11,12 @@ public interface IWorkflowDefinitionRepository
     Task<WorkflowDefinition?> GetByIdForWorkspaceAsync(Guid id, Guid workspaceId, CancellationToken cancellationToken = default);
     Task<List<WorkflowDefinition>> GetForWorkspaceAsync(Guid workspaceId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Published, non-deleted definitions whose trigger is a schedule, across all workspaces — used only
+    /// by the schedule trigger job; each run it starts is still scoped to the definition's workspace.
+    /// </summary>
+    Task<List<WorkflowDefinition>> GetPublishedScheduledAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Resolves a workflow by its workspace-unique slug — used by the public API.</summary>
     Task<WorkflowDefinition?> GetBySlugForWorkspaceAsync(Guid workspaceId, string slug, CancellationToken cancellationToken = default);
 

@@ -229,9 +229,14 @@ public class OAuthServiceTests
         var msResponse = """{"access_token":"eyJ-ms-token","refresh_token":"ref-token","expires_in":3600,"token_type":"Bearer"}""";
         var httpFactory = FakeHttp(HttpStatusCode.OK, msResponse);
 
+        // Microsoft tokens expire (~1h), so the refresh token is stored with the access token as a bundle.
         var vaultMock = new Mock<ICredentialVaultService>();
         vaultMock.Setup(v => v.StoreAsync(workspaceId, "microsoft-teams", It.IsAny<string>(),
-                "OAuth2AuthCode", "eyJ-ms-token", It.IsAny<CancellationToken>()))
+                "OAuth2AuthCode",
+                It.Is<string>(json => Flowamaz.Core.Models.OAuthTokenBundle.TryParse(json)!.AccessToken == "eyJ-ms-token"
+                                      && Flowamaz.Core.Models.OAuthTokenBundle.TryParse(json)!.RefreshToken == "ref-token"
+                                      && Flowamaz.Core.Models.OAuthTokenBundle.TryParse(json)!.ExpiresAtUtc > DateTime.UtcNow.AddMinutes(50)),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedCredentialId);
 
         var service = BuildService(multiplexerMock, vaultMock, httpFactory);

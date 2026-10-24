@@ -43,6 +43,4 @@ a database, create a GitHub issue, or call an AI model.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/connectors/add-your-first-connector.md)

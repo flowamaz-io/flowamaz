@@ -1,5 +1,8 @@
 using FluentAssertions;
 using Flowamaz.Application.Analytics;
+using Flowamaz.Core.Interfaces.Repositories;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 
 namespace Flowamaz.Tests.Unit.Analytics;
 
@@ -35,5 +38,28 @@ public class WorkflowWeatherTests
     public void Green_when_healthy()
     {
         WorkflowWeatherService.ComputeStatus(0, 99, false, false).Should().Be("green");
+    }
+
+    [Fact]
+    public async Task RunsThisMonth_is_the_live_production_run_count_not_the_hourly_metric_rollup()
+    {
+        var ws = Guid.NewGuid();
+        var definitions = new Mock<IWorkflowDefinitionRepository>();
+        definitions.Setup(d => d.GetForWorkspaceAsync(ws, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var metrics = new Mock<IWorkflowMetricRepository>();
+        metrics.Setup(m => m.GetLatestPerWorkflowAsync(ws, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        metrics.Setup(m => m.GetRunCountSinceAsync(ws, It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(0);
+        var insights = new Mock<IWorkflowInsightRepository>();
+        insights.Setup(i => i.GetUnacknowledgedForWorkspaceAsync(ws, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var analytics = new Mock<IWorkflowAnalyticsRepository>();
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        analytics.Setup(a => a.GetProductionRunCountSinceAsync(ws, monthStart, It.IsAny<CancellationToken>())).ReturnsAsync(5);
+
+        var service = new WorkflowWeatherService(definitions.Object, metrics.Object, insights.Object, analytics.Object,
+            NullLogger<WorkflowWeatherService>.Instance);
+        var weather = await service.GetWeatherAsync(ws);
+
+        weather.RunsThisMonth.Should().Be(5);
     }
 }

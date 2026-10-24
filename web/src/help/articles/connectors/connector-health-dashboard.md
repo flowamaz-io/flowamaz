@@ -44,6 +44,4 @@ credentials associated with that connector in this workspace.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/connectors/connector-health-dashboard.md)

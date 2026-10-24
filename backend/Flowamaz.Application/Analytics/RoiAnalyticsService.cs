@@ -12,20 +12,20 @@ namespace Flowamaz.Application.Analytics;
 public sealed class RoiAnalyticsService : IRoiAnalyticsService
 {
     private readonly IWorkflowRoiConfigRepository _configs;
-    private readonly IWorkflowMetricRepository _metrics;
+    private readonly IWorkflowAnalyticsRepository _analytics;
     private readonly IWorkflowDefinitionRepository _definitions;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<RoiAnalyticsService> _logger;
 
     public RoiAnalyticsService(
         IWorkflowRoiConfigRepository configs,
-        IWorkflowMetricRepository metrics,
+        IWorkflowAnalyticsRepository analytics,
         IWorkflowDefinitionRepository definitions,
         IUnitOfWork unitOfWork,
         ILogger<RoiAnalyticsService> logger)
     {
         _configs = configs;
-        _metrics = metrics;
+        _analytics = analytics;
         _definitions = definitions;
         _unitOfWork = unitOfWork;
         _logger = logger;
@@ -36,14 +36,14 @@ public sealed class RoiAnalyticsService : IRoiAnalyticsService
         _logger.LogDebug("RoiAnalyticsService.GetWorkspaceRoiAsync enter workspace={WorkspaceId} from={From} to={To}", workspaceId, periodStart, periodEnd);
         try
         {
-            var metrics = await _metrics.GetForWorkspaceInRangeAsync(workspaceId, periodStart, periodEnd, ct);
+            // Live production run counts (B11) — the hourly metric roll-up lags and may not run locally.
+            var runCounts = await _analytics.GetProductionRunCountsAsync(workspaceId, periodStart, periodEnd, ct);
             var configs = (await _configs.GetForWorkspaceAsync(workspaceId, ct)).ToDictionary(c => c.WorkflowDefinitionId);
             var names = (await _definitions.GetForWorkspaceAsync(workspaceId, ct)).ToDictionary(d => d.Id, d => d.Name);
 
             // Group run counts per workflow over the period.
-            var perWorkflow = metrics
-                .GroupBy(m => m.WorkflowDefinitionId)
-                .ToDictionary(g => g.Key, g => (Runs: g.Sum(m => m.RunsTotal), Successful: g.Sum(m => m.RunsCompleted)));
+            var perWorkflow = runCounts
+                .ToDictionary(c => c.WorkflowDefinitionId, c => (Runs: c.Runs, Successful: c.Completed));
 
             // Every workflow that either ran in the period or has a config is reported.
             var workflowIds = perWorkflow.Keys.Union(configs.Keys).ToList();
@@ -89,11 +89,11 @@ public sealed class RoiAnalyticsService : IRoiAnalyticsService
         var definition = await _definitions.GetByIdForWorkspaceAsync(workflowId, workspaceId, ct);
         if (definition is null) return null;
 
-        var metrics = await _metrics.GetForWorkspaceInRangeAsync(workspaceId, periodStart, periodEnd, ct);
-        var forWorkflow = metrics.Where(m => m.WorkflowDefinitionId == workflowId).ToList();
+        var counts = (await _analytics.GetProductionRunCountsAsync(workspaceId, periodStart, periodEnd, ct))
+            .FirstOrDefault(c => c.WorkflowDefinitionId == workflowId);
         var config = await _configs.GetForWorkflowAsync(workflowId, workspaceId, ct);
 
-        return BuildDetail(workflowId, definition.Name, forWorkflow.Sum(m => m.RunsTotal), forWorkflow.Sum(m => m.RunsCompleted), config);
+        return BuildDetail(workflowId, definition.Name, counts?.Runs ?? 0, counts?.Completed ?? 0, config);
     }
 
     public async Task<RoiConfigDto?> GetConfigAsync(Guid workspaceId, Guid workflowId, CancellationToken ct = default)

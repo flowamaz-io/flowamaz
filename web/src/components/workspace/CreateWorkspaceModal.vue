@@ -4,6 +4,7 @@ import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
 import FmModal from '@/components/common/FmModal.vue';
 import { useWorkspace } from '@/composables/useWorkspace';
+import { useToast } from '@/composables/useToast';
 import { toUserFacingError } from '@/utils/error.util';
 import { slugify } from '@/components/workspace/createWorkspace';
 import type { WorkspaceResponse } from '@/types';
@@ -12,6 +13,7 @@ const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; created: [workspace: WorkspaceResponse] }>();
 
 const ws = useWorkspace();
+const toast = useToast();
 
 const name = ref('');
 const slug = ref('');
@@ -51,6 +53,8 @@ async function submit(): Promise<void> {
   error.value = '';
   try {
     const created = await ws.createWorkspace({ name: name.value.trim(), slug: slug.value });
+    // Creating a workspace also switches into it — say so, or the context change goes unnoticed.
+    toast.success(`Workspace created — switched to ${created.name}.`);
     emit('created', created);
     emit('close');
   } catch (e) {

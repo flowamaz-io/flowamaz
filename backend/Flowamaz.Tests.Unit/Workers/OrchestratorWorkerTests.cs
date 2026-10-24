@@ -27,10 +27,12 @@ public class OrchestratorWorkerTests
         nodes:
           - { id: start, type: Trigger }
           - { id: a, type: Action }
+          - { id: gate, type: HumanGate }
           - { id: done, type: End }
         edges:
           - { id: e1, from: start, to: a }
-          - { id: e2, from: a, to: done }
+          - { id: e2, from: a, to: gate }
+          - { id: e3, from: gate, to: done }
         """;
 
     private readonly Mock<ITaskQueue> _queue = new();
@@ -39,6 +41,7 @@ public class OrchestratorWorkerTests
     private readonly Mock<IWorkflowInstanceRepository> _instances = new();
     private readonly Mock<IWorkflowVersionRepository> _versions = new();
     private readonly Mock<INodeWorkerRegistry> _registry = new();
+    private readonly Mock<IWorkflowVariableRepository> _variables = new();
     private readonly SfgParser _parser = new();
 
     private readonly Guid _ws = Guid.NewGuid();
@@ -53,6 +56,9 @@ public class OrchestratorWorkerTests
         provider.Setup(p => p.GetService(typeof(IWorkflowVersionRepository))).Returns(_versions.Object);
         provider.Setup(p => p.GetService(typeof(SfgParser))).Returns(_parser);
         provider.Setup(p => p.GetService(typeof(INodeWorkerRegistry))).Returns(_registry.Object);
+        provider.Setup(p => p.GetService(typeof(IWorkflowVariableRepository))).Returns(_variables.Object);
+        _variables.Setup(v => v.GetForInstanceAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<WorkflowVariable>());
         return provider.Object;
     }
 
@@ -105,18 +111,51 @@ public class OrchestratorWorkerTests
     }
 
     [Fact]
-    public async Task ProcessInstance_NeedsHumanGate_AcknowledgesAndDoesNotExecuteNodes()
+    public async Task ProcessInstance_NeedsHumanGate_ExecutesGateWorker_AndParksInstance()
     {
+        // Regression: gate steps used to skip execution entirely, so no approval was ever created.
+        var gateId = Guid.NewGuid();
         _instances.Setup(r => r.TryAcquireLeaseAsync(_instanceId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         _orchestrator.Setup(o => o.StepAsync(_instanceId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(OrchestratorResult.Gate(["gate"]));
+        SetupRunnableInstance();
+        var gateWorker = new Mock<INodeWorker>();
+        gateWorker.Setup(w => w.ExecuteAsync(It.IsAny<NodeExecutionContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(NodeExecutionResult.GateWaiting(gateId.ToString()));
+        _registry.Setup(r => r.Resolve(NodeType.HumanGate)).Returns(gateWorker.Object);
         var worker = NewWorker();
 
         await worker.ProcessInstanceAsync(BuildProvider(), _ws, _instanceId, CancellationToken.None);
 
+        gateWorker.Verify(w => w.ExecuteAsync(It.Is<NodeExecutionContext>(c => c.Node.Id == "gate"), It.IsAny<CancellationToken>()), Times.Once);
+        _orchestrator.Verify(o => o.ParkAtGateAsync(_instanceId, "gate", gateId, It.IsAny<CancellationToken>()), Times.Once);
+        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Never);
         _queue.Verify(q => q.AcknowledgeAsync(_ws, _instanceId, It.IsAny<CancellationToken>()), Times.Once);
-        _registry.Verify(r => r.Resolve(It.IsAny<NodeType>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessInstance_PassesInstanceVariablesToNodeContext()
+    {
+        _instances.Setup(r => r.TryAcquireLeaseAsync(_instanceId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _orchestrator.Setup(o => o.StepAsync(_instanceId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(OrchestratorResult.Continue(["a"]));
+        SetupRunnableInstance();
+        NodeExecutionContext? seen = null;
+        var nodeWorker = new Mock<INodeWorker>();
+        nodeWorker.Setup(w => w.ExecuteAsync(It.IsAny<NodeExecutionContext>(), It.IsAny<CancellationToken>()))
+            .Callback<NodeExecutionContext, CancellationToken>((c, _) => seen = c)
+            .ReturnsAsync(NodeExecutionResult.Ok(null));
+        _registry.Setup(r => r.Resolve(NodeType.Action)).Returns(nodeWorker.Object);
+        var worker = NewWorker();
+        var provider = BuildProvider();
+        _variables.Setup(v => v.GetForInstanceAsync(_instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new WorkflowVariable { Name = "approver_email", Value = "\"a@b.co\"" }]);
+
+        await worker.ProcessInstanceAsync(provider, _ws, _instanceId, CancellationToken.None);
+
+        seen!.Variables["approver_email"].GetString().Should().Be("a@b.co");
     }
 
     [Fact]
@@ -136,7 +175,7 @@ public class OrchestratorWorkerTests
         await worker.ProcessInstanceAsync(BuildProvider(), _ws, _instanceId, CancellationToken.None);
 
         _orchestrator.Verify(o => o.CompleteNodeAsync(_instanceId, "a", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]
@@ -155,7 +194,8 @@ public class OrchestratorWorkerTests
 
         await worker.ProcessInstanceAsync(BuildProvider(), _ws, _instanceId, CancellationToken.None);
 
-        _orchestrator.Verify(o => o.FailNodeAsync(_instanceId, "a", "boom", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        // A Fatal result is permanent: the RetryPolicy must not be consumed.
+        _orchestrator.Verify(o => o.FailNodeAsync(_instanceId, "a", "boom", It.IsAny<string>(), It.IsAny<CancellationToken>(), false), Times.Once);
         _orchestrator.Verify(o => o.CompleteNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -176,7 +216,8 @@ public class OrchestratorWorkerTests
         var act = async () => await worker.ProcessInstanceAsync(BuildProvider(), _ws, _instanceId, CancellationToken.None);
 
         await act.Should().NotThrowAsync();
-        _orchestrator.Verify(o => o.FailNodeAsync(_instanceId, "a", It.Is<string>(s => s.Contains("kaboom")), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        // An unexpected exception may be transient, so it stays retryable.
+        _orchestrator.Verify(o => o.FailNodeAsync(_instanceId, "a", It.Is<string>(s => s.Contains("kaboom")), It.IsAny<string>(), It.IsAny<CancellationToken>(), true), Times.Once);
     }
 
     [Fact]
@@ -193,7 +234,7 @@ public class OrchestratorWorkerTests
         await worker.ProcessInstanceAsync(BuildProvider(), _ws, _instanceId, CancellationToken.None);
 
         _orchestrator.Verify(o => o.CompleteNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Fact]

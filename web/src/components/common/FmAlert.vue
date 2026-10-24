@@ -10,7 +10,14 @@ const props = withDefaults(
   { type: 'info', dismissible: false },
 );
 
+const emit = defineEmits<{ dismiss: [] }>();
+
 const visible = ref(true);
+
+function dismiss(): void {
+  visible.value = false;
+  emit('dismiss');
+}
 
 const config = computed(
   () =>
@@ -42,7 +49,7 @@ const config = computed(
       type="button"
       class="shrink-0 rounded p-0.5 hover:bg-black/5"
       aria-label="Dismiss"
-      @click="visible = false"
+      @click="dismiss"
     >
       <X class="h-4 w-4" />
     </button>

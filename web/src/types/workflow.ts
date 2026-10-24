@@ -216,6 +216,11 @@ export interface GateResponse {
   createdAt: string;
   decidedAt: string | null;
   decisionNote: string | null;
+  /** Optional display label of the gate node (not sent by every API version). */
+  gateLabel?: string | null;
+  label?: string | null;
+  /** True when the gate belongs to a test run (optional — older APIs omit it). */
+  isTest?: boolean;
 }
 
 export interface InterpreterNarrative {

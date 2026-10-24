@@ -1,3 +1,4 @@
+using Flowamaz.Core.Enums;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flowamaz.Core.Interfaces.Services;
@@ -71,10 +72,17 @@ public abstract class PublicApiController : ControllerBase
     /// Resolves the workspace (401 if no API key) and enforces the rate limit (429 if exceeded),
     /// always setting the X-RateLimit-* headers. Returns null when the request may proceed.
     /// </summary>
-    protected async Task<IActionResult?> GuardAsync(string bucketSuffix, int maxPerHour, CancellationToken ct)
+    protected async Task<IActionResult?> GuardAsync(string requiredScope, string bucketSuffix, int maxPerHour, CancellationToken ct)
     {
         if (WorkspaceId is not { } ws)
             return Unauthorized401();
+
+        // FUNCTIONAL.md §4.6: every call is limited to the key's scopes (a read-only key must not
+        // be able to start runs or decide approvals).
+        if (!_currentUser.ApiKeyScopes.Contains(requiredScope, StringComparer.Ordinal))
+            return ApiError(StatusCodes.Status403Forbidden, "insufficient_scope",
+                $"This API key doesn't have the '{requiredScope}' scope. Create a key with that scope in " +
+                "Settings → API keys and use it for this call.", "errors#insufficient_scope");
 
         var result = await _rateLimiter.CheckAsync($"{ws}:{bucketSuffix}", maxPerHour, ct);
         Response.Headers["X-RateLimit-Limit"] = result.Limit.ToString();

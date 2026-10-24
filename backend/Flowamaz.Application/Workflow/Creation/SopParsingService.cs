@@ -1,3 +1,4 @@
+using Flowamaz.Core.Exceptions;
 using System.Text;
 using Flowamaz.Core.Constants;
 using Flowamaz.Core.Interfaces.Services;
@@ -55,6 +56,7 @@ public sealed class SopParsingService : ISopParsingService
         var truncated = rawText.Length > 80_000 ? rawText[..80_000] : rawText;
 
         var config = await _modelResolution.ResolveModelConfigAsync(FunctionId, workspaceId, cancellationToken);
+        AiNotConfiguredException.ThrowIfNoKey(config, "Generating a workflow from a document");
         var userPrompt = $"Document text:\n\n{truncated}";
         var aiResult = await _ai.CompleteAsync(config, ExtractionSystemPrompt, userPrompt, cancellationToken);
 

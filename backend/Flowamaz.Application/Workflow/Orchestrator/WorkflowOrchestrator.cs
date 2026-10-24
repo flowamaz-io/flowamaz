@@ -251,6 +251,13 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                 instance.StartedAt = DateTime.UtcNow;
                 _instances.Update(instance);
 
+                // Expose the trigger payload to the workflow: the whole payload as {{ trigger }} and each
+                // top-level field as its own variable ({{ variables.amount }}), so steps can use their input.
+                await SeedTriggerVariablesAsync(instance, cancellationToken);
+                // Persist now: condition evaluation later in this same step reads variables from the
+                // database, so unsaved trigger variables would look empty to the first router.
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
                 var trigger = graph.TriggerNode;
                 await _nodeStates.AddAsync(NewState(instance, trigger, NodeStatus.Completed), cancellationToken);
                 seq = await AppendEventAsync(seq, instance, "NodeCompleted", trigger.Id, trigger.Type.ToString(), "{}", cancellationToken);
@@ -266,12 +273,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             var work = new Queue<string>();
             foreach (var source in completedNodeIds)
             {
-                foreach (var edge in graph.OutgoingEdges(source))
+                foreach (var target in await SelectTargetsAsync(instanceId, graph, source, cancellationToken))
                 {
-                    if (await _variableEvaluation.EvaluateConditionAsync(instanceId, edge.Condition, cancellationToken))
-                    {
-                        work.Enqueue(edge.ToNodeId);
-                    }
+                    work.Enqueue(target);
                 }
             }
 
@@ -317,12 +321,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                         // Routing is instantaneous: mark complete and follow matching edges.
                         await _nodeStates.AddAsync(NewState(instance, node, NodeStatus.Completed), cancellationToken);
                         seq = await AppendEventAsync(seq, instance, "NodeCompleted", node.Id, node.Type.ToString(), "{}", cancellationToken);
-                        foreach (var edge in graph.OutgoingEdges(node.Id))
+                        foreach (var target in await SelectTargetsAsync(instanceId, graph, node.Id, cancellationToken))
                         {
-                            if (await _variableEvaluation.EvaluateConditionAsync(instanceId, edge.Condition, cancellationToken))
-                            {
-                                work.Enqueue(edge.ToNodeId);
-                            }
+                            work.Enqueue(target);
                         }
                         break;
 
@@ -401,6 +402,13 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         state.OutputPayload = string.IsNullOrWhiteSpace(output) ? null : output;
         _nodeStates.Update(state);
 
+        // A decided gate resumes a parked instance.
+        if (instance.Status == InstanceStatus.Waiting)
+        {
+            instance.TransitionTo(InstanceStatus.Running);
+            _instances.Update(instance);
+        }
+
         await UpsertVariableAsync(instance, $"{nodeId}.output", string.IsNullOrWhiteSpace(output) ? "null" : output, cancellationToken);
 
         // Snapshot what this node produced + how long it ran (07-04 step debugger). The output is
@@ -419,7 +427,8 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _logger.LogInformation("WorkflowOrchestrator.CompleteNodeAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
     }
 
-    public async Task FailNodeAsync(Guid instanceId, string nodeId, string error, string leaseId, CancellationToken cancellationToken = default)
+    public async Task FailNodeAsync(Guid instanceId, string nodeId, string error, string leaseId, CancellationToken cancellationToken = default,
+        bool retryable = true)
     {
         _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync enter instance={InstanceId} node={NodeId}", instanceId, nodeId);
 
@@ -433,7 +442,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         var seq = await _events.GetNextSequenceNumberAsync(instanceId, cancellationToken);
 
         var retry = node?.RetryPolicy;
-        if (retry is not null && state.RetryCount < retry.MaxAttempts)
+        if (retryable && retry is not null && state.RetryCount < retry.MaxAttempts)
         {
             state.RetryCount++;
             state.LastRetryAt = DateTime.UtcNow;
@@ -494,6 +503,34 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
     }
 
+    public async Task ParkAtGateAsync(Guid instanceId, string nodeId, Guid gateId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("WorkflowOrchestrator.ParkAtGateAsync enter instance={InstanceId} node={NodeId} gate={GateId}",
+            instanceId, nodeId, gateId);
+
+        var instance = await _instances.GetByIdAsync(instanceId, cancellationToken)
+            ?? throw new InvalidOperationException($"Instance '{instanceId}' not found parking at gate '{nodeId}'.");
+        var state = await _nodeStates.GetByNodeAsync(instanceId, nodeId, cancellationToken)
+            ?? throw new InvalidOperationException($"Node state '{nodeId}' not found on instance '{instanceId}'.");
+
+        if (state.Status == NodeStatus.Pending)
+        {
+            state.Status = NodeStatus.Running;
+            state.StartedAt ??= DateTime.UtcNow;
+            _nodeStates.Update(state);
+        }
+
+        if (instance.CanTransitionTo(InstanceStatus.Waiting)) instance.TransitionTo(InstanceStatus.Waiting);
+        instance.CurrentNodeId = nodeId;
+        _instances.Update(instance);
+
+        var seq = await _events.GetNextSequenceNumberAsync(instanceId, cancellationToken);
+        await AppendEventAsync(seq, instance, "GateWaiting", nodeId, state.NodeType, $$"""{"gateId":"{{gateId}}"}""", cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("WorkflowOrchestrator.ParkAtGateAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
+    }
+
     public async Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("WorkflowOrchestrator.CancelAsync enter instance={InstanceId} by={RequestedBy}", instanceId, requestedBy);
@@ -507,13 +544,31 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             return;
         }
 
+        var now = DateTime.UtcNow;
         instance.TransitionTo(InstanceStatus.Cancelled);
+        // B6: a cancelled run has ended — stamp the end time so the run's duration stops counting.
+        instance.CompletedAt ??= now;
         instance.UpdatedBy = requestedBy;
         _instances.Update(instance);
 
         var seq = await _events.GetNextSequenceNumberAsync(instanceId, cancellationToken);
+
+        // B6: close every node still in flight (e.g. a gate waiting for a decision) so it no longer
+        // reads "Running" with an ever-growing duration on the timeline.
+        var states = await _nodeStates.GetForInstanceAsync(instanceId, cancellationToken) ?? [];
+        var closed = 0;
+        foreach (var state in states.Where(s => s.Status is NodeStatus.Pending or NodeStatus.Running))
+        {
+            state.Status = NodeStatus.Cancelled;
+            state.CompletedAt ??= now;
+            _nodeStates.Update(state);
+            seq = await AppendEventAsync(seq, instance, "NodeCancelled", state.NodeId, state.NodeType, "{}", cancellationToken);
+            closed++;
+        }
+
         await AppendEventAsync(seq, instance, "InstanceCancelled", null, null, "{}", cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("WorkflowOrchestrator.CancelAsync closed {Count} in-flight node(s) instance={InstanceId}", closed, instanceId);
 
         if (!string.IsNullOrEmpty(instance.WorkerLeaseId))
         {
@@ -529,6 +584,116 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             ?? throw new InvalidOperationException(
                 $"Pinned version '{instance.WorkflowVersionId}' missing for instance '{instance.Id}'.");
         return await _parser.ParseAsync(version.YamlContent, ct);
+    }
+
+    /// <summary>
+    /// Targets of a node's outgoing edges whose conditions hold. Default ("else") edges are followed
+    /// only when no conditional sibling matched — otherwise a router would take every branch.
+    /// </summary>
+    private async Task<List<string>> SelectTargetsAsync(Guid instanceId, WorkflowGraph graph, string nodeId, CancellationToken ct)
+    {
+        var targets = new List<string>();
+        var defaults = new List<string>();
+        var anyConditionalMatched = false;
+        var outgoing = graph.OutgoingEdges(nodeId).ToList();
+
+        // Label-only branches (via: approved / rejected) route on the upstream decision. Without this a
+        // router with no branch config would take every edge (e.g. approve AND notify-rejected).
+        string? decision = null;
+        if (outgoing.Any(IsLabelOnly))
+            decision = await UpstreamDecisionAsync(instanceId, graph, nodeId, ct);
+
+        foreach (var edge in outgoing)
+        {
+            if (edge.IsDefault)
+            {
+                defaults.Add(edge.ToNodeId);
+                continue;
+            }
+            if (IsLabelOnly(edge) && decision is not null)
+            {
+                if (DecisionMatches(edge.Via!, decision))
+                {
+                    targets.Add(edge.ToNodeId);
+                    anyConditionalMatched = true;
+                }
+                continue;
+            }
+            if (await _variableEvaluation.EvaluateConditionAsync(instanceId, edge.Condition, ct))
+            {
+                targets.Add(edge.ToNodeId);
+                if (!string.IsNullOrWhiteSpace(edge.Condition)) anyConditionalMatched = true;
+            }
+        }
+        if (!anyConditionalMatched) targets.AddRange(defaults);
+        return targets;
+    }
+
+    private static bool IsLabelOnly(SfgEdge edge) =>
+        !edge.IsDefault && string.IsNullOrWhiteSpace(edge.Condition) && !string.IsNullOrWhiteSpace(edge.Via);
+
+    /// <summary>The "decision" field of this node's output, else of its nearest predecessor that has one.</summary>
+    private async Task<string?> UpstreamDecisionAsync(Guid instanceId, WorkflowGraph graph, string nodeId, CancellationToken ct)
+    {
+        foreach (var candidate in new[] { nodeId }.Concat(graph.IncomingEdges(nodeId).Select(e => e.FromNodeId)))
+        {
+            var variable = await _variables.GetByNameAsync(instanceId, $"{candidate}.output", ct);
+            if (variable is null || string.IsNullOrWhiteSpace(variable.Value)) continue;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(variable.Value);
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("decision", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.String)
+                    return d.GetString();
+            }
+            catch (System.Text.Json.JsonException) { }
+        }
+        return null;
+    }
+
+    internal static bool DecisionMatches(string via, string decision)
+    {
+        static string Norm(string v) => v.Trim().ToLowerInvariant() switch
+        {
+            "approve" or "approved" or "yes" or "accept" or "accepted" => "approved",
+            "reject" or "rejected" or "no" or "decline" or "declined" or "denied" => "rejected",
+            var other => other,
+        };
+        return Norm(via) == Norm(decision);
+    }
+
+    public async Task<bool> HasDecisionRouteAsync(Guid instanceId, string nodeId, string decision, CancellationToken cancellationToken = default)
+    {
+        var instance = await _instances.GetByIdAsync(instanceId, cancellationToken);
+        if (instance is null) return false;
+        var graph = await LoadGraphAsync(instance, cancellationToken);
+
+        bool Routes(string from) => graph.OutgoingEdges(from).Any(e => IsLabelOnly(e) && DecisionMatches(e.Via!, decision));
+        if (Routes(nodeId)) return true;
+        return graph.OutgoingEdges(nodeId)
+            .Select(e => graph.Nodes.FirstOrDefault(n => n.Id == e.ToNodeId))
+            .Any(n => n is { Type: NodeType.Router } && Routes(n.Id));
+    }
+
+    private async Task SeedTriggerVariablesAsync(WorkflowInstance instance, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(instance.TriggerPayload)) return;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(instance.TriggerPayload);
+            await UpsertVariableAsync(instance, "trigger", doc.RootElement.GetRawText(), ct);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return;
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                if (property.Name.Length is 0 or > 100 || property.Name.Contains('.')) continue;
+                await UpsertVariableAsync(instance, property.Name, property.Value.GetRawText(), ct);
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Non-JSON payloads stay available as a plain string.
+            await UpsertVariableAsync(instance, "trigger", System.Text.Json.JsonSerializer.Serialize(instance.TriggerPayload), ct);
+        }
     }
 
     private async Task UpsertVariableAsync(WorkflowInstance instance, string name, string value, CancellationToken ct)
@@ -604,7 +769,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         NodeId = node.Id,
         NodeType = node.Type.ToString(),
         Status = status,
-        StartedAt = status is NodeStatus.Running or NodeStatus.Pending ? DateTime.UtcNow : null,
+        // O3: instantly-completed nodes (trigger, routers, end) get a start time too, so timelines
+        // ordered by StartedAt follow execution order instead of falling back to the save-time CreatedAt.
+        StartedAt = status is NodeStatus.Running or NodeStatus.Pending or NodeStatus.Completed ? DateTime.UtcNow : null,
         CompletedAt = status == NodeStatus.Completed ? DateTime.UtcNow : null,
     };
 

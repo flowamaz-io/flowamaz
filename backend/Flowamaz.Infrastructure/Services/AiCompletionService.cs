@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Flowamaz.Core.Configuration;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -44,7 +45,7 @@ public sealed class AiCompletionService : IAiCompletionService
         _logger.LogDebug("AiCompletionService.CompleteAsync enter model={ModelId} provider={Provider} maxTokens={MaxTokens}",
             config.ModelId, config.Provider, maxTokens);
 
-        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        if (ShouldUseStub(config))
         {
             _logger.LogWarning(
                 "AiCompletionService: returning local stub completion for {Provider}/{Model} (stubMode={Stub}, hasKey={HasKey})",
@@ -58,6 +59,11 @@ public sealed class AiCompletionService : IAiCompletionService
             _logger.LogDebug(
                 "AiCompletionService.CompleteAsync exit tokensIn={In} tokensOut={Out}", result.TokensInput, result.TokensOutput);
             return result;
+        }
+        catch (Exception ex) when (TranslateTransportFailure(ex, config, cancellationToken) is { } translated)
+        {
+            _logger.LogError(ex, "AiCompletionService.CompleteAsync provider unreachable kind={Kind} model={ModelId}", translated.Kind, config.ModelId);
+            throw translated;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -82,7 +88,7 @@ public sealed class AiCompletionService : IAiCompletionService
         });
 
         using var response = await client.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureProviderSuccessAsync(response, config, ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
@@ -122,7 +128,7 @@ public sealed class AiCompletionService : IAiCompletionService
     {
         _logger.LogDebug("AiCompletionService.CompleteWithImageAsync enter model={ModelId}", config.ModelId);
 
-        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        if (ShouldUseStub(config))
         {
             _logger.LogWarning("AiCompletionService.CompleteWithImageAsync: stub mode");
             const string stubJson = """{"nodes":[{"id":"n1","label":"Start","type":"trigger","x":100,"y":100,"confidence":0.99,"annotations":[]},{"id":"n2","label":"Process","type":"action","x":100,"y":200,"confidence":0.95,"annotations":[]},{"id":"n3","label":"End","type":"end","x":100,"y":300,"confidence":0.99,"annotations":[]}],"edges":[{"from":"n1","to":"n2","label":null},{"from":"n2","to":"n3","label":null}],"low_confidence":[]}""";
@@ -134,6 +140,11 @@ public sealed class AiCompletionService : IAiCompletionService
             var result = await CallAnthropicWithImageAsync(config, systemPrompt, imageBase64, mimeType, additionalText, cancellationToken);
             _logger.LogDebug("AiCompletionService.CompleteWithImageAsync exit tokensIn={In} tokensOut={Out}", result.TokensInput, result.TokensOutput);
             return result;
+        }
+        catch (Exception ex) when (TranslateTransportFailure(ex, config, cancellationToken) is { } translated)
+        {
+            _logger.LogError(ex, "AiCompletionService.CompleteWithImageAsync provider unreachable kind={Kind} model={ModelId}", translated.Kind, config.ModelId);
+            throw translated;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -170,7 +181,7 @@ public sealed class AiCompletionService : IAiCompletionService
         });
 
         using var response = await client.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
+        await EnsureProviderSuccessAsync(response, config, ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
@@ -183,7 +194,7 @@ public sealed class AiCompletionService : IAiCompletionService
     {
         _logger.LogDebug("AiCompletionService.SubmitBatchAsync enter model={ModelId}", config.ModelId);
 
-        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        if (ShouldUseStub(config))
         {
             var stubId = $"stub-batch-{Guid.NewGuid():N}";
             _logger.LogWarning("AiCompletionService.SubmitBatchAsync: stub mode → {BatchId}", stubId);
@@ -215,13 +226,18 @@ public sealed class AiCompletionService : IAiCompletionService
             });
 
             using var response = await client.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
+            await EnsureProviderSuccessAsync(response, config, cancellationToken);
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
             var batchId = doc.RootElement.GetProperty("id").GetString()!;
             _logger.LogInformation("AiCompletionService.SubmitBatchAsync exit batchId={BatchId}", batchId);
             return batchId;
+        }
+        catch (Exception ex) when (TranslateTransportFailure(ex, config, cancellationToken) is { } translated)
+        {
+            _logger.LogError(ex, "AiCompletionService.SubmitBatchAsync provider unreachable kind={Kind} model={ModelId}", translated.Kind, config.ModelId);
+            throw translated;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -235,7 +251,7 @@ public sealed class AiCompletionService : IAiCompletionService
     {
         _logger.LogDebug("AiCompletionService.PollBatchResultAsync enter batchId={BatchId}", batchId);
 
-        if (_options.UseStubCompletion || string.IsNullOrEmpty(config.ApiKey))
+        if (ShouldUseStub(config))
         {
             _logger.LogDebug("AiCompletionService.PollBatchResultAsync: stub mode — returning immediate result");
             return StubResult("batch-system", batchId);
@@ -250,7 +266,7 @@ public sealed class AiCompletionService : IAiCompletionService
             statusRequest.Headers.TryAddWithoutValidation("x-api-key", config.ApiKey);
             statusRequest.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
             using var statusResponse = await client.SendAsync(statusRequest, cancellationToken);
-            statusResponse.EnsureSuccessStatusCode();
+            await EnsureProviderSuccessAsync(statusResponse, config, cancellationToken);
 
             await using var statusStream = await statusResponse.Content.ReadAsStreamAsync(cancellationToken);
             using var statusDoc = await JsonDocument.ParseAsync(statusStream, cancellationToken: cancellationToken);
@@ -266,7 +282,7 @@ public sealed class AiCompletionService : IAiCompletionService
             resultsRequest.Headers.TryAddWithoutValidation("x-api-key", config.ApiKey);
             resultsRequest.Headers.TryAddWithoutValidation("anthropic-version", AnthropicVersion);
             using var resultsResponse = await client.SendAsync(resultsRequest, cancellationToken);
-            resultsResponse.EnsureSuccessStatusCode();
+            await EnsureProviderSuccessAsync(resultsResponse, config, cancellationToken);
 
             var jsonl = await resultsResponse.Content.ReadAsStringAsync(cancellationToken);
             var firstLine = jsonl.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
@@ -281,11 +297,80 @@ public sealed class AiCompletionService : IAiCompletionService
                 batchId, parsed.TokensInput, parsed.TokensOutput);
             return parsed;
         }
+        catch (Exception ex) when (TranslateTransportFailure(ex, config, cancellationToken) is { } translated)
+        {
+            _logger.LogError(ex, "AiCompletionService.PollBatchResultAsync provider unreachable kind={Kind} model={ModelId}", translated.Kind, config.ModelId);
+            throw translated;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "AiCompletionService.PollBatchResultAsync error batchId={BatchId}", batchId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// B8: replaces <c>EnsureSuccessStatusCode</c>. A non-success provider response becomes an actionable
+    /// <see cref="AiProviderException"/> (401/403 bad key, 429 throttled, 5xx outage, other 4xx refused).
+    /// The provider's error type/message is logged for operators — never the API key, never shown to users.
+    /// </summary>
+    private async Task EnsureProviderSuccessAsync(HttpResponseMessage response, ModelConfig config, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode) return;
+
+        var status = (int)response.StatusCode;
+        string? errorType = null;
+        string? errorMessage = null;
+        try
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+            {
+                errorType = error.TryGetProperty("type", out var t) ? t.GetString() : null;
+                errorMessage = error.TryGetProperty("message", out var msg) ? msg.GetString() : null;
+                if (errorMessage is { Length: > 300 }) errorMessage = errorMessage[..300];
+            }
+        }
+        catch (Exception ex) when (ex is JsonException or HttpRequestException or InvalidOperationException)
+        {
+            // Body is optional diagnostics only.
+        }
+
+        var kind = AiProviderException.KindFor(status);
+        _logger.LogError(
+            "AiCompletionService provider call failed status={Status} kind={Kind} errorType={ErrorType} providerMessage={ProviderMessage} model={ModelId} provider={Provider} keySource={KeySource}",
+            status, kind, errorType, errorMessage, config.ModelId, config.Provider, config.ApiKeySource);
+        throw new AiProviderException(kind, config.Provider, config.ApiKeySource, status);
+    }
+
+    /// <summary>
+    /// Network failures and HttpClient timeouts (a <see cref="TaskCanceledException"/> the caller did not
+    /// request) become <see cref="AiProviderFailureKind.Unavailable"/>; anything else returns null.
+    /// </summary>
+    internal static AiProviderException? TranslateTransportFailure(Exception ex, ModelConfig config, CancellationToken ct) => ex switch
+    {
+        AiProviderException => null,
+        HttpRequestException http => new AiProviderException(
+            http.StatusCode is { } code ? AiProviderException.KindFor((int)code) : AiProviderFailureKind.Unavailable,
+            config.Provider, config.ApiKeySource, http.StatusCode is { } c ? (int)c : null, http),
+        TaskCanceledException timeout when !ct.IsCancellationRequested => new AiProviderException(
+            AiProviderFailureKind.Unavailable, config.Provider, config.ApiKeySource, null, timeout),
+        _ => null,
+    };
+
+    /// <summary>
+    /// Stub only when explicitly enabled. With no key and stub not allowed, throw instead of returning
+    /// canned text that would be shown to users as real AI output.
+    /// </summary>
+    private bool ShouldUseStub(ModelConfig config)
+    {
+        if (_options.UseStubCompletion) return true;
+        if (!string.IsNullOrEmpty(config.ApiKey)) return false;
+        if (_options.AllowStubWithoutKey) return true;
+
+        _logger.LogError("AiCompletionService: no API key for {Provider}/{Model} and stub not allowed", config.Provider, config.ModelId);
+        throw new AiNotConfiguredException(config.Provider.ToString(), config.ModelId);
     }
 
     // Deterministic local completion: lead sentence + the supplied facts so instance-specific values

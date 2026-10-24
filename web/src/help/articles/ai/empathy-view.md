@@ -48,6 +48,4 @@ exactly what's happening and what to do — which is the whole point.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/ai/empathy-view.md)

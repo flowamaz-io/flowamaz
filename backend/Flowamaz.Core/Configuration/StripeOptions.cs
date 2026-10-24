@@ -13,6 +13,9 @@ public sealed class StripeOptions
     public string SecretKey { get; set; } = string.Empty;
     public string WebhookSecret { get; set; } = string.Empty;
 
+    /// <summary>Signing secret of the Connect webhook endpoint (account.updated for publisher accounts). Optional.</summary>
+    public string ConnectWebhookSecret { get; set; } = string.Empty;
+
     public string StarterPriceIdMonthly { get; set; } = string.Empty;
     public string StarterPriceIdAnnual { get; set; } = string.Empty;
     public string ProPriceIdMonthly { get; set; } = string.Empty;

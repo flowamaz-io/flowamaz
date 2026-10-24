@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue';
 import { useWorkspace } from '@/composables/useWorkspace';
+import { postLoginTarget } from '@/utils/redirect.util';
 
 const router = useRouter();
+const route = useRoute();
 const ws = useWorkspace();
 
 onMounted(() => {
@@ -13,7 +15,8 @@ onMounted(() => {
 });
 
 function onFinished(): void {
-  router.push('/');
+  // Continue to the page the user originally asked for (validated same-origin path), else home.
+  router.push(postLoginTarget(route.query.redirect, true));
 }
 </script>
 

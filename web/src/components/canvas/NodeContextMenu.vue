@@ -39,7 +39,7 @@ import {
   Edit2, Copy, PlusCircle, HelpCircle, Trash2,
   Zap, Variable, FlaskConical, Settings, ArrowRight, ArrowLeftRight, RotateCcw,
   Users, Clock, Eye, Bell, Filter, Bookmark,
-  Brain, FileEdit, Flag, AlignLeft, Palette, Plus,
+  Brain, FileEdit, Flag, AlignLeft, Palette, Plus, FileCode,
 } from 'lucide-vue-next';
 
 type ActionItem = {
@@ -65,6 +65,7 @@ const emit = defineEmits<{
   'preview-gate': [];
   'edit-conditions': [];
   'set-default-branch': [];
+  'show-in-yaml': [];
 }>();
 
 function getTypeSpecificItems(nodeType: string | undefined): MenuItem[] {
@@ -131,6 +132,7 @@ const menuItems = computed((): MenuItem[] => {
     { id: 'duplicate', label: 'Duplicate', icon: Copy, action: () => emit('duplicate') },
     { id: 'add-connected', label: 'Add connected node', icon: PlusCircle, action: () => emit('add-connected') },
     { id: 'help', label: `Help with ${nodeType ?? 'this'} node`, icon: HelpCircle, action: () => emit('help', nodeType ?? '') },
+    { id: 'show-in-yaml', label: 'Show in YAML', icon: FileCode, action: () => emit('show-in-yaml') },
   ];
   const typeItems = getTypeSpecificItems(nodeType);
   const destructiveItems: MenuItem[] = [

@@ -1,39 +1,56 @@
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
-using Flowamaz.Core.Entities.Connector;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Flowamaz.Application.Connectors.Handlers;
 
-/// <summary>Base for GitHub API handlers. Adds required User-Agent and Bearer auth.</summary>
+/// <summary>
+/// Base for GitHub REST API handlers. Authenticates with the workspace's GitHub OAuth token or PAT
+/// from the credential; owner/repo are escaped as single path segments.
+/// </summary>
 public abstract class GitHubHandlerBase : IConnectorOperationHandler
 {
+    public const string HttpClientName = "github-connector";
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger _logger;
 
     protected GitHubHandlerBase(IHttpClientFactory httpClientFactory, ILogger logger)
     {
         _httpClientFactory = httpClientFactory;
-        _logger = logger;
+        Logger = logger;
     }
 
     public string ConnectorId => "github";
     public abstract string OperationId { get; }
+    protected ILogger Logger { get; }
 
-    protected ILogger Logger => _logger;
+    public abstract Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct);
 
-    protected HttpClient CreateClient() => _httpClientFactory.CreateClient("github-connector");
-
-    protected static void SetAuth(HttpRequestMessage request, string? token)
+    protected async Task<JsonDocument> CallAsync(
+        HttpMethod method, string path, object? body, ConnectorCredential? credential, CancellationToken ct)
     {
+        var op = $"github/{OperationId}";
+        var cred = ConnectorInput.RequireCredential(credential, "GitHub", op);
+        using var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var request = ConnectorHttp.Json(method, $"https://api.github.com{path}", body, cred.AccessToken);
         request.Headers.Add("User-Agent", "Flowamaz/1.0");
-        if (!string.IsNullOrEmpty(token))
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Add("Accept", "application/vnd.github+json");
+        request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
+        return await ConnectorHttp.SendAsync(client, request, op, ct);
     }
 
-    public abstract Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct);
+    protected (string Owner, string Repo) Repo(JsonElement root) =>
+        (ConnectorInput.Segment(ConnectorInput.Required(root, "owner", $"github/{OperationId}")),
+         ConnectorInput.Segment(ConnectorInput.Required(root, "repo", $"github/{OperationId}")));
+
+    protected int Number(JsonElement root, string name)
+    {
+        var raw = ConnectorInput.Required(root, name, $"github/{OperationId}");
+        return int.TryParse(raw, out var n) && n > 0
+            ? n
+            : throw new Flowamaz.Core.Exceptions.ConnectorOperationException(
+                $"github/{OperationId}: '{name}' must be a positive number, got '{raw}'.");
+    }
 }
 
 public sealed class GitHubCreateIssueHandler : GitHubHandlerBase
@@ -41,33 +58,20 @@ public sealed class GitHubCreateIssueHandler : GitHubHandlerBase
     public GitHubCreateIssueHandler(IHttpClientFactory f, ILogger<GitHubCreateIssueHandler> l) : base(f, l) { }
     public override string OperationId => "create-issue";
 
-    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
+    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
         Logger.LogInformation("[GitHub:create-issue] ExecuteAsync entry");
-
         var root = input.RootElement;
-        var owner = root.GetProperty("owner").GetString() ?? throw new InvalidOperationException("'owner' is required.");
-        var repo = root.GetProperty("repo").GetString() ?? throw new InvalidOperationException("'repo' is required.");
-        var title = root.GetProperty("title").GetString() ?? throw new InvalidOperationException("'title' is required.");
-        var body = root.TryGetProperty("body", out var bEl) ? bEl.GetString() : null;
-
-        var labels = root.TryGetProperty("labels", out var lEl) && lEl.ValueKind == JsonValueKind.Array
-            ? lEl.EnumerateArray().Select(e => e.GetString()).Where(s => s is not null).ToArray()
+        var (owner, repo) = Repo(root);
+        var title = ConnectorInput.Required(root, "title", "github/create-issue");
+        var body = ConnectorInput.Optional(root, "body");
+        var labels = root.TryGetProperty("labels", out var l) && l.ValueKind == JsonValueKind.Array
+            ? l.EnumerateArray().Select(e => e.GetString()).Where(s => !string.IsNullOrWhiteSpace(s)).ToArray()
             : [];
 
-        var payload = JsonSerializer.Serialize(new { title, body, labels });
-        using var client = CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"https://api.github.com/repos/{owner}/{repo}/issues")
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-        SetAuth(request, null); // token set by sandbox via credential
-
-        using var response = await client.SendAsync(request, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
-
-        Logger.LogInformation("[GitHub:create-issue] ExecuteAsync exit status={Status}", (int)response.StatusCode);
-        return JsonDocument.Parse(string.IsNullOrWhiteSpace(responseBody) ? "{}" : responseBody);
+        var result = await CallAsync(HttpMethod.Post, $"/repos/{owner}/{repo}/issues", new { title, body, labels }, credential, ct);
+        Logger.LogInformation("[GitHub:create-issue] ExecuteAsync exit");
+        return result;
     }
 }
 
@@ -76,24 +80,16 @@ public sealed class GitHubGetIssueHandler : GitHubHandlerBase
     public GitHubGetIssueHandler(IHttpClientFactory f, ILogger<GitHubGetIssueHandler> l) : base(f, l) { }
     public override string OperationId => "get-issue";
 
-    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
+    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
         Logger.LogInformation("[GitHub:get-issue] ExecuteAsync entry");
-
         var root = input.RootElement;
-        var owner = root.GetProperty("owner").GetString()!;
-        var repo = root.GetProperty("repo").GetString()!;
-        var issueNumber = root.GetProperty("issue_number").GetInt32();
+        var (owner, repo) = Repo(root);
+        var number = Number(root, "issue_number");
 
-        using var client = CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{owner}/{repo}/issues/{issueNumber}");
-        SetAuth(request, null);
-
-        using var response = await client.SendAsync(request, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
-
+        var result = await CallAsync(HttpMethod.Get, $"/repos/{owner}/{repo}/issues/{number}", null, credential, ct);
         Logger.LogInformation("[GitHub:get-issue] ExecuteAsync exit");
-        return JsonDocument.Parse(string.IsNullOrWhiteSpace(responseBody) ? "{}" : responseBody);
+        return result;
     }
 }
 
@@ -102,31 +98,22 @@ public sealed class GitHubCreatePrHandler : GitHubHandlerBase
     public GitHubCreatePrHandler(IHttpClientFactory f, ILogger<GitHubCreatePrHandler> l) : base(f, l) { }
     public override string OperationId => "create-pr";
 
-    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
+    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
         Logger.LogInformation("[GitHub:create-pr] ExecuteAsync entry");
-
         var root = input.RootElement;
-        var owner = root.GetProperty("owner").GetString()!;
-        var repo = root.GetProperty("repo").GetString()!;
-        var title = root.GetProperty("title").GetString()!;
-        var head = root.GetProperty("head").GetString()!;
-        var base_ = root.GetProperty("base").GetString()!;
-        var body = root.TryGetProperty("body", out var bEl) ? bEl.GetString() : null;
-
-        var payload = JsonSerializer.Serialize(new { title, head, @base = base_, body });
-        using var client = CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"https://api.github.com/repos/{owner}/{repo}/pulls")
+        var (owner, repo) = Repo(root);
+        var payload = new
         {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            title = ConnectorInput.Required(root, "title", "github/create-pr"),
+            head = ConnectorInput.Required(root, "head", "github/create-pr"),
+            @base = ConnectorInput.Required(root, "base", "github/create-pr"),
+            body = ConnectorInput.Optional(root, "body"),
         };
-        SetAuth(request, null);
 
-        using var response = await client.SendAsync(request, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
-
+        var result = await CallAsync(HttpMethod.Post, $"/repos/{owner}/{repo}/pulls", payload, credential, ct);
         Logger.LogInformation("[GitHub:create-pr] ExecuteAsync exit");
-        return JsonDocument.Parse(string.IsNullOrWhiteSpace(responseBody) ? "{}" : responseBody);
+        return result;
     }
 }
 
@@ -135,28 +122,16 @@ public sealed class GitHubAddCommentHandler : GitHubHandlerBase
     public GitHubAddCommentHandler(IHttpClientFactory f, ILogger<GitHubAddCommentHandler> l) : base(f, l) { }
     public override string OperationId => "add-comment";
 
-    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
+    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
         Logger.LogInformation("[GitHub:add-comment] ExecuteAsync entry");
-
         var root = input.RootElement;
-        var owner = root.GetProperty("owner").GetString()!;
-        var repo = root.GetProperty("repo").GetString()!;
-        var issueNumber = root.GetProperty("issue_number").GetInt32();
-        var body = root.GetProperty("body").GetString()!;
+        var (owner, repo) = Repo(root);
+        var number = Number(root, "issue_number");
+        var body = ConnectorInput.Required(root, "body", "github/add-comment");
 
-        var payload = JsonSerializer.Serialize(new { body });
-        using var client = CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"https://api.github.com/repos/{owner}/{repo}/issues/{issueNumber}/comments")
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-        SetAuth(request, null);
-
-        using var response = await client.SendAsync(request, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
-
+        var result = await CallAsync(HttpMethod.Post, $"/repos/{owner}/{repo}/issues/{number}/comments", new { body }, credential, ct);
         Logger.LogInformation("[GitHub:add-comment] ExecuteAsync exit");
-        return JsonDocument.Parse(string.IsNullOrWhiteSpace(responseBody) ? "{}" : responseBody);
+        return result;
     }
 }

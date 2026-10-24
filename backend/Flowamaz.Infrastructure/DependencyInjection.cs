@@ -45,6 +45,7 @@ public static class DependencyInjection
     {
         services.AddSingleton<IStripeEventVerifier, StripeEventVerifier>();
         services.AddScoped<IStripeService, StripeService>();
+        services.AddScoped<IStripeConnectGateway, StripeConnectGateway>();
     }
 
     private static string FirstNonEmpty(string current, string? fallback) =>
@@ -75,6 +76,7 @@ public static class DependencyInjection
             // Documented single-name STRIPE_* env vars win over appsettings (mirrors AI/Git mapping).
             options.SecretKey = FirstNonEmpty(options.SecretKey, configuration["STRIPE_SECRET_KEY"]);
             options.WebhookSecret = FirstNonEmpty(options.WebhookSecret, configuration["STRIPE_WEBHOOK_SECRET"]);
+            options.ConnectWebhookSecret = FirstNonEmpty(options.ConnectWebhookSecret, configuration["STRIPE_CONNECT_WEBHOOK_SECRET"]);
             options.StarterPriceIdMonthly = FirstNonEmpty(options.StarterPriceIdMonthly, configuration["STRIPE_STARTER_PRICE_ID_MONTHLY"]);
             options.StarterPriceIdAnnual = FirstNonEmpty(options.StarterPriceIdAnnual, configuration["STRIPE_STARTER_PRICE_ID_ANNUAL"]);
             options.ProPriceIdMonthly = FirstNonEmpty(options.ProPriceIdMonthly, configuration["STRIPE_PRO_PRICE_ID_MONTHLY"]);
@@ -195,8 +197,10 @@ public static class DependencyInjection
     private static void AddConnectors(IServiceCollection services)
     {
         services.AddScoped<ICredentialVaultService, CredentialVaultService>();
+        services.AddScoped<IConnectorCredentialResolver, ConnectorCredentialResolver>();
         services.AddScoped<IConnectorMarketplaceRepository, ConnectorMarketplaceRepository>();
         services.AddScoped<IWorkflowTemplateRepository, WorkflowTemplateRepository>();
+        services.AddScoped<IEconomyRepository, EconomyRepository>();
         services.AddHttpClient(ConnectorSubmissionPrService.HttpClientName);
         services.AddScoped<IConnectorSubmissionPrService, ConnectorSubmissionPrService>();
         services.AddSingleton<ISecretProtector, AesGcmSecretProtector>();
@@ -214,7 +218,7 @@ public static class DependencyInjection
         services.AddHttpClient(Services.Sso.OidcClient.HttpClientName);
         services.AddScoped<IOidcClient, Services.Sso.OidcClient>();
         services.AddScoped<IConnectorCatalogueService, ConnectorCatalogueService>();
-        services.AddHttpClient(ConnectorSandbox.HttpClientName);
+        services.AddHttpClient(ConnectorSandbox.HttpClientName).ConfigurePrimaryHttpMessageHandler(Flowamaz.Application.DependencyInjection.GuardedHandler);
         services.AddScoped<IConnectorSandbox, ConnectorSandbox>();
     }
 }

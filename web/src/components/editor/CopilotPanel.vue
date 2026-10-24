@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import FmTooltip from '@/components/common/FmTooltip.vue';
 
 const props = defineProps<{
@@ -16,6 +16,15 @@ const command = ref('');
 const loading = ref(false);
 const lastResult = ref<{ patch: string | null; pattern: string | null; error: string | null } | null>(null);
 const showDiff = ref(false);
+const inputRef = ref<HTMLInputElement | null>(null);
+
+// `autofocus` only works on page load, not when the panel is inserted by v-if — focus the command
+// box on every open so the panel is visibly active and the user can type straight away.
+watch(() => props.open, async (open) => {
+  if (!open) return;
+  await nextTick();
+  inputRef.value?.focus();
+}, { immediate: true });
 
 const suggestions = computed(() =>
   props.history.filter(h => h.toLowerCase().includes(command.value.toLowerCase()) && h !== command.value).slice(0, 5),
@@ -80,12 +89,12 @@ defineExpose({ setResult });
         <!-- Command input -->
         <div class="relative">
           <input
+            ref="inputRef"
             v-model="command"
             type="text"
             placeholder="What would you like to do? e.g. 'Add a 24h timeout to manager-gate'"
             class="w-full bg-white text-gray-900 text-sm rounded-xl px-4 py-3 border border-gray-300 focus:border-teal-500 focus:outline-none placeholder-gray-400"
             :disabled="loading"
-            autofocus
             @keydown="onKeydown"
           >
           <button

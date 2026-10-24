@@ -34,7 +34,10 @@ public sealed record SfgNode(
     CompensationBlock? Compensation);
 
 /// <summary>A directed edge. A null <see cref="Condition"/> is unconditional.</summary>
-public sealed record SfgEdge(string Id, string FromNodeId, string ToNodeId, string? Condition);
+/// <param name="IsDefault">An "else" branch of a router: followed only when no sibling edge's condition holds.</param>
+/// <param name="Via">Branch label from YAML (<c>via: approved</c>). Without a matching router branch
+/// config it routes on the upstream decision (e.g. a human gate's approved/rejected).</param>
+public sealed record SfgEdge(string Id, string FromNodeId, string ToNodeId, string? Condition, bool IsDefault = false, string? Via = null);
 
 public sealed record WorkflowMetadata(string Name, string? Description);
 

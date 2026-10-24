@@ -8,6 +8,9 @@ import TemplateCard from '@/components/library/TemplateCard.vue';
 import InstallTemplateModal from '@/components/library/InstallTemplateModal.vue';
 import { templateService, type TemplateListItem } from '@/services/template.service';
 import { useWorkspace } from '@/composables/useWorkspace';
+import { marketplaceService } from '@/services/marketplace.service';
+import { isPaid } from '@/utils/money.util';
+import { isPurchaseRequiredError } from '@/utils/marketplace.util';
 
 const CATEGORIES = ['All', 'Finance', 'HR', 'IT', 'Legal', 'Operations', 'Custom'] as const;
 type Category = (typeof CATEGORIES)[number];
@@ -67,13 +70,35 @@ watch(searchQuery, () => {
 });
 watch(activeCategory, () => void load());
 
-function openPreview(id: string): void {
-  void router.push({ name: 'template-detail', params: { id } });
+function openPreview(id: string, intent?: 'install'): void {
+  // `intent=install` makes the detail page explain why Install is locked (a toast here
+  // would be lost in the navigation).
+  void router.push({ name: 'template-detail', params: { id }, query: intent ? { intent } : {} });
 }
 
-function openInstall(id: string): void {
-  selectedTemplate.value = templates.value.find((t) => t.id === id) ?? null;
-  if (selectedTemplate.value) installModalOpen.value = true;
+/** Paid templates the workspace doesn't own go to the detail page to buy. */
+async function openInstall(id: string): Promise<void> {
+  const template = templates.value.find((t) => t.id === id) ?? null;
+  if (!template) return;
+  if (isPaid(template.pricingModel, template.priceCents)) {
+    if (!currentWorkspaceId.value) await loadWorkspaces();
+    const workspaceId = currentWorkspaceId.value;
+    let owned = false;
+    if (workspaceId) {
+      try {
+        const access = await marketplaceService.access(workspaceId, id);
+        owned = access.owned || !access.requiresPurchase;
+      } catch {
+        // Fall through to the detail page, which explains the access error with a retry.
+      }
+    }
+    if (!owned) {
+      openPreview(id, 'install');
+      return;
+    }
+  }
+  selectedTemplate.value = template;
+  installModalOpen.value = true;
 }
 
 async function confirmInstall(name: string): Promise<void> {
@@ -93,6 +118,11 @@ async function confirmInstall(name: string): Promise<void> {
       query: { workspaceId },
     });
   } catch (err: unknown) {
+    if (isPurchaseRequiredError(err)) {
+      installModalOpen.value = false;
+      openPreview(template.id, 'install');
+      return;
+    }
     installModal.value?.fail(
       err instanceof Error
         ? err.message

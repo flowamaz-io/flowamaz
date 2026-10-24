@@ -22,7 +22,7 @@ const MAX_LIVE_SOCKETS = 20;
 
 const store = useWorkflowStore();
 const auth = useAuthStore();
-const { instances, loading, error } = storeToRefs(store);
+const { instances, workflows, loading, error } = storeToRefs(store);
 const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
 
 const activeTab = ref<RunTab>('production');
@@ -31,6 +31,12 @@ const from = ref('');
 const to = ref('');
 
 let sockets: InstanceWebSocket[] = [];
+
+// O8: the list showed only instance ids, so runs of different workflows looked identical.
+const workflowNames = computed(() => new Map(workflows.value.map((w) => [w.id, w.name])));
+function workflowName(definitionId: string): string {
+  return workflowNames.value.get(definitionId) ?? 'Deleted workflow';
+}
 
 const liveCount = computed(() => sockets.filter((s) => s.connectionState.value === 'live').length);
 const anyReconnecting = computed(() => sockets.some((s) => s.connectionState.value === 'reconnecting'));
@@ -68,7 +74,8 @@ function connectLive(): void {
 
 async function reload(): Promise<void> {
   if (!currentWorkspaceId.value) await loadWorkspaces();
-  const filters: InstanceListFilters = { includeTest: activeTab.value === 'test' };
+  if (workflows.value.length === 0) await store.loadWorkflows();
+  const filters: InstanceListFilters = activeTab.value === 'test' ? { testOnly: true } : {};
   if (statusFilter.value) filters.status = statusFilter.value;
   if (from.value) filters.from = from.value;
   if (to.value) filters.to = to.value;
@@ -205,6 +212,9 @@ onUnmounted(disconnectAll);
               Instance
             </th>
             <th class="px-4 py-3">
+              Workflow
+            </th>
+            <th class="px-4 py-3">
               Status
             </th>
             <th class="px-4 py-3">
@@ -239,6 +249,9 @@ onUnmounted(disconnectAll);
               >
                 TEST
               </span>
+            </td>
+            <td class="px-4 py-3 text-slate-700">
+              {{ workflowName(inst.workflowDefinitionId) }}
             </td>
             <td class="px-4 py-3">
               <FmBadge :variant="instanceStatusVariant(inst.status)">

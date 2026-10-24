@@ -34,11 +34,34 @@ In any non-`Development` environment the API validates the following variables a
 | `REDIS_CONNECTION_STRING` | Yes (resolved) | Redis endpoint for task queue, session/semantic cache, and rate limiting. In Compose overridden to `redis:6379`. | `<host>:6379` (add `,password=<pwd>` if your Redis requires auth). |
 | `CORS_ALLOWED_ORIGINS` | Recommended | Comma-separated SPA origins. If unset in Production all cross-origin requests are blocked (a warning is logged). | e.g. `https://app.flowamaz.io` |
 | `GIT_REPOS_BASE_PATH` | Recommended | Writable directory for workflow Git versioning. Startup probes it for write access and fails if not writable. Defaults to `bin/git-repos`. | Any persistent, writable volume path. |
+| `CONNECTOR_RUNNER_SECRET` | Yes, with the sandbox | HMAC key shared by the API and the connector-runner (32+ chars). Enforced when `Connectors__Sandbox__Url` is set; the runner itself refuses to start without it. | `openssl rand -hex 32` |
 
 > The six variables marked Required in the first six rows are the exact set enforced by the startup
 > gate (`DB_CONNECTION_STRING`, `JWT_SECRET`, `CREDENTIAL_MASTER_KEY`, `GATE_SIGNING_KEY`,
 > `Email__ResendApiKey`, `Ai__AnthropicPlatformKey`). A missing value yields a log line naming the
 > variable and how to generate it, then the process exits.
+
+### 1b. Connector sandbox (FUNCTIONAL.md §9.5)
+
+Compose runs two extra services so workflow-directed code and third-party calls never execute in the API:
+
+- **`connector-runner`** runs HTTP/REST, Webhook emit, Slack, Teams, GitHub, Microsoft 365 and Script/Shell
+  steps. It is attached only to the internal `sandbox` network (no internet, no db/redis), runs as non-root
+  with a read-only filesystem, `cap_drop: ALL`, `no-new-privileges`, CPU/memory/pids limits and a 256 MB
+  `/tmp`. Each request is HMAC-signed by the API (60 s replay window) and carries only that step's inputs and
+  its one decrypted credential. Per-connector domain allowlists (e.g. Slack → `slack.com`) come from the
+  connector catalog and cannot be widened by the request. Script/Shell is enabled **only** here.
+- **`egress-proxy`** is the runner's sole route out. It resolves every destination itself and refuses
+  private, loopback, link-local/cloud-metadata, CGNAT and ULA addresses and any port other than 443/80
+  (`Proxy__AllowedPorts`). Blocked attempts are logged as `Egress proxy BLOCKED host:port — reason`.
+
+PostgreSQL/MySQL, File system and platform Email stay in the API behind the in-process egress guard.
+Without `Connectors__Sandbox__Url` (local dev) all connectors run in-process and Script/Shell stays off.
+Community Edition does not ship the sandbox; self-hosters who enable Script/Shell accept that scripts run
+inside the API container.
+
+Verify after deploy: `docker compose logs connector-runner | grep "executing"` while running a workflow with
+an HTTP step, and `docker compose exec connector-runner curl -fsS -m5 http://169.254.169.254/` must fail (the proxy answers 403).
 
 ## 2. TLS certificate
 Replace the self-signed dev cert with a real one.

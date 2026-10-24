@@ -66,6 +66,4 @@ their job — it's the safest default.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/workspaces/roles-and-permissions.md)

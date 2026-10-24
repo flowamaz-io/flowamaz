@@ -9,7 +9,9 @@ public record CredentialAlias(
     string Name,
     string AuthType,
     DateTime? ExpiresAt,
-    bool IsActive);
+    bool IsActive,
+    string? ConnectorId = null,
+    DateTime? LastUsedAt = null);
 
 /// <summary>
 /// Secure credential vault: store/retrieve/revoke AES-256-GCM encrypted credentials.
@@ -34,6 +36,12 @@ public interface ICredentialVaultService
     /// belongs to <paramref name="workspaceId"/> before decrypting.
     /// </summary>
     Task<string> RetrieveAsync(Guid workspaceId, Guid credentialId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Re-encrypts a new plain value into an existing credential (e.g. a refreshed OAuth token bundle).
+    /// Validates workspace ownership. The alias and auth type are unchanged.
+    /// </summary>
+    Task UpdateValueAsync(Guid workspaceId, Guid credentialId, string plainValue, CancellationToken ct = default);
 
     /// <summary>Marks the credential inactive; does not delete the row.</summary>
     Task RevokeAsync(Guid workspaceId, Guid credentialId, CancellationToken ct = default);

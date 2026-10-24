@@ -9,4 +9,7 @@ public enum NodeStatus
     Failed,
     Skipped,
     Compensating,
+
+    /// <summary>The run was cancelled while this node was pending/running (e.g. waiting at a gate).</summary>
+    Cancelled,
 }

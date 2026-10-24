@@ -69,10 +69,10 @@ describe('RouterConditionBuilder', () => {
 });
 
 describe('VariableAutocomplete', () => {
-  it('shows variables matching the open ${ fragment', async () => {
+  it('shows variables matching the open {{ fragment', async () => {
     const wrapper = mount(VariableAutocomplete, {
       props: {
-        modelValue: '${ap',
+        modelValue: 'Hello {{ ap',
         variables: [
           { name: 'approver_email', type: 'string' },
           { name: 'amount', type: 'number' },
@@ -85,5 +85,26 @@ describe('VariableAutocomplete', () => {
     const suggestions = wrapper.findAll('[data-test="variable-suggestion"]');
     expect(suggestions).toHaveLength(1);
     expect(suggestions[0]!.text()).toContain('approver_email');
+  });
+
+  it('inserts the {{ name }} syntax the engine resolves (not ${name})', async () => {
+    const wrapper = mount(VariableAutocomplete, {
+      props: { modelValue: 'Total: {{ am', variables: [{ name: 'amount', type: 'number' }] },
+    });
+
+    await wrapper.find('input').trigger('focus');
+    await wrapper.find('[data-test="variable-suggestion"]').trigger('mousedown');
+
+    expect(wrapper.emitted('update:modelValue')!.at(-1)).toEqual(['Total: {{ amount }}']);
+  });
+
+  it('offers nothing once the placeholder is closed', async () => {
+    const wrapper = mount(VariableAutocomplete, {
+      props: { modelValue: '{{ amount }} and more', variables: [{ name: 'amount', type: 'number' }] },
+    });
+
+    await wrapper.find('input').trigger('focus');
+
+    expect(wrapper.findAll('[data-test="variable-suggestion"]')).toHaveLength(0);
   });
 });

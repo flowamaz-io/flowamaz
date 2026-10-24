@@ -48,6 +48,4 @@ new production version while the previous ones remain in history for rollback.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/workflows/publishing-workflows.md)

@@ -1,3 +1,4 @@
+using Flowamaz.Core.Exceptions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -55,6 +56,7 @@ public sealed partial class ConversationImportService : IConversationImportServi
 
         var normalised = NormaliseConversation(conversationText, sourceType);
         var modelConfig = await _models.ResolveModelConfigAsync(AiFunctionIds.NlYaml, workspaceId, cancellationToken);
+        AiNotConfiguredException.ThrowIfNoKey(modelConfig, "Extracting a workflow from a conversation");
         var result = await _ai.CompleteAsync(modelConfig, ExtractionSystemPrompt, normalised, cancellationToken);
 
         _metering.RecordUsage(AiFunctionIds.NlYaml, modelConfig.ModelId, modelConfig.Provider,
@@ -134,14 +136,18 @@ public sealed partial class ConversationImportService : IConversationImportServi
     private static NlWorkflowRequest BuildNlRequest(ExtractionDto e, string originalText)
     {
         var name = string.IsNullOrWhiteSpace(e.WorkflowName) ? "Imported Workflow" : e.WorkflowName;
-        var steps = e.Steps.Count > 0 ? string.Join(". ", e.Steps) : "Process steps extracted from conversation";
+        // One step per line: the generator sizes its output budget from the line count, and joining with ". "
+        // made every conversation look like a one-step process (run 3: truncated YAML).
+        var steps = e.Steps.Count > 0
+            ? string.Join("\n", e.Steps.Select((step, i) => $"{i + 1}. {step.Trim()}"))
+            : "Process steps extracted from conversation";
         var approvers = e.Approvers.Count > 0 ? $"Approvers: {string.Join(", ", e.Approvers)}. " : "";
         var rules = string.IsNullOrWhiteSpace(e.Rules) ? "None" : e.Rules;
 
         return new NlWorkflowRequest(
             WorkflowName: name,
             Purpose: e.Summary,
-            TriggerDescription: string.IsNullOrWhiteSpace(e.Trigger) ? "Manual or event-based trigger" : e.Trigger,
+            TriggerDescription: string.IsNullOrWhiteSpace(e.Trigger) ? "Started manually by a person" : e.Trigger,
             StepsDescription: steps,
             RulesAndConstraints: $"{approvers}{rules}",
             SystemsAndAi: e.Systems.Count > 0 ? string.Join(", ", e.Systems) : "None specified",

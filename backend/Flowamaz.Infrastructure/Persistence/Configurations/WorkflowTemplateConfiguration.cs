@@ -22,6 +22,9 @@ public sealed class WorkflowTemplateConfiguration : IEntityTypeConfiguration<Wor
         builder.Property(t => t.ReviewStatus).HasMaxLength(16).IsRequired();
         builder.Property(t => t.YamlContent).IsRequired();
         builder.Property(t => t.AverageRating).HasColumnType("numeric(3,2)");
+        builder.Property(t => t.PricingModel).HasMaxLength(16).HasDefaultValue("free").IsRequired();
+        builder.Property(t => t.PriceCents).HasDefaultValue(0);
+        builder.Property(t => t.Currency).HasMaxLength(3).HasDefaultValue("usd").IsRequired();
 
         var tagsConverter = new ValueConverter<string[], string>(
             v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),

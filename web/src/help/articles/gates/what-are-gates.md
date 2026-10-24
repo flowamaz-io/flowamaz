@@ -47,6 +47,4 @@ Gates**. To learn how people respond, see **Approving Gates**.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/gates/what-are-gates.md)

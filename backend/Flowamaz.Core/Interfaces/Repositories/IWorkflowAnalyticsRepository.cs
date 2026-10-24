@@ -19,7 +19,20 @@ public interface IWorkflowAnalyticsRepository
 
     Task<int> GetActiveInstanceCountAsync(Guid workspaceId, Guid workflowDefinitionId, CancellationToken cancellationToken = default);
     Task<int> GetFailedCountSinceAsync(Guid workspaceId, Guid workflowDefinitionId, DateTime since, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Live count of production (non-test) runs created in the workspace since <paramref name="since"/>.
+    /// Read straight from workflow_instances so the dashboard is current without waiting for the
+    /// hourly metric roll-up.
+    /// </summary>
+    Task<int> GetProductionRunCountSinceAsync(Guid workspaceId, DateTime since, CancellationToken cancellationToken = default);
+
+    /// <summary>Per-workflow production (non-test) run totals and completed counts for runs created in [from, to).</summary>
+    Task<List<WorkflowRunCounts>> GetProductionRunCountsAsync(Guid workspaceId, DateTime from, DateTime to, CancellationToken cancellationToken = default);
 }
+
+/// <summary>Production run totals for one workflow in a window.</summary>
+public sealed record WorkflowRunCounts(Guid WorkflowDefinitionId, int Runs, int Completed);
 
 /// <summary>One instance's status and completed duration (null when not completed).</summary>
 public sealed record InstanceDurationSample(InstanceStatus Status, long? DurationMs);

@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import LoginView from '@/views/auth/LoginView.vue';
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => ({ query: {} }) }));
 vi.mock('@/services/sso.service', () => ({
   ssoService: {
     getStatus: vi.fn(),

@@ -64,6 +64,4 @@ makes that loop more powerful.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/getting-started/what-is-flowamaz.md)

@@ -36,6 +36,7 @@ public sealed class StripeService : IStripeService
     private readonly ILogger<StripeService> _logger;
     private readonly IStripeEventVerifier _verifier;
     private readonly IAuditService? _audit;
+    private readonly IWorkflowEconomyService? _economy;
 
     public StripeService(
         IOptions<StripeOptions> options,
@@ -47,8 +48,10 @@ public sealed class StripeService : IStripeService
         IEmailService email,
         ILogger<StripeService> logger,
         IStripeEventVerifier? verifier = null,
-        IAuditService? audit = null)
+        IAuditService? audit = null,
+        IWorkflowEconomyService? economy = null)
     {
+        _economy = economy;
         _options = options.Value;
         _organisations = organisations;
         _subscriptions = subscriptions;
@@ -150,6 +153,12 @@ public sealed class StripeService : IStripeService
             {
                 stripeEvent = _verifier.Verify(payload, stripeSignature, _options.WebhookSecret);
             }
+            catch (StripeException) when (!string.IsNullOrWhiteSpace(_options.ConnectWebhookSecret))
+            {
+                // Connect events (publisher account.updated) are signed by the Connect endpoint's secret.
+                try { stripeEvent = _verifier.Verify(payload, stripeSignature, _options.ConnectWebhookSecret); }
+                catch (StripeException) { throw BillingException.InvalidWebhookSignature(); }
+            }
             catch (StripeException)
             {
                 throw BillingException.InvalidWebhookSignature();
@@ -159,6 +168,15 @@ public sealed class StripeService : IStripeService
             {
                 _logger.LogInformation("StripeService.HandleWebhookAsync skip duplicate event={EventId} type={Type}",
                     stripeEvent.Id, stripeEvent.Type);
+                return;
+            }
+
+            // Workflow Economy events (paid templates, publisher accounts) are routed first; anything
+            // the economy doesn't own falls through to plan billing below.
+            if (await HandleEconomyEventAsync(stripeEvent, cancellationToken))
+            {
+                await MarkProcessedAsync(stripeEvent.Id);
+                _logger.LogInformation("StripeService.HandleWebhookAsync exit event={EventId} type={Type} (economy)", stripeEvent.Id, stripeEvent.Type);
                 return;
             }
 
@@ -195,6 +213,54 @@ public sealed class StripeService : IStripeService
     }
 
     // ── Webhook handlers ──────────────────────────────────────────────────────
+
+    private async Task<bool> HandleEconomyEventAsync(Event stripeEvent, CancellationToken ct)
+    {
+        if (_economy is null) return false;
+        switch (stripeEvent.Type)
+        {
+            case EventTypes.CheckoutSessionCompleted:
+            {
+                var s = (Session)stripeEvent.Data.Object;
+                return await _economy.HandleCheckoutCompletedAsync(new Core.Models.EconomyCheckoutCompleted(
+                    s.Id, (IReadOnlyDictionary<string, string>?)s.Metadata?.ToDictionary() ?? new Dictionary<string, string>(),
+                    s.PaymentStatus, s.PaymentIntentId, s.SubscriptionId, s.AmountTotal, s.Currency), ct);
+            }
+            case EventTypes.InvoicePaymentSucceeded:
+            {
+                var i = (Invoice)stripeEvent.Data.Object;
+                return await _economy.HandleInvoicePaidAsync(new Core.Models.EconomyInvoicePaid(
+                    i.Id, InvoiceSubscriptionId(i), i.BillingReason, i.AmountPaid, i.Currency, null), ct);
+            }
+            case EventTypes.InvoicePaymentFailed:
+                return await _economy.HandleInvoicePaymentFailedAsync(InvoiceSubscriptionId((Invoice)stripeEvent.Data.Object), ct);
+            case EventTypes.CustomerSubscriptionUpdated:
+            case EventTypes.CustomerSubscriptionDeleted:
+            {
+                var sub = (StripeSubscription)stripeEvent.Data.Object;
+                var periodEnd = sub.Items?.Data?.Select(it => (DateTime?)it.CurrentPeriodEnd).Max();
+                return await _economy.HandleSubscriptionChangedAsync(new Core.Models.EconomySubscriptionChanged(
+                    sub.Id, sub.Status ?? string.Empty, sub.CancelAtPeriodEnd, periodEnd,
+                    stripeEvent.Type == EventTypes.CustomerSubscriptionDeleted), ct);
+            }
+            case EventTypes.ChargeRefunded:
+            {
+                var c = (Charge)stripeEvent.Data.Object;
+                var refunds = c.Refunds?.Data?.Select(r => new Core.Models.EconomyRefund(r.Id, r.Amount)).ToList()
+                    ?? [];
+                return await _economy.HandleChargeRefundedAsync(new Core.Models.EconomyChargeRefunded(
+                    c.Id, c.PaymentIntentId, c.Amount, c.AmountRefunded, refunds), ct);
+            }
+            case EventTypes.AccountUpdated:
+                await _economy.HandleAccountUpdatedAsync(StripeConnectGateway.ToStatus((Account)stripeEvent.Data.Object), ct);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static string? InvoiceSubscriptionId(Invoice invoice) =>
+        invoice.Parent?.SubscriptionDetails?.SubscriptionId;
 
     private async Task HandleCheckoutCompletedAsync(Session session, CancellationToken ct)
     {

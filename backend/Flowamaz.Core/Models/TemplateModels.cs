@@ -19,7 +19,11 @@ public sealed record TemplateListItem(
     decimal AverageRating,
     string[] Tags,
     string Version,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string PricingModel = "free",
+    int PriceCents = 0,
+    string Currency = "usd",
+    string? PublisherName = null);
 
 /// <summary>Full template detail including the YAML body and a derived node-type summary.</summary>
 public sealed record TemplateDetail(
@@ -36,7 +40,11 @@ public sealed record TemplateDetail(
     string Version,
     string YamlContent,
     IReadOnlyList<TemplateNodeSummary> NodeSummary,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string PricingModel = "free",
+    int PriceCents = 0,
+    string Currency = "usd",
+    string? PublisherName = null);
 
 /// <summary>"This template uses: 2× human-gate, 3× action…" — a count per node type.</summary>
 public sealed record TemplateNodeSummary(string NodeType, int Count);
@@ -47,7 +55,8 @@ public sealed record PublishTemplateDetails(
     string Description,
     string Category,
     string[] Tags,
-    string? PreviewImageUrl);
+    string? PreviewImageUrl,
+    TemplatePricingRequest? Pricing = null);
 
 /// <summary>Outcome of publishing a community template.</summary>
 public sealed record PublishTemplateResult(Guid TemplateId, string Slug, string ReviewStatus);

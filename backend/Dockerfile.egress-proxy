@@ -1,0 +1,19 @@
+# Egress proxy for the connector sandbox: CONNECT/HTTP forward proxy that refuses private,
+# loopback, link-local/metadata and other internal destinations. Build context is ./backend.
+#   docker build -f Dockerfile.egress-proxy -t flowamaz-egress-proxy .
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY Flowamaz.Core/*.csproj Flowamaz.Core/
+COPY Flowamaz.EgressProxy/*.csproj Flowamaz.EgressProxy/
+RUN dotnet restore Flowamaz.EgressProxy/Flowamaz.EgressProxy.csproj
+COPY Flowamaz.Core/ Flowamaz.Core/
+COPY Flowamaz.EgressProxy/ Flowamaz.EgressProxy/
+RUN dotnet publish Flowamaz.EgressProxy/Flowamaz.EgressProxy.csproj -c Release -o /app/publish --no-restore
+
+FROM mcr.microsoft.com/dotnet/runtime:10.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish .
+ENV DOTNET_EnableDiagnostics=0 Proxy__Port=3128
+EXPOSE 3128
+USER $APP_UID
+ENTRYPOINT ["dotnet", "Flowamaz.EgressProxy.dll"]

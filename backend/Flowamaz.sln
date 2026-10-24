@@ -15,6 +15,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flowamaz.Tests.Unit", "Flow
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flowamaz.Tests.Integration", "Flowamaz.Tests.Integration\Flowamaz.Tests.Integration.csproj", "{9388B915-6719-4C60-980E-A1A6E711D8D1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flowamaz.ConnectorRunner", "Flowamaz.ConnectorRunner\Flowamaz.ConnectorRunner.csproj", "{AF987D82-D3B1-4F9B-9205-0B27E0788594}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flowamaz.EgressProxy", "Flowamaz.EgressProxy\Flowamaz.EgressProxy.csproj", "{C9E7FBEF-1600-416E-B30D-138C20014C50}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -97,6 +101,30 @@ Global
 		{9388B915-6719-4C60-980E-A1A6E711D8D1}.Release|x64.Build.0 = Release|Any CPU
 		{9388B915-6719-4C60-980E-A1A6E711D8D1}.Release|x86.ActiveCfg = Release|Any CPU
 		{9388B915-6719-4C60-980E-A1A6E711D8D1}.Release|x86.Build.0 = Release|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Debug|x64.Build.0 = Debug|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Debug|x86.Build.0 = Debug|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Release|x64.ActiveCfg = Release|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Release|x64.Build.0 = Release|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Release|x86.ActiveCfg = Release|Any CPU
+		{AF987D82-D3B1-4F9B-9205-0B27E0788594}.Release|x86.Build.0 = Release|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Debug|x64.Build.0 = Debug|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Debug|x86.Build.0 = Debug|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Release|x64.ActiveCfg = Release|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Release|x64.Build.0 = Release|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Release|x86.ActiveCfg = Release|Any CPU
+		{C9E7FBEF-1600-416E-B30D-138C20014C50}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

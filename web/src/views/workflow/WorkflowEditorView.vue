@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { useRoute, onBeforeRouteLeave } from 'vue-router';
 import { onClickOutside } from '@vueuse/core';
 import { XCircle, AlertTriangle, CheckCircle2 } from 'lucide-vue-next';
+import FmModal from '../../components/common/FmModal.vue';
 import SfgCanvas from '../../components/canvas/SfgCanvas.vue';
 import FmYamlEditor from '../../components/editor/FmYamlEditor.vue';
 import CopilotPanel from '../../components/editor/CopilotPanel.vue';
@@ -12,6 +13,9 @@ import { useHelp } from '../../composables/useHelp';
 import { useWorkspace } from '../../composables/useWorkspace';
 import { useWorkflowStore } from '../../stores/workflow.store';
 import { useToast } from '../../composables/useToast';
+import { useCanvasStore } from '../../stores/canvas.store';
+import { findNodeIdLine } from '../../utils/canvas.util';
+import { copilotErrorMessage } from '../../utils/error.util';
 
 const route = useRoute();
 const ws = useWorkspace();
@@ -22,10 +26,65 @@ const workflowStore = useWorkflowStore();
 const {
   yaml, healthScore, saveState, isDirty, validationErrors,
   copilotHistory, splitRatio,
-  loadWorkflow, validateDebounced, validate, save, sendCopilotCommand, applyPatch, updateSplitRatio,
+  loadWorkflow, validateDebounced, validate, save: saveWorkflow, sendCopilotCommand, applyPatch, updateSplitRatio,
 } = useWorkflowEditor(workspaceId, workflowId);
 
 const toast = useToast();
+
+/** Save, telling the user what to do when it fails (the composable only reports success). */
+async function save(): Promise<boolean> {
+  const ok = await saveWorkflow();
+  if (!ok) {
+    toast.error("Couldn't save the workflow — your changes are still here. Check your connection and press Save again.");
+  }
+  return ok;
+}
+
+// ── Unsaved-changes guard ────────────────────────────────────────────────────
+// Leaving the editor (in-app navigation) asks first; closing/reloading the tab gets the
+// browser's own prompt, which is the only thing browsers allow during unload.
+const leaveDialogOpen = ref(false);
+const leaveSaving = ref(false);
+let resolveLeave: ((proceed: boolean) => void) | null = null;
+
+function askToLeave(): Promise<boolean> {
+  leaveDialogOpen.value = true;
+  return new Promise((resolve) => { resolveLeave = resolve; });
+}
+
+function finishLeave(proceed: boolean): void {
+  leaveDialogOpen.value = false;
+  const resolve = resolveLeave;
+  resolveLeave = null;
+  resolve?.(proceed);
+}
+
+async function saveAndLeave(): Promise<void> {
+  leaveSaving.value = true;
+  try {
+    // On failure stay on the page: the error toast explains what to do and nothing is lost.
+    finishLeave(await save());
+  } finally {
+    leaveSaving.value = false;
+  }
+}
+
+function onLeaveDialogToggle(open: boolean): void {
+  // Closing the dialog (Esc, ×, backdrop) means "Stay".
+  if (!open) finishLeave(false);
+}
+
+onBeforeRouteLeave(async () => {
+  if (!isDirty.value) return true;
+  return askToLeave();
+});
+
+function onBeforeUnload(e: BeforeUnloadEvent): void {
+  if (!isDirty.value) return;
+  e.preventDefault();
+  // Legacy browsers need returnValue set to show the prompt.
+  e.returnValue = '';
+}
 
 const { openArticle } = useHelp();
 
@@ -87,8 +146,9 @@ async function onCopilotCommand(cmd: string) {
     const { patch, pattern } = await sendCopilotCommand(cmd);
     copilotPanelRef.value?.setResult(patch, pattern);
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Request failed';
-    copilotPanelRef.value?.setResult(null, null, `Co-pilot request failed: ${msg}. Check your connection and try again.`);
+    // Show the server's actionable message (e.g. a rejected AI key) verbatim; only a real network
+    // failure mentions the connection.
+    copilotPanelRef.value?.setResult(null, null, copilotErrorMessage(e));
   }
 }
 
@@ -117,6 +177,30 @@ function healthColour(score: number | null) {
   return 'text-red-400';
 }
 
+// ── Canvas → YAML jump ("Show in YAML" / node selection) ─────────────────────
+const canvasStore = useCanvasStore();
+const yamlEditorRef = ref<InstanceType<typeof FmYamlEditor> | null>(null);
+
+watch(() => canvasStore.yamlRevealRequest, async (req) => {
+  if (!req) return;
+  if (empathyMode.value) {
+    // Passive selection shouldn't yank the user out of Empathy mode; an explicit request does.
+    if (!req.explicit) return;
+    empathyMode.value = false;
+  }
+  // Let the latest canvas edit flow into the editor document before locating the line.
+  await nextTick();
+  const line = findNodeIdLine(yaml.value, req.nodeId);
+  if (line === null) {
+    yamlEditorRef.value?.clearRevealedLine();
+    if (req.explicit) {
+      toast.warning(`Node "${req.nodeId}" isn't in the YAML yet. Make a change on the canvas or save, then try "Show in YAML" again.`);
+    }
+    return;
+  }
+  yamlEditorRef.value?.revealLine(line, { focus: req.explicit });
+});
+
 watch(yaml, () => validateDebounced());
 watch(saveState, (next, prev) => {
   if (next === 'saved' && prev === 'saving') workflowStore.bumpYamlVersion();
@@ -126,6 +210,7 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
   window.addEventListener('mousemove', onMousemove);
   window.addEventListener('mouseup', onMouseup);
+  window.addEventListener('beforeunload', onBeforeUnload);
   try {
     await loadWorkflow();
   } catch (e: unknown) {
@@ -139,6 +224,9 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
   window.removeEventListener('mousemove', onMousemove);
   window.removeEventListener('mouseup', onMouseup);
+  window.removeEventListener('beforeunload', onBeforeUnload);
+  // A pending leave prompt must not keep the navigation hanging.
+  finishLeave(false);
 });
 </script>
 
@@ -189,7 +277,10 @@ onUnmounted(() => {
         </button>
 
         <button
+          type="button"
           class="text-xs bg-violet-900 hover:bg-violet-800 text-violet-300 rounded-lg px-3 py-1.5"
+          data-test="copilot-toggle"
+          :aria-expanded="copilotOpen"
           @click="copilotOpen = !copilotOpen"
         >
           ✦ Co-pilot <kbd class="ml-1 text-neutral-400">⌘K</kbd>
@@ -200,8 +291,11 @@ onUnmounted(() => {
           ref="validationBadgeRef"
           class="relative shrink-0"
         >
+          <!-- Fixed minimum width: the label changes when async validation lands ("Valid" →
+               "2 errors"); without it every toolbar button to the left shifted under the cursor
+               and a click aimed at Co-pilot could land beside it. -->
           <button
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            class="flex min-w-[8.5rem] items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
             :class="validationErrorCount > 0
               ? 'bg-red-100 text-red-700 hover:bg-red-200'
               : validationWarningCount > 0
@@ -304,6 +398,7 @@ onUnmounted(() => {
             :key="workflowId"
             :initial-yaml="yaml"
             :saving="saveState === 'saving'"
+            :is-dirty="isDirty"
             @yaml-change="yaml = $event"
             @save="save"
           />
@@ -343,5 +438,55 @@ onUnmounted(() => {
         @command="onCopilotCommand"
       />
     </template>
+
+    <!-- Unsaved-changes prompt when leaving the editor -->
+    <FmModal
+      :model-value="leaveDialogOpen"
+      size="sm"
+      title="Unsaved changes"
+      @update:model-value="onLeaveDialogToggle"
+    >
+      <div
+        class="flex gap-3"
+        data-test="unsaved-changes-dialog"
+      >
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+          <AlertTriangle class="h-5 w-5" />
+        </span>
+        <p class="text-sm text-slate-700">
+          This workflow has changes that haven't been saved. Save them before you leave, or discard
+          them — discarded changes can't be recovered.
+        </p>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          data-test="leave-stay"
+          :disabled="leaveSaving"
+          class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          @click="finishLeave(false)"
+        >
+          Stay
+        </button>
+        <button
+          type="button"
+          data-test="leave-discard"
+          :disabled="leaveSaving"
+          class="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+          @click="finishLeave(true)"
+        >
+          Discard changes
+        </button>
+        <button
+          type="button"
+          data-test="leave-save"
+          :disabled="leaveSaving"
+          class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+          @click="saveAndLeave"
+        >
+          {{ leaveSaving ? 'Saving…' : 'Save and leave' }}
+        </button>
+      </template>
+    </FmModal>
   </div>
 </template>

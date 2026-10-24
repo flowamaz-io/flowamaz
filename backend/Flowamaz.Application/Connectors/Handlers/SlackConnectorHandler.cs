@@ -1,121 +1,100 @@
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
-using Flowamaz.Core.Entities.Connector;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Flowamaz.Application.Connectors.Handlers;
 
 /// <summary>
-/// Handles Slack operations: send-message, send-dm, post-approval-message.
-/// Auth: Bearer token from credential. Calls https://slack.com/api/chat.postMessage.
+/// Shared Slack Web API call. Uses the workspace's Slack OAuth (bot) token from the credential.
+/// Slack returns HTTP 200 with <c>"ok": false</c> for most errors, so the body is checked too.
 /// </summary>
-public sealed class SlackSendMessageHandler : IConnectorOperationHandler
+public abstract class SlackHandlerBase : IConnectorOperationHandler
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<SlackSendMessageHandler> _logger;
+    public const string HttpClientName = "slack-connector";
+    private const string PostMessageUrl = "https://slack.com/api/chat.postMessage";
 
-    public SlackSendMessageHandler(IHttpClientFactory httpClientFactory, ILogger<SlackSendMessageHandler> logger)
+    private readonly IHttpClientFactory _httpClientFactory;
+    protected SlackHandlerBase(IHttpClientFactory httpClientFactory, ILogger logger)
     {
         _httpClientFactory = httpClientFactory;
-        _logger = logger;
+        Logger = logger;
     }
 
+    protected ILogger Logger { get; }
     public string ConnectorId => "slack";
-    public string OperationId => "send-message";
+    public abstract string OperationId { get; }
+    public abstract Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct);
 
-    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
+    protected async Task<JsonDocument> PostMessageAsync(ConnectorCredential? credential, object body, CancellationToken ct)
     {
-        _logger.LogInformation("[Slack:send-message] ExecuteAsync entry");
+        var op = $"slack/{OperationId}";
+        var cred = ConnectorInput.RequireCredential(credential, "Slack", op);
+        using var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var request = ConnectorHttp.Json(HttpMethod.Post, PostMessageUrl, body, cred.AccessToken);
+        var doc = await ConnectorHttp.SendAsync(client, request, op, ct);
 
-        var root = input.RootElement;
-        var channel = root.GetProperty("channel").GetString() ?? throw new InvalidOperationException("'channel' is required.");
-        var text = root.GetProperty("text").GetString() ?? throw new InvalidOperationException("'text' is required.");
+        var root = doc.RootElement;
+        if (root.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.False)
+        {
+            var error = root.TryGetProperty("error", out var e) ? e.GetString() : "unknown_error";
+            doc.Dispose();
+            throw new ConnectorOperationException($"{op}: Slack rejected the request ({error}).{Hint(error)}",
+                retryable: error is "ratelimited" or "internal_error" or "service_unavailable");
+        }
 
-        var result = await PostToSlackAsync(credential, channel, text, null, ct);
-        _logger.LogInformation("[Slack:send-message] ExecuteAsync exit");
-        return result;
+        return doc;
     }
 
-    private async Task<JsonDocument> PostToSlackAsync(
-        WorkspaceCredential? credential,
-        string channel,
-        string? text,
-        string? blocksJson,
-        CancellationToken ct)
+    private static string Hint(string? error) => error switch
     {
-        using var client = _httpClientFactory.CreateClient("slack-connector");
+        "not_in_channel" => " Invite the Flowamaz app to the channel (/invite @Flowamaz) or use a public channel.",
+        "channel_not_found" => " Check the channel name or id in the node inputs.",
+        "invalid_auth" or "token_revoked" or "not_authed" or "account_inactive" => " Reconnect Slack in Settings → Credentials.",
+        "missing_scope" => " Reconnect Slack so the app is granted the chat:write scope.",
+        _ => string.Empty,
+    };
+}
 
-        if (credential is not null)
-        {
-            // Token retrieved by caller via vault — credential object used only for identity here.
-            // The actual token must come through input or a separate vault call.
-            // For this handler, token is passed via credential.Name convention OR input.
-        }
+public sealed class SlackSendMessageHandler : SlackHandlerBase
+{
+    public SlackSendMessageHandler(IHttpClientFactory f, ILogger<SlackSendMessageHandler> l) : base(f, l) { }
+    public override string OperationId => "send-message";
 
-        var body = new Dictionary<string, object> { ["channel"] = channel };
-        if (text is not null) body["text"] = text;
-        if (blocksJson is not null)
-        {
-            using var blocksDoc = JsonDocument.Parse(blocksJson);
-            body["blocks"] = blocksDoc.RootElement.Clone();
-        }
+    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
+    {
+        Logger.LogInformation("[Slack:send-message] ExecuteAsync entry");
+        var root = input.RootElement;
+        var channel = ConnectorInput.Required(root, "channel", "slack/send-message");
+        var text = ConnectorInput.Required(root, "text", "slack/send-message");
 
-        var json = JsonSerializer.Serialize(body);
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://slack.com/api/chat.postMessage")
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
-        };
+        var body = new Dictionary<string, object> { ["channel"] = channel, ["text"] = text };
+        if (root.TryGetProperty("blocks", out var blocks) && blocks.ValueKind == JsonValueKind.Array)
+            body["blocks"] = blocks.Clone();
 
-        // Token via credential EncryptedValue is decrypted upstream by ConnectorSandbox before calling.
-        // For direct handler invocation the token must be embedded in input as { token: string }.
-        // We accept it in input for testability.
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "placeholder");
-
-        using var response = await client.SendAsync(request, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
-        return JsonDocument.Parse(string.IsNullOrWhiteSpace(responseBody) ? "{\"ok\":false}" : responseBody);
+        var result = await PostMessageAsync(credential, body, ct);
+        Logger.LogInformation("[Slack:send-message] ExecuteAsync exit");
+        return result;
     }
 }
 
-/// <summary>Slack send-dm (direct message) — alias of send-message with user ID as channel.</summary>
-public sealed class SlackSendDmHandler : IConnectorOperationHandler
+/// <summary>Slack DM — chat.postMessage with the user id as channel.</summary>
+public sealed class SlackSendDmHandler : SlackHandlerBase
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<SlackSendDmHandler> _logger;
+    public SlackSendDmHandler(IHttpClientFactory f, ILogger<SlackSendDmHandler> l) : base(f, l) { }
+    public override string OperationId => "send-dm";
 
-    public SlackSendDmHandler(IHttpClientFactory httpClientFactory, ILogger<SlackSendDmHandler> logger)
+    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
-        _httpClientFactory = httpClientFactory;
-        _logger = logger;
-    }
-
-    public string ConnectorId => "slack";
-    public string OperationId => "send-dm";
-
-    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
-    {
-        _logger.LogInformation("[Slack:send-dm] ExecuteAsync entry");
-
+        Logger.LogInformation("[Slack:send-dm] ExecuteAsync entry");
         var root = input.RootElement;
-        var userId = root.GetProperty("user_id").GetString() ?? throw new InvalidOperationException("'user_id' is required.");
-        var text = root.GetProperty("text").GetString() ?? throw new InvalidOperationException("'text' is required.");
+        var userId = ConnectorInput.Required(root, "user_id", "slack/send-dm");
+        var text = ConnectorInput.Required(root, "text", "slack/send-dm");
 
-        // DM in Slack = postMessage with the user ID as channel
-        using var client = _httpClientFactory.CreateClient("slack-connector");
-        var body = JsonSerializer.Serialize(new { channel = userId, text });
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://slack.com/api/chat.postMessage")
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json")
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "placeholder");
-
-        using var response = await client.SendAsync(request, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
-
-        _logger.LogInformation("[Slack:send-dm] ExecuteAsync exit");
-        return JsonDocument.Parse(string.IsNullOrWhiteSpace(responseBody) ? "{\"ok\":false}" : responseBody);
+        var result = await PostMessageAsync(credential, new { channel = userId, text }, ct);
+        Logger.LogInformation("[Slack:send-dm] ExecuteAsync exit");
+        return result;
     }
 }
 
@@ -123,50 +102,29 @@ public sealed class SlackSendDmHandler : IConnectorOperationHandler
 /// Posts a Block Kit approval message with Approve/Reject buttons for a human-gate decision.
 /// Input: { channel, gate_decision_id, workflow_name, gate_summary }
 /// </summary>
-public sealed class SlackPostApprovalMessageHandler : IConnectorOperationHandler
+public sealed class SlackPostApprovalMessageHandler : SlackHandlerBase
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<SlackPostApprovalMessageHandler> _logger;
+    public SlackPostApprovalMessageHandler(IHttpClientFactory f, ILogger<SlackPostApprovalMessageHandler> l) : base(f, l) { }
+    public override string OperationId => "post-approval-message";
 
-    public SlackPostApprovalMessageHandler(IHttpClientFactory httpClientFactory, ILogger<SlackPostApprovalMessageHandler> logger)
+    public override async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
-        _httpClientFactory = httpClientFactory;
-        _logger = logger;
-    }
-
-    public string ConnectorId => "slack";
-    public string OperationId => "post-approval-message";
-
-    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
-    {
-        _logger.LogInformation("[Slack:post-approval-message] ExecuteAsync entry");
-
+        Logger.LogInformation("[Slack:post-approval-message] ExecuteAsync entry");
         var root = input.RootElement;
-        var channel = root.GetProperty("channel").GetString() ?? throw new InvalidOperationException("'channel' is required.");
-        var gateDecisionId = root.GetProperty("gate_decision_id").GetString() ?? throw new InvalidOperationException("'gate_decision_id' is required.");
-        var workflowName = root.GetProperty("workflow_name").GetString() ?? "";
-        var gateSummary = root.GetProperty("gate_summary").GetString() ?? "";
+        var channel = ConnectorInput.Required(root, "channel", "slack/post-approval-message");
+        var gateDecisionId = ConnectorInput.Required(root, "gate_decision_id", "slack/post-approval-message");
+        var workflowName = ConnectorInput.Optional(root, "workflow_name") ?? string.Empty;
+        var gateSummary = ConnectorInput.Optional(root, "gate_summary") ?? string.Empty;
 
-        var blocks = BuildApprovalBlocks(gateDecisionId, workflowName, gateSummary);
-        var body = JsonSerializer.Serialize(new
+        var result = await PostMessageAsync(credential, new
         {
             channel,
             text = $"Approval required for workflow: {workflowName}",
-            blocks
-        });
+            blocks = BuildApprovalBlocks(gateDecisionId, workflowName, gateSummary),
+        }, ct);
 
-        using var client = _httpClientFactory.CreateClient("slack-connector");
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://slack.com/api/chat.postMessage")
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json")
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "placeholder");
-
-        using var response = await client.SendAsync(request, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
-
-        _logger.LogInformation("[Slack:post-approval-message] ExecuteAsync exit");
-        return JsonDocument.Parse(string.IsNullOrWhiteSpace(responseBody) ? "{\"ok\":false}" : responseBody);
+        Logger.LogInformation("[Slack:post-approval-message] ExecuteAsync exit");
+        return result;
     }
 
     private static object[] BuildApprovalBlocks(string gateDecisionId, string workflowName, string gateSummary) =>
@@ -181,22 +139,8 @@ public sealed class SlackPostApprovalMessageHandler : IConnectorOperationHandler
             type = "actions",
             elements = new object[]
             {
-                new
-                {
-                    type = "button",
-                    text = new { type = "plain_text", text = "Approve" },
-                    style = "primary",
-                    value = gateDecisionId,
-                    action_id = "approve_gate"
-                },
-                new
-                {
-                    type = "button",
-                    text = new { type = "plain_text", text = "Reject" },
-                    style = "danger",
-                    value = gateDecisionId,
-                    action_id = "reject_gate"
-                }
+                new { type = "button", text = new { type = "plain_text", text = "Approve" }, style = "primary", value = gateDecisionId, action_id = "approve_gate" },
+                new { type = "button", text = new { type = "plain_text", text = "Reject" }, style = "danger", value = gateDecisionId, action_id = "reject_gate" },
             }
         }
     ];

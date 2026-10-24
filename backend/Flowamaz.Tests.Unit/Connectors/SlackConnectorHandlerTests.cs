@@ -2,6 +2,8 @@ using System.Net;
 using System.Text.Json;
 using FluentAssertions;
 using Flowamaz.Application.Connectors.Handlers;
+using Flowamaz.Core.Exceptions;
+using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Moq.Protected;
@@ -11,6 +13,9 @@ namespace Flowamaz.Tests.Unit.Connectors;
 [Trait("Category", "Connectors")]
 public class SlackConnectorHandlerTests
 {
+    private static readonly ConnectorCredential Cred =
+        new(Guid.NewGuid(), "slack-oauth", "OAuth2AuthCode", "xoxb-real-token");
+
     private static IHttpClientFactory BuildFactory(HttpStatusCode status, string responseBody)
     {
         var handlerMock = new Mock<HttpMessageHandler>();
@@ -57,12 +62,15 @@ public class SlackConnectorHandlerTests
         var input = JsonDocument.Parse("{\"channel\":\"#general\",\"text\":\"Hello World\"}");
 
         // Act
-        var result = await handler.ExecuteAsync(input, null, CancellationToken.None);
+        var result = await handler.ExecuteAsync(input, Cred, CancellationToken.None);
 
         // Assert
         capturedRequest.Should().NotBeNull();
         capturedRequest!.RequestUri!.ToString().Should().Be("https://slack.com/api/chat.postMessage");
         capturedRequest.Method.Should().Be(HttpMethod.Post);
+        // Regression: the handler used to send the literal token "placeholder".
+        capturedRequest.Headers.Authorization!.Scheme.Should().Be("Bearer");
+        capturedRequest.Headers.Authorization.Parameter.Should().Be("xoxb-real-token");
 
         var resultRoot = result.RootElement;
         resultRoot.GetProperty("ok").GetBoolean().Should().BeTrue();
@@ -105,7 +113,7 @@ public class SlackConnectorHandlerTests
         }));
 
         // Act
-        var result = await handler.ExecuteAsync(input, null, CancellationToken.None);
+        var result = await handler.ExecuteAsync(input, Cred, CancellationToken.None);
 
         // Assert
         capturedBody.Should().NotBeNullOrEmpty();
@@ -117,5 +125,48 @@ public class SlackConnectorHandlerTests
 
         var resultRoot = result.RootElement;
         resultRoot.GetProperty("ok").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SendMessage_WithoutCredential_ThrowsActionableError_AndMakesNoCall()
+    {
+        var factory = new Mock<IHttpClientFactory>();
+        var handler = new SlackSendMessageHandler(factory.Object, NullLogger<SlackSendMessageHandler>.Instance);
+        var input = JsonDocument.Parse("{\"channel\":\"#general\",\"text\":\"hi\"}");
+
+        var act = () => handler.ExecuteAsync(input, null, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<ConnectorOperationException>())
+            .Which.Message.Should().Contain("Settings → Credentials");
+        factory.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendMessage_SlackOkFalse_IsAFailure_WithHint()
+    {
+        // Slack reports most errors as HTTP 200 + {"ok":false}; that must not look like success.
+        var handler = new SlackSendMessageHandler(
+            BuildFactory(HttpStatusCode.OK, "{\"ok\":false,\"error\":\"not_in_channel\"}"),
+            NullLogger<SlackSendMessageHandler>.Instance);
+        var input = JsonDocument.Parse("{\"channel\":\"#private\",\"text\":\"hi\"}");
+
+        var act = () => handler.ExecuteAsync(input, Cred, CancellationToken.None);
+
+        var ex = (await act.Should().ThrowAsync<ConnectorOperationException>()).Which;
+        ex.Message.Should().Contain("not_in_channel").And.Contain("/invite");
+        ex.Retryable.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SendMessage_RateLimited_IsRetryable()
+    {
+        var handler = new SlackSendMessageHandler(
+            BuildFactory(HttpStatusCode.TooManyRequests, "{\"ok\":false,\"error\":\"ratelimited\"}"),
+            NullLogger<SlackSendMessageHandler>.Instance);
+        var input = JsonDocument.Parse("{\"channel\":\"#general\",\"text\":\"hi\"}");
+
+        var act = () => handler.ExecuteAsync(input, Cred, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<ConnectorOperationException>()).Which.Retryable.Should().BeTrue();
     }
 }

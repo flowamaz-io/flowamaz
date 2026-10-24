@@ -7,6 +7,7 @@ import dagre from 'cytoscape-dagre';
 import { NODE_VISUALS } from '@/types/canvas.types';
 import type { NodeType } from '@/types/canvas.types';
 import { useCanvasStore } from '@/stores/canvas.store';
+import { snapPosition } from '@/utils/canvas.util';
 
 // Register extensions once
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,9 +135,53 @@ function buildStylesheet(): CytoscapeOptions['style'] {
   return styles;
 }
 
-export function useCytoscapeCanvas(containerRef: Ref<HTMLElement | null>) {
+/**
+ * Id of the node drawn at a point in rendered (container-relative) coordinates, or null.
+ * Group boxes are ignored (they have no node actions); the topmost (last drawn) node wins.
+ */
+export function nodeIdAtRenderedPoint(cy: Core, x: number, y: number): string | null {
+  let hit: string | null = null;
+  cy.nodes().forEach((node) => {
+    if (node.id() === '' || node.data('isGroup') || node.isParent()) return;
+    const bb = node.renderedBoundingBox({ includeLabels: false, includeOverlays: false });
+    if (x >= bb.x1 && x <= bb.x2 && y >= bb.y1 && y <= bb.y2) hit = node.id();
+  });
+  return hit;
+}
+
+export interface CytoscapeCanvasOptions {
+  /** When true, node positions snap to the grid on drag end and when nodes are added. */
+  snapToGrid?: Ref<boolean>;
+}
+
+export function useCytoscapeCanvas(containerRef: Ref<HTMLElement | null>, options: CytoscapeCanvasOptions = {}) {
   const store = useCanvasStore();
   const cy = ref<Core | null>(null);
+  /** Number of selected (non-group) nodes — > 1 means a multi/box selection is active. */
+  const selectedNodeCount = ref(0);
+  /** Current viewport, mirrored so the grid background can follow pan/zoom. */
+  const viewport = ref({ zoom: 1, pan: { x: 0, y: 0 } });
+
+  const snapEnabled = () => options.snapToGrid?.value === true;
+
+  let selectionSyncQueued = false;
+  function queueSelectionSync() {
+    if (selectionSyncQueued) return;
+    selectionSyncQueued = true;
+    // Box selection fires one `select` per element; coalesce into a single update.
+    queueMicrotask(() => {
+      selectionSyncQueued = false;
+      if (!cy.value) return;
+      const nodes = cy.value.nodes(':selected').filter(n => !n.data('isGroup'));
+      selectedNodeCount.value = nodes.length;
+      if (nodes.length > 1) {
+        // Inspector edits a single node; hide it while several are selected.
+        store.setSelectedNode(null);
+      } else if (nodes.length === 1 && store.selectedNodeId !== nodes[0].id()) {
+        store.setSelectedNode(nodes[0].id());
+      }
+    });
+  }
 
   function init() {
     if (!containerRef.value) return;
@@ -148,7 +193,10 @@ export function useCytoscapeCanvas(containerRef: Ref<HTMLElement | null>) {
       layout: { name: 'preset' },
       userZoomingEnabled: true,
       userPanningEnabled: true,
-      boxSelectionEnabled: false,
+      // With panning also enabled, Cytoscape only starts a box selection when a modifier
+      // key (shift/ctrl/alt/meta) is held — a plain background drag still pans.
+      boxSelectionEnabled: true,
+      selectionType: 'single',
     } as CytoscapeOptions);
 
     // Edge handles via extension
@@ -175,12 +223,21 @@ export function useCytoscapeCanvas(containerRef: Ref<HTMLElement | null>) {
     cy.value.on('tap', evt => {
       if (evt.target === cy.value) store.setSelectedNode(null);
     });
+    cy.value.on('select unselect', 'node', queueSelectionSync);
 
-    // Node position changes
+    // Node position changes. When several nodes are dragged together each one fires
+    // `dragfree`, so snapping per target covers multi-selection drags too.
     cy.value.on('dragfree', 'node', evt => {
-      const pos = evt.target.position();
-      store.updateNode(evt.target.id(), { position: { x: pos.x, y: pos.y } });
-      store.setDirty(true);
+      const node = evt.target as NodeSingular;
+      if (snapEnabled() && !node.isParent()) node.position(snapPosition(node.position()));
+      const pos = node.position();
+      store.updateNode(node.id(), { position: { x: pos.x, y: pos.y } });
+    });
+
+    cy.value.on('viewport', () => {
+      if (!cy.value) return;
+      const pan = cy.value.pan();
+      viewport.value = { zoom: cy.value.zoom(), pan: { x: pan.x, y: pan.y } };
     });
   }
 
@@ -189,21 +246,29 @@ export function useCytoscapeCanvas(containerRef: Ref<HTMLElement | null>) {
     cy.value = null;
   }
 
-  function addNodeToCanvas(type: NodeType, position: { x: number; y: number }) {
+  function addNodeToCanvas(
+    type: NodeType,
+    position: { x: number; y: number },
+    extra: { label?: string; copiedFrom?: string; select?: boolean } = {},
+  ): string | undefined {
     if (!cy.value) return;
-    const typeCount = cy.value.nodes(`[nodeType = "${type}"]`).length;
-    const id = `${type}-${typeCount + 1}`;
+    let n = cy.value.nodes(`[nodeType = "${type}"]`).length + 1;
+    let id = `${type}-${n}`;
+    // Counting by type can collide after deletions — find the next free id.
+    while (cy.value.getElementById(id).length > 0) { n++; id = `${type}-${n}`; }
+    const finalPos = snapEnabled() ? snapPosition(position) : position;
+    const label = extra.label ?? id;
     cy.value.add({
       group: 'nodes',
-      data: { id, label: id, nodeType: type },
+      data: { id, label, nodeType: type, ...(extra.copiedFrom ? { copiedFrom: extra.copiedFrom } : {}) },
       classes: type === 'annotation' ? 'annotation' : undefined,
-      position,
+      position: finalPos,
     });
     const node: import('@/types/canvas.types').CanvasNode = {
-      id, type, label: id, config: {}, position,
+      id, type, label, config: {}, position: finalPos,
     };
     store.addNode(node);
-    store.setSelectedNode(id);
+    if (extra.select !== false) store.setSelectedNode(id);
     return id;
   }
 
@@ -227,14 +292,59 @@ export function useCytoscapeCanvas(containerRef: Ref<HTMLElement | null>) {
   function zoomIn() { if (cy.value) cy.value.zoom(cy.value.zoom() * 1.2); }
   function zoomOut() { if (cy.value) cy.value.zoom(cy.value.zoom() / 1.2); }
 
-  function deleteSelected() {
-    if (!cy.value) return;
+  /** Remove every selected element. Returns how many elements were removed. */
+  function deleteSelected(): number {
+    if (!cy.value) return 0;
     const selected = cy.value.$(':selected');
     selected.forEach(el => {
       if (el.isNode() && !el.data('isGroup')) store.removeNode(el.id());
       if (el.isEdge()) store.removeEdge(el.id());
     });
+    const count = selected.length;
     selected.remove();
+    return count;
+  }
+
+  /**
+   * Duplicate the given nodes (offset by one grid cell pair) plus the edges that run
+   * between them. The copies become the new selection. Returns the new node ids.
+   */
+  function duplicateNodes(ids: string[], offset = 40): string[] {
+    const c = cy.value;
+    if (!c) return [];
+    const idMap = new Map<string, string>();
+    for (const srcId of ids) {
+      const src = c.getElementById(srcId);
+      if (src.length === 0 || src.data('isGroup')) continue;
+      const pos = src.position();
+      const newId = addNodeToCanvas(
+        (src.data('nodeType') as NodeType) || 'action',
+        { x: pos.x + offset, y: pos.y + offset },
+        { label: `${src.data('label') ?? srcId} (copy)`, copiedFrom: srcId, select: false },
+      );
+      if (newId) idMap.set(srcId, newId);
+    }
+    let edgeSeq = 0;
+    c.edges().forEach(edge => {
+      const s = idMap.get(edge.data('source') as string);
+      const t = idMap.get(edge.data('target') as string);
+      if (!s || !t) return;
+      const id = `e-${Date.now()}-${edgeSeq++}`;
+      c.add({ group: 'edges', data: { id, source: s, target: t, ...(edge.data('via') ? { via: edge.data('via') } : {}) } });
+      store.addEdge({ id, from: s, to: t, via: edge.data('via') as string | undefined });
+    });
+    const newIds = [...idMap.values()];
+    c.elements().unselect();
+    newIds.forEach(id => c.getElementById(id).select());
+    store.setSelectedNode(newIds.length === 1 ? newIds[0] : null);
+    return newIds;
+  }
+
+  /** Snap every non-group node to the grid (used when the toggle is switched on). */
+  function snapAllNodes() {
+    cy.value?.nodes().forEach(n => {
+      if (!n.isParent() && !n.data('isGroup')) n.position(snapPosition(n.position()));
+    });
   }
 
   function addGroup(label: string, color = '#6B7280') {
@@ -278,5 +388,9 @@ export function useCytoscapeCanvas(containerRef: Ref<HTMLElement | null>) {
   onMounted(() => init());
   onUnmounted(() => destroy());
 
-  return { cy, addNodeToCanvas, runLayout, fitView, zoomIn, zoomOut, deleteSelected, addGroup, loadFromNodes };
+  return {
+    cy, selectedNodeCount, viewport,
+    addNodeToCanvas, runLayout, fitView, zoomIn, zoomOut, deleteSelected, duplicateNodes, snapAllNodes,
+    addGroup, loadFromNodes,
+  };
 }

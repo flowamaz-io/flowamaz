@@ -7,7 +7,8 @@ namespace Flowamaz.Core.Exceptions;
 public sealed class AccountLockedException : AppException
 {
     public AccountLockedException()
-        : base("AUTH_ACCOUNT_LOCKED", "Account temporarily locked. Try again later.", httpStatusCode: 401)
+        : base("AUTH_ACCOUNT_LOCKED", "Sign-in is temporarily locked for this account after repeated failed attempts. " +
+            "Wait a few minutes before signing in again, or use 'Forgot password' to reset your password now.", httpStatusCode: 401)
     {
     }
 }

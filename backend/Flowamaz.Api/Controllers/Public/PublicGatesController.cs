@@ -1,3 +1,4 @@
+using Flowamaz.Core.Enums;
 using Flowamaz.Application.Workflow.Services;
 using Flowamaz.Core.Interfaces.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -19,17 +20,18 @@ public sealed class PublicGatesController : PublicApiController
     [HttpGet("pending")]
     public async Task<IActionResult> Pending(CancellationToken ct)
     {
-        if (await GuardAsync("read", DefaultHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.InstancesRead, "read", DefaultHourlyLimit, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
-        var gates = await _gates.ListPendingAsync(ws, ct);
+        // Production approvals only — test-run gates never reach API integrations (O2).
+        var gates = await _gates.ListPendingAsync(ws, includeTest: false, ct);
         return Data(gates);
     }
 
     [HttpPost("{id:guid}/decide")]
     public async Task<IActionResult> Decide(Guid id, [FromBody] PublicGateDecisionRequest request, CancellationToken ct)
     {
-        if (await GuardAsync("trigger", TriggerHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.InstancesWrite, "trigger", TriggerHourlyLimit, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         var info = await _gates.GetByGateIdAsync(id, ct);

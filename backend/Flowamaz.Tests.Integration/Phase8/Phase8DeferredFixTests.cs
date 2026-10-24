@@ -38,7 +38,7 @@ public class Phase8DeferredFixTests : ApiTestBase
 
         // Install the first official template — creates a WorkflowDefinition from its flowamaz/v1 YAML.
         var listResp = await Fixture.NewClient().GetAsync("/api/v1/templates?pageSize=50");
-        var templateId = (await DataAsync(listResp)).GetProperty("items").EnumerateArray().First()
+        var templateId = (await DataAsync(listResp)).GetProperty("items").EnumerateArray().First(t => t.GetProperty("pricingModel").GetString() == "free")
             .GetProperty("id").GetGuid();
 
         var install = await owner.Client.PostAsJsonAsync(

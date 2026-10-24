@@ -70,6 +70,4 @@ gracefully instead of failing the instance.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/connectors/http-rest-connector.md)

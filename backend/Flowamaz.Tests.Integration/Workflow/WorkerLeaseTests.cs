@@ -15,8 +15,7 @@ namespace Flowamaz.Tests.Integration.Workflow;
 /// </summary>
 public class WorkerLeaseTests : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
         .WithDatabase("flowamaz_lease_test")
         .WithUsername("flowamaz")
         .WithPassword("flowamaz_test_pw")

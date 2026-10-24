@@ -57,6 +57,4 @@ are blocked.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/settings/billing.md)

@@ -56,3 +56,37 @@ export function passwordStrength(password: string): { score: number; label: stri
   const labels = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'];
   return { score, label: labels[score] ?? 'Weak' };
 }
+
+/**
+ * Reduces markdown to readable plain text for previews/snippets: drops code fences, HTML tags,
+ * heading/list/quote markers, table pipes, emphasis, inline-code ticks, and link/image URLs.
+ */
+export function stripMarkdown(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s*(?:[-*+]|\d+\.)\s+/gm, '')
+    .replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm, ' ')
+    .replace(/^[\s|:-]+$/gm, ' ')
+    .replace(/\|/g, ' ')
+    .replace(/(\*\*|__)(.+?)\1/g, '$2')
+    .replace(/(^|[^\w*])\*(\S(?:[^*]*?\S)?)\*/g, '$1$2')
+    .replace(/(^|\W)_(\S(?:[^_]*?\S)?)_(?=\W|$)/g, '$1$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Turns a machine id ("manager-approval", "send_email", "riskReview") into "Manager approval". */
+export function humanizeId(id: string): string {
+  const words = id
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[-_.]+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : id;
+}

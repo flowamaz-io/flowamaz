@@ -85,6 +85,7 @@ public sealed class JwtAuthMiddleware
             ApiKeyWorkspaceId = validation.WorkspaceId,
             ApiKeyEnvironmentId = validation.EnvironmentId,
             ApiKeyScopes = validation.Scopes,
+            ApiKeyAuditLabel = validation.AuditLabel,
         };
 
         // Last-used bookkeeping must not block the request — run it in a detached scope.

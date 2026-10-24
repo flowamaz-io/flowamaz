@@ -259,4 +259,45 @@ public class WorkflowServiceTests
         _definitions.Setup(r => r.GetByIdForWorkspaceAsync(It.IsAny<Guid>(), _ws, It.IsAny<CancellationToken>())).ReturnsAsync((WorkflowDefinition?)null);
         (await NewService().PublishAsync(_ws, Guid.NewGuid(), Guid.NewGuid())).Should().BeNull();
     }
+
+    private const string ScheduledYaml = """
+        apiVersion: flowamaz/v1
+        kind: Workflow
+        metadata: { id: nightly, name: Nightly }
+        spec:
+          trigger:
+            type: schedule
+            config: { cron: "CRON", timezone: "Asia/Kuala_Lumpur" }
+          nodes:
+            - { id: start, type: trigger }
+            - { id: done, type: end }
+          edges:
+            - { id: e1, from: start, to: done }
+        """;
+
+    [Fact]
+    public async Task PublishAsync_ScheduleTrigger_RecordsTriggerType()
+    {
+        var def = Definition();
+        def.YamlContent = ScheduledYaml.Replace("CRON", "0 9 * * 1-5");
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_id, _ws, It.IsAny<CancellationToken>())).ReturnsAsync(def);
+
+        await NewService().PublishAsync(_ws, _id, Guid.NewGuid());
+
+        def.TriggerType.Should().Be(WorkflowTriggerType.Schedule);
+    }
+
+    [Fact]
+    public async Task PublishAsync_InvalidSchedule_IsRejected_WithActionableMessage()
+    {
+        var def = Definition();
+        def.YamlContent = ScheduledYaml.Replace("CRON", "every morning");
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_id, _ws, It.IsAny<CancellationToken>())).ReturnsAsync(def);
+
+        var act = () => NewService().PublishAsync(_ws, _id, Guid.NewGuid());
+
+        (await act.Should().ThrowAsync<Flowamaz.Core.Exceptions.InvalidScheduleException>())
+            .Which.Message.Should().Contain("0 9 * * 1-5");
+        def.Status.Should().Be(WorkflowStatus.Draft);
+    }
 }

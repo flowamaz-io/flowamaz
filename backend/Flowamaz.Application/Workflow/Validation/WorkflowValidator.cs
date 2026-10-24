@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Flowamaz.Core.Interfaces.Workflow;
@@ -37,6 +39,7 @@ public sealed class WorkflowValidator : IWorkflowValidator
     ];
 
     private static readonly Regex ExpressionPattern = new(@"\{\{\s*([^}]+?)\s*\}\}", RegexOptions.Compiled);
+    private static readonly Regex EmailPattern = new(@"^[^\s@]+@[^\s@]+\.[^\s@]+$", RegexOptions.Compiled);
     private static readonly Regex ExternalUrlPattern = new(@"https?://\S+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -66,6 +69,19 @@ public sealed class WorkflowValidator : IWorkflowValidator
 
         // Convert YAML → JSON string (NullNamingConvention preserves YAML keys as-is)
         var jsonString = ConvertYamlToJson(yamlContent);
+        if (jsonString is not null)
+        {
+            try
+            {
+                var tree = JsonNode.Parse(jsonString);
+                CoerceToSchema(tree, await GetSchemaAsync(ct));
+                jsonString = tree?.ToJsonString() ?? jsonString;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log.LogWarning(ex, "[WorkflowValidator] type coercion skipped");
+            }
+        }
 
         // Layer 1 — JSON Schema validation
         await RunLayer1Async(jsonString, errors, ct);
@@ -111,13 +127,15 @@ public sealed class WorkflowValidator : IWorkflowValidator
         try
         {
             var schema = await GetSchemaAsync(ct);
-            var issues = schema.Validate(jsonString);
+            // An array item error ("spec.nodes[3]: ArrayItemNotValid") hides the field that is actually wrong,
+            // so report the innermost errors with their full path instead.
+            var issues = schema.Validate(jsonString).SelectMany(Innermost);
             foreach (var issue in issues)
             {
                 errors.Add(new ValidationIssue(
                     Layer: 1,
                     Code: $"SCH-{(int)issue.Kind:D3}",
-                    Message: $"{issue.Path}: {issue.Kind} — fix this field per the workflow-v1 specification",
+                    Message: DescribeSchemaIssue(issue),
                     NodeId: null,
                     Line: issue.HasLineInfo ? issue.LineNumber : null,
                     Column: issue.HasLineInfo ? issue.LinePosition : null));
@@ -128,6 +146,84 @@ public sealed class WorkflowValidator : IWorkflowValidator
             _log.LogError(ex, "[WorkflowValidator] Layer 1 schema load error");
             errors.Add(new ValidationIssue(1, "SCH-000", $"Schema validation unavailable: {ex.Message}", null, null, null));
         }
+    }
+
+    private static IEnumerable<ValidationError> Innermost(ValidationError error) =>
+        error is ChildSchemaValidationError child && child.Errors.Count > 0
+            ? child.Errors.SelectMany(kv => kv.Value).SelectMany(Innermost)
+            : [error];
+
+    /// <summary>Plain-language schema error: which field, what is wrong with it, and how to fix it.</summary>
+    internal static string DescribeSchemaIssue(ValidationError issue)
+    {
+        var path = string.IsNullOrEmpty(issue.Path) ? "the document" : issue.Path.TrimStart('#', '/');
+        var field = issue.Property is { Length: > 0 } p && !path.EndsWith(p, StringComparison.Ordinal) ? $"{path}.{p}" : path;
+        var allowed = issue.Schema?.ActualSchema.Enumeration is { Count: > 0 } values
+            ? string.Join(", ", values.Select(v => v?.ToString()))
+            : null;
+        return issue.Kind switch
+        {
+            ValidationErrorKind.NoAdditionalPropertiesAllowed =>
+                $"'{field}' is not a field the workflow format recognises. Remove it, or move step settings under that step's config.",
+            ValidationErrorKind.PropertyRequired => $"'{field}' is required but missing. Add it.",
+            ValidationErrorKind.NotInEnumeration =>
+                $"'{field}' has a value that isn't allowed." + (allowed is null ? "" : $" Use one of: {allowed}."),
+            ValidationErrorKind.IntegerExpected => $"'{field}' must be a whole number (for example 30).",
+            ValidationErrorKind.NumberExpected => $"'{field}' must be a number.",
+            ValidationErrorKind.BooleanExpected => $"'{field}' must be true or false.",
+            ValidationErrorKind.StringExpected => $"'{field}' must be text.",
+            ValidationErrorKind.ObjectExpected => $"'{field}' must be a set of named fields (a mapping).",
+            ValidationErrorKind.ArrayExpected => $"'{field}' must be a list.",
+            ValidationErrorKind.PatternMismatch when issue.Schema?.ActualSchema.Pattern == "^[a-z0-9-]+$" =>
+                $"'{field}' must use only lowercase letters, numbers and hyphens (for example manager-approval).",
+            ValidationErrorKind.PatternMismatch => $"'{field}' is not in the required format.",
+            ValidationErrorKind.StringTooShort => $"'{field}' must not be empty.",
+            ValidationErrorKind.TooFewItems => $"'{field}' needs at least one item.",
+            _ => $"'{field}': {issue.Kind}. Fix this field per the workflow-v1 specification.",
+        };
+    }
+
+    /// <summary>
+    /// YAML has no types without a schema: the untyped YamlDotNet pass turns every scalar into a string, so
+    /// "timeout: { seconds: 30 }" reached the JSON schema as "30" and failed IntegerExpected. The runtime parser
+    /// reads those fields as numbers, so convert a string where the schema expects a number or boolean (and
+    /// does not also accept text). Free-form config objects have no property schema and are left untouched.
+    /// </summary>
+    internal static void CoerceToSchema(JsonNode? node, JsonSchema schema)
+    {
+        var actual = schema.ActualSchema;
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var key in obj.Select(p => p.Key).ToList())
+                {
+                    JsonSchema? child = actual.Properties.TryGetValue(key, out var prop) ? prop : actual.AdditionalPropertiesSchema;
+                    if (child is null) continue;
+                    if (obj[key] is JsonValue value && TryCoerce(value, child.ActualSchema.Type, out var typed)) obj[key] = typed;
+                    else CoerceToSchema(obj[key], child);
+                }
+                break;
+            case JsonArray array when actual.Item is not null:
+                for (var i = 0; i < array.Count; i++)
+                {
+                    if (array[i] is JsonValue value && TryCoerce(value, actual.Item.ActualSchema.Type, out var typed)) array[i] = typed;
+                    else CoerceToSchema(array[i], actual.Item);
+                }
+                break;
+        }
+    }
+
+    private static bool TryCoerce(JsonValue value, JsonObjectType type, out JsonNode? typed)
+    {
+        typed = null;
+        if (!value.TryGetValue<string>(out var text) || type.HasFlag(JsonObjectType.String)) return false;
+        if (type.HasFlag(JsonObjectType.Integer) && long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var l))
+            typed = JsonValue.Create(l);
+        else if (type.HasFlag(JsonObjectType.Number) && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
+            typed = JsonValue.Create(d);
+        else if (type.HasFlag(JsonObjectType.Boolean) && bool.TryParse(text, out var b))
+            typed = JsonValue.Create(b);
+        return typed is not null;
     }
 
     private static async Task<JsonSchema> GetSchemaAsync(CancellationToken ct)
@@ -169,7 +265,7 @@ public sealed class WorkflowValidator : IWorkflowValidator
                 .Deserialize(yaml);
 
             if (obj == null) return null;
-            return new SerializerBuilder().JsonCompatible().Build().Serialize(obj);
+            return new SerializerBuilder().JsonCompatible().DisableAliases().Build().Serialize(obj);
         }
         catch
         {
@@ -297,10 +393,33 @@ public sealed class WorkflowValidator : IWorkflowValidator
     {
         foreach (var gate in doc.Spec?.Nodes?.Where(n => n.Type?.Equals("human-gate", StringComparison.OrdinalIgnoreCase) == true) ?? [])
         {
-            if (gate.Timeout == null && (gate.Config == null || !gate.Config.ContainsKey("timeout")))
+            // The gate worker reads timeout_hours (canvas: timeoutHours); "timeout" is the legacy key.
+            if (gate.Timeout == null && (gate.Config == null
+                || !(gate.Config.ContainsKey("timeout") || gate.Config.ContainsKey("timeout_hours") || gate.Config.ContainsKey("timeoutHours") || gate.Config.ContainsKey("timeoutValue"))))
                 warnings.Add(new ValidationIssue(6, "BPR-001",
-                    $"Human gate '{gate.Id}' has no timeout. Without a timeout the gate waits forever and may block the workflow.",
+                    $"Human gate '{gate.Id}' sets no timeout, so it uses the default of {Flowamaz.Core.Entities.Workflow.GateTimeoutActions.DefaultTimeoutHours} hours " +
+                    "and the run fails if nobody decides by then. Set timeout_hours (and on_timeout: escalate, auto-approve or auto-reject) to choose the deadline and what happens.",
                     gate.Id, null, null));
+        }
+
+        // BPR-012 — "escalate" with nobody to escalate to: at the deadline the run fails instead (run 4: every
+        // AI-built gate was set this way). The gate panel warned; Validate did not.
+        foreach (var gate in doc.Spec?.Nodes?.Where(n => n.Type?.Equals("human-gate", StringComparison.OrdinalIgnoreCase) == true) ?? [])
+        {
+            var cfg = gate.Config;
+            var onTimeout = cfg is not null && cfg.TryGetValue("on_timeout", out var ot) && ot.ValueKind == JsonValueKind.String ? ot.GetString()
+                : cfg is not null && cfg.TryGetValue("onTimeout", out var ot2) && ot2.ValueKind == JsonValueKind.String ? ot2.GetString()
+                : gate.Timeout?.OnTimeout;
+            if (Flowamaz.Core.Entities.Workflow.GateTimeoutActions.Normalize(onTimeout) != Flowamaz.Core.Entities.Workflow.GateTimeoutActions.Escalate) continue;
+            var target = cfg is null ? null
+                : HasText(cfg, "escalate_to") ? cfg["escalate_to"].GetString()
+                : HasText(cfg, "escalateTo") ? cfg["escalateTo"].GetString() : null;
+            if (target is not null && EmailPattern.IsMatch(target.Trim())) continue;
+            var label = string.IsNullOrWhiteSpace(gate.Label) ? gate.Id : gate.Label;
+            warnings.Add(new ValidationIssue(6, "BPR-012",
+                $"Human gate '{gate.Id}' ({label}) escalates on timeout but has no escalation email, so the run fails at the deadline instead. " +
+                "Set escalate_to to the person's email, or change on_timeout to fail, auto-approve or auto-reject.",
+                gate.Id, null, null));
         }
 
         foreach (var node in doc.Spec?.Nodes?.Where(n => n.Retry?.MaxAttempts > 10) ?? [])
@@ -320,6 +439,22 @@ public sealed class WorkflowValidator : IWorkflowValidator
                 "No SLA threshold configured. Set spec.sla_threshold_ms to enable SLA monitoring.",
                 null, null, null));
 
+        // BPR-011 — a decision with a single exit: every case that doesn't match that one path has nowhere to go
+        // (for example, removing "Finance approves" from a photo left "Over 1000?" with only its "no" exit).
+        var edges = doc.Spec?.Edges ?? [];
+        foreach (var router in doc.Spec?.Nodes?.Where(n => n.Type?.Equals("router", StringComparison.OrdinalIgnoreCase) == true) ?? [])
+        {
+            var exits = edges.Where(e => string.Equals(e.From, router.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (exits.Count != 1) continue;
+            var only = exits[0];
+            var branch = string.IsNullOrWhiteSpace(only.Via) ? "" : $" (\"{only.Via}\")";
+            var label = string.IsNullOrWhiteSpace(router.Label) ? router.Id : router.Label;
+            warnings.Add(new ValidationIssue(6, "BPR-011",
+                $"Decision '{router.Id}' ({label}) has only one exit{branch}, to '{only.To}', so any case that doesn't take it has nowhere to go. " +
+                "Connect the missing branch, or remove the decision and connect the steps directly.",
+                router.Id, null, null));
+        }
+
         // BPR-010 — runtime-readiness: action/AI nodes without a connector configured
         foreach (var node in doc.Spec?.Nodes ?? [])
         {
@@ -327,9 +462,13 @@ public sealed class WorkflowValidator : IWorkflowValidator
             var isAi = node.Type?.Equals("ai", StringComparison.OrdinalIgnoreCase) == true;
             if (!isAction && !isAi) continue;
 
-            var hasConfig = node.Config is { Count: > 0 };
-            var hasConnector = node.Config?.ContainsKey("connector_id") == true;
-            if (hasConfig && hasConnector) continue;
+            // Runnable when it names a connector (spec key connector_id, or the canvas key connector)
+            // or, for action nodes, a raw HTTP url. AI nodes are configured by prompt/model instead.
+            var cfg = node.Config;
+            var hasConnector = cfg is not null && (HasText(cfg, "connector_id") || HasText(cfg, "connector"));
+            var hasUrl = isAction && cfg is not null && HasText(cfg, "url");
+            var aiConfigured = isAi && cfg is not null && (HasText(cfg, "prompt") || hasConnector);
+            if (hasConnector || hasUrl || aiConfigured) continue;
 
             var label = string.IsNullOrWhiteSpace(node.Label) ? node.Id : node.Label;
             warnings.Add(new ValidationIssue(6, "BPR-010",
@@ -338,6 +477,9 @@ public sealed class WorkflowValidator : IWorkflowValidator
                 node.Id, null, null));
         }
     }
+
+    private static bool HasText(Dictionary<string, JsonElement> config, string key) =>
+        config.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString());
 
     // ─── DTOs (System.Text.Json deserialization from JSON) ──────────────────
 
@@ -389,6 +531,7 @@ public sealed class WorkflowValidator : IWorkflowValidator
     private sealed class TimeoutDto
     {
         [JsonPropertyName("seconds")] public int Seconds { get; set; }
+        [JsonPropertyName("on_timeout")] public string? OnTimeout { get; set; }
     }
 
     private sealed class EdgeDto

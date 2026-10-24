@@ -34,6 +34,16 @@ export const useCanvasStore = defineStore('canvas', () => {
     }
   }
 
+  /**
+   * Start a fresh undo history whose first entry is the document as loaded. Without this
+   * baseline the first edit was entry 0 and could never be undone ("0 actions available"),
+   * and history from a previously opened workflow could leak into this one.
+   */
+  function resetHistory(baseline: string) {
+    history.value = [baseline];
+    historyIndex.value = 0;
+  }
+
   function undo(): string | null {
     if (!canUndo.value) return null;
     historyIndex.value--;
@@ -83,7 +93,9 @@ export const useCanvasStore = defineStore('canvas', () => {
     const idx = nodes.value.findIndex(n => n.id === id);
     if (idx !== -1) {
       nodes.value[idx] = { ...nodes.value[idx], ...updates };
-      isDirty.value = true;
+      // A position-only update (node drag) is not a document change: positions are not stored in
+      // the workflow YAML, so there is nothing to save and the editor must keep saying "Saved".
+      if (Object.keys(updates).some((k) => k !== 'position')) isDirty.value = true;
     }
   }
 
@@ -104,7 +116,19 @@ export const useCanvasStore = defineStore('canvas', () => {
     isDirty.value = true;
   }
 
+  /**
+   * Canvas → YAML editor "reveal node" request. `seq` increments on every request so
+   * asking for the same node twice still triggers watchers.
+   */
+  const yamlRevealRequest = ref<{ nodeId: string; seq: number; explicit: boolean } | null>(null);
+
+  /** `explicit` = user asked directly (context menu) — the editor should take focus and report misses. */
+  function requestYamlReveal(nodeId: string, explicit = false) {
+    yamlRevealRequest.value = { nodeId, explicit, seq: (yamlRevealRequest.value?.seq ?? 0) + 1 };
+  }
+
   function reset() {
+    yamlRevealRequest.value = null;
     nodes.value = [];
     edges.value = [];
     groups.value = [];
@@ -120,8 +144,9 @@ export const useCanvasStore = defineStore('canvas', () => {
     nodes, edges, groups, selectedNodeId, selectedNode,
     history, historyIndex, isDirty, isSyncing, yamlContent,
     canUndo, canRedo, undoCount,
-    pushHistory, undo, redo,
+    pushHistory, resetHistory, undo, redo,
     setNodes, setEdges, setGroups, setSelectedNode, setYaml, setDirty, setSyncing,
     addNode, updateNode, removeNode, addEdge, removeEdge, reset,
+    yamlRevealRequest, requestYamlReveal,
   };
 });

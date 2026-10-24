@@ -5,11 +5,14 @@ import FmModal from '@/components/common/FmModal.vue';
 import { connectorService } from '@/services/connector.service';
 import { useWorkspace } from '@/composables/useWorkspace';
 import type { ConnectorDefinition } from '@/services/connector.service';
-
-interface ConnectorManifest {
-  auth?: { type?: string };
-  description?: string;
-}
+import {
+  AUTH_TYPE_LABELS,
+  credentialService,
+  isOAuthConnector,
+  manualCredentialTypes,
+  parseManifest,
+} from '@/services/credential.service';
+import { toUserFacingError } from '@/utils/error.util';
 
 interface Props {
   connector: ConnectorDefinition;
@@ -34,19 +37,19 @@ const oauthConnecting = ref(false);
 const resolvedCredentialId = ref('');
 let oauthTimeout: ReturnType<typeof setTimeout> | null = null;
 
-const manifest = computed<ConnectorManifest>(() => {
-  try {
-    return JSON.parse(props.connector.manifestJson) as ConnectorManifest;
-  } catch {
-    return {};
-  }
+const manifest = computed(() => parseManifest(props.connector));
+const isOAuth = computed(() => isOAuthConnector(manifest.value));
+const manualType = computed(() => manualCredentialTypes(manifest.value)[0] ?? null);
+// 'oauth' | 'basic' | 'apikey' (any single secret) | 'none' — drives which form step 1 shows.
+const authType = computed<string>(() => {
+  if (isOAuth.value) return 'oauth';
+  if (manualType.value === 'BasicAuth') return 'basic';
+  if (manualType.value) return 'apikey';
+  return 'none';
 });
-
-const authType = computed<string>(() => manifest.value.auth?.type?.toLowerCase() ?? 'apikey');
-
-const isOAuth = computed(() =>
-  authType.value === 'oauth2' || authType.value === 'oauth',
-);
+const secretLabel = computed(() => (manualType.value ? AUTH_TYPE_LABELS[manualType.value] : 'Secret') ?? 'Secret');
+const saveError = ref<string | null>(null);
+const saving = ref(false);
 
 const defaultCredentialName = computed(
   () => `${props.connector.displayName} workspace`,
@@ -70,12 +73,43 @@ function resetState(): void {
 
 function canContinueStep1(): boolean {
   if (isOAuth.value) return false; // OAuth auto-advances
+  if (authType.value === 'none') return true;
   if (authType.value === 'basic') return username.value.length > 0 && password.value.length > 0;
   return apiKey.value.length > 0;
 }
 
-function continueStep1(): void {
-  if (canContinueStep1()) step.value = 2;
+/**
+ * Stores the pasted secret in the workspace vault (previously the value was collected and then
+ * discarded). Connectors that need no credential install directly.
+ */
+async function continueStep1(): Promise<void> {
+  if (!canContinueStep1() || !currentWorkspaceId.value) return;
+  saveError.value = null;
+  if (authType.value === 'none' || !manualType.value) {
+    resolvedCredentialId.value = '';
+    credentialName.value = defaultCredentialName.value;
+    step.value = 3;
+    return;
+  }
+  saving.value = true;
+  try {
+    const value = authType.value === 'basic' ? `${username.value}:${password.value}` : apiKey.value;
+    const alias = await credentialService.create(currentWorkspaceId.value, {
+      connectorId: props.connector.connectorId,
+      name: credentialName.value.trim() || defaultCredentialName.value,
+      authType: manualType.value,
+      value,
+    });
+    apiKey.value = '';
+    password.value = '';
+    resolvedCredentialId.value = alias.id;
+    credentialName.value = alias.name;
+    step.value = 3;
+  } catch (e) {
+    saveError.value = toUserFacingError(e).message;
+  } finally {
+    saving.value = false;
+  }
 }
 
 async function startOAuth(): Promise<void> {
@@ -169,15 +203,28 @@ onBeforeUnmount(() => {
       >
         <p class="text-sm text-slate-600">
           <span class="font-medium">Auth type:</span>
-          <span class="ml-1 capitalize text-slate-800">{{ authType }}</span>
+          <span class="ml-1 text-slate-800">{{ isOAuth ? 'OAuth sign-in' : manualType ? (AUTH_TYPE_LABELS[manualType] ?? manualType) : 'None' }}</span>
         </p>
 
         <div
-          v-if="oauthError"
+          v-if="oauthError || saveError"
           class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
         >
-          {{ oauthError }}
+          {{ oauthError ?? saveError }}
         </div>
+
+        <p
+          v-if="authType === 'none'"
+          class="text-sm text-slate-600"
+        >
+          {{ connector.displayName }} doesn't need a credential.
+          <button
+            class="mt-3 w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+            @click="continueStep1"
+          >
+            Continue
+          </button>
+        </p>
 
         <!-- OAuth -->
         <button
@@ -194,16 +241,17 @@ onBeforeUnmount(() => {
           class="space-y-3"
         >
           <label class="block">
-            <span class="text-sm font-medium text-slate-700">API Key</span>
+            <span class="text-sm font-medium text-slate-700">{{ secretLabel }}</span>
             <input
               v-model="apiKey"
               type="password"
-              placeholder="Enter your API key"
+              autocomplete="new-password"
+              :placeholder="`Enter the ${secretLabel.toLowerCase()}`"
               class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
             >
           </label>
           <button
-            :disabled="!canContinueStep1()"
+            :disabled="!canContinueStep1() || saving"
             class="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
             @click="continueStep1"
           >
@@ -213,7 +261,7 @@ onBeforeUnmount(() => {
 
         <!-- Basic auth -->
         <div
-          v-else
+          v-else-if="authType === 'basic'"
           class="space-y-3"
         >
           <label class="block">
@@ -235,7 +283,7 @@ onBeforeUnmount(() => {
             >
           </label>
           <button
-            :disabled="!canContinueStep1()"
+            :disabled="!canContinueStep1() || saving"
             class="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
             @click="continueStep1"
           >

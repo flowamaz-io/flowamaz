@@ -29,6 +29,11 @@ dotnet watch --project Flowamaz.Api
 ### Debugging individual concerns
 - Logs: structured JSON to console + `backend/Flowamaz.Api/logs/flowamaz-*.log`.
 - JWT: set `Jwt__Secret` (env `JWT_SECRET`, ≥ 32 chars). In Development a random ephemeral key is generated if unset (tokens won't survive a restart).
+- Secrets: credentials and webhooks need `CREDENTIAL_MASTER_KEY`, and approval links need `GATE_SIGNING_KEY`, even in
+  Development (any 32+ character dev value). Without them those calls fail with a 500.
+- AI without a key: `Ai:AllowStubWithoutKey=true` (already set in `appsettings.Development.json`) returns canned text for
+  summaries and narratives. Workflow *generation* (plain English, photo, conversation) still needs `Ai__AnthropicPlatformKey`.
+- Easiest local start for manual or browser testing: `prompts/e2e-chrome/start-local.sh` (or `.ps1`).
 
 ## Frontend
 ```bash
@@ -39,7 +44,7 @@ npm run typecheck
 npm run build
 npm run lint
 ```
-Set `VITE_API_BASE_URL=http://localhost:8307` in `web/.env` (see `web/.env.example`).
+The Vite dev server proxies `/api`, `/webhooks` and `/scalar` to http://localhost:8307, so leave `VITE_API_BASE_URL` empty locally (override the target with `VITE_API_PROXY_TARGET`).
 
 ## Tests
 ```bash

@@ -26,7 +26,7 @@ public sealed class WorkspaceGitService : IWorkspaceGitService
 
     private static readonly Regex HunkHeader = new(@"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", RegexOptions.Compiled);
     private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder().Build();
-    private static readonly ISerializer YamlSerializer = new SerializerBuilder().Build();
+    private static readonly ISerializer YamlSerializer = new SerializerBuilder().DisableAliases().Build();
 
     private readonly string _basePath;
     private readonly ILogger<WorkspaceGitService> _logger;

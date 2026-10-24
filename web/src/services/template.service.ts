@@ -1,7 +1,8 @@
 import { http, unwrap } from './api.service';
 import type { ApiEnvelope } from '@/types';
+import type { PricingModel, TemplatePricing } from '@/types/marketplace';
 
-export interface TemplateListItem {
+export interface TemplateListItem extends TemplatePricing {
   id: string;
   name: string;
   slug: string;
@@ -41,6 +42,10 @@ export interface PublishTemplateRequest {
   category: string;
   tags: string[];
   previewImageUrl: string | null;
+  /** Workflow Economy (§8.9) — omitted means free. Paid requires a ready publisher account. */
+  pricingModel?: PricingModel;
+  priceCents?: number;
+  currency?: string;
 }
 
 export interface PublishTemplateResult {

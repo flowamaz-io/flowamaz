@@ -8,11 +8,18 @@ import FmBadge from '@/components/common/FmBadge.vue';
 import { gateService } from '@/services/gate.service';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { formatDate, fromNow } from '@/utils/date.util';
+import { humanizeId } from '@/utils/string.util';
 import type { GateResponse } from '@/types';
 
 type Tab = 'pending' | 'all';
 
 const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
+
+/** Prefer the gate node's label when the API sends one; otherwise humanise the node id. */
+function gateDisplayName(gate: GateResponse): string {
+  const label = (gate.gateLabel ?? gate.label ?? '').trim();
+  return label.length > 0 ? label : humanizeId(gate.nodeId);
+}
 
 function openHumanGatesDocs(): void {
   window.open('https://docs.flowamaz.io/human-gates', '_blank', 'noopener');
@@ -23,6 +30,19 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const activeTab = ref<Tab>('pending');
 
+// Run 4: a test run stopped at an approval could only be moved on through the API, because test-run gates
+// are kept out of the queue. This switch brings them in (tagged TEST). Remembered per browser.
+const SHOW_TEST_KEY = 'fmz_gates_show_test';
+function readShowTest(): boolean {
+  try { return localStorage.getItem(SHOW_TEST_KEY) === 'true'; } catch { return false; }
+}
+const showTest = ref(readShowTest());
+function toggleShowTest(): void {
+  showTest.value = !showTest.value;
+  try { localStorage.setItem(SHOW_TEST_KEY, String(showTest.value)); } catch { /* storage unavailable */ }
+  load();
+}
+
 // Per-row note inputs and submitting state.
 const notes = ref<Record<string, string>>({});
 const submitting = ref<Record<string, boolean>>({});
@@ -31,9 +51,13 @@ const pendingCount = computed(() =>
   allGates.value.filter((g) => g.decision === 'Pending').length,
 );
 
+// Run 5: approving on the Pending tab made the row vanish, so the decision was never seen. Rows decided
+// here stay (showing Approved/Rejected) until the list is reloaded or the tab changes.
+const decidedHere = ref<Set<string>>(new Set());
+
 const displayedGates = computed<GateResponse[]>(() =>
   activeTab.value === 'pending'
-    ? allGates.value.filter((g) => g.decision === 'Pending')
+    ? allGates.value.filter((g) => g.decision === 'Pending' || decidedHere.value.has(rowKey(g)))
     : allGates.value,
 );
 
@@ -43,14 +67,16 @@ async function load(): Promise<void> {
 
   loading.value = true;
   error.value = null;
+  decidedHere.value = new Set();
 
   try {
-    allGates.value = await gateService.getPendingGates(currentWorkspaceId.value);
+    // "All" needs decided gates too; the default endpoint returns only the pending queue.
+    allGates.value = await gateService.getAllGates(currentWorkspaceId.value, showTest.value);
   } catch (err: unknown) {
     error.value =
       err instanceof Error
         ? err.message
-        : 'Failed to load pending gates. Check your network connection and try again.';
+        : 'Could not load approval gates. Check that the Flowamaz API is reachable, then select "Try again".';
   } finally {
     loading.value = false;
   }
@@ -78,6 +104,7 @@ async function decide(
       (g) => g.instanceId === gate.instanceId && g.nodeId === gate.nodeId,
     );
     if (idx !== -1) allGates.value[idx] = updated;
+    decidedHere.value = new Set(decidedHere.value).add(key);
 
     delete notes.value[key];
   } catch (err: unknown) {
@@ -128,35 +155,47 @@ onMounted(load);
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit">
-      <button
-        :class="[
-          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
-          activeTab === 'pending'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700',
-        ]"
-        @click="activeTab = 'pending'"
-      >
-        Pending
-        <span
-          v-if="pendingCount > 0"
-          class="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700"
+    <div class="flex flex-wrap items-center gap-4">
+      <div class="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit">
+        <button
+          :class="[
+            'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+            activeTab === 'pending'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700',
+          ]"
+          @click="activeTab = 'pending'; decidedHere = new Set()"
         >
-          {{ pendingCount }}
-        </span>
-      </button>
-      <button
-        :class="[
-          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
-          activeTab === 'all'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700',
-        ]"
-        @click="activeTab = 'all'"
-      >
-        All
-      </button>
+          Pending
+          <span
+            v-if="pendingCount > 0"
+            class="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700"
+          >
+            {{ pendingCount }}
+          </span>
+        </button>
+        <button
+          :class="[
+            'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+            activeTab === 'all'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700',
+          ]"
+          @click="activeTab = 'all'"
+        >
+          All
+        </button>
+      </div>
+      <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+        <input
+          type="checkbox"
+          class="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-200"
+          :checked="showTest"
+          data-testid="gates-show-test"
+          @change="toggleShowTest"
+        >
+        Include test runs
+      </label>
     </div>
 
     <!-- Loading -->
@@ -183,7 +222,9 @@ onMounted(load);
       :title="activeTab === 'pending' ? 'No pending approvals' : 'No gates yet'"
       :description="
         activeTab === 'pending'
-          ? 'All caught up — no workflows are waiting for your approval right now.'
+          ? (showTest
+            ? 'All caught up — no workflows are waiting for your approval right now.'
+            : 'All caught up — no workflows are waiting for your approval right now. Approvals from test runs are hidden; tick Include test runs above to see them.')
           : 'Gates will appear here once workflows reach a human-approval step.'
       "
       cta-label="Learn about human gates"
@@ -230,11 +271,17 @@ onMounted(load);
           >
             <!-- Gate node info -->
             <td class="px-4 py-3">
-              <div class="font-medium text-slate-800">
-                {{ gate.nodeId }}
+              <div class="flex items-center gap-2 font-medium text-slate-800">
+                {{ gateDisplayName(gate) }}
+                <span
+                  v-if="gate.isTest === true"
+                  class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800"
+                  title="This gate belongs to a test run"
+                  data-testid="gate-test-tag"
+                >TEST</span>
               </div>
-              <div class="text-xs text-slate-400 font-mono">
-                {{ gate.instanceId.slice(0, 8) }}…
+              <div class="font-mono text-xs text-slate-400">
+                {{ gate.nodeId }} · {{ gate.instanceId.slice(0, 8) }}…
               </div>
             </td>
 

@@ -338,6 +338,8 @@ Six-section structured template:
 
 AI generates complete YAML in one pass. Max 3-5 clarifying questions asked all at once. Validation runs automatically. YAML + canvas appear together. .flowamaz-def.md committed alongside YAML.
 
+Clarifying questions (implemented): `POST /workflows/clarify` takes the NL form and returns up to 3 questions about missing essentials — what triggers it, who approves, what happens on rejection, which systems. Deterministic keyword heuristics run first (zero cost); one small F2 AI call (ResolveModelConfig, budget-checked, semantic-cached, metered) is made only when the heuristics find no gap but the steps are too thin to judge (< 2 identifiable steps). Any AI failure falls back to the heuristic result. The user answers or skips; answered ones are sent as `nlRequest.clarifications` on `POST /workflows/create` and appended to the generation prompt (and cache key). No questions → generation proceeds unchanged. Trigger, rules and systems are optional fields.
+
 ### 6.2 Method 2 — Voice Input
 User speaks instead of typing. Voice → text → same template pipeline → YAML. Streaming transcription (Web Speech API or Whisper). Same output as Method 1.
 
@@ -352,6 +354,9 @@ Pipeline:
 6. Canvas populated, original image stored as workflow reference
 
 Cost: ~$0.01-0.02 per upload.
+
+Review flow (implemented): `POST /workflows/visual/preview` returns every detected node with `confidence`, `reviewNeeded` (< 0.80, flagged by the model, or an unknown shape type) and the model's `reason`; nothing is saved. The user keeps / renames / removes nodes, then `POST /workflows/create` with `method: visual` and `visualGraph` builds YAML via YamlDotNet from the confirmed graph (no AI call). Edges of removed nodes are reconnected predecessor → successor; a missing trigger/end node is added and wired to entry/exit nodes. The result goes through the same validation gate as every method (invalid → 422 `WORKFLOW_GENERATION_INVALID`).
+One-shot (API clients that skip review, `imageBase64` on `/create`): low-confidence nodes are **included, never dropped**, with `config.review_needed: true` and `config.review_reason`, so the canvas/editor can surface them later. Matched connectors are written as `config.suggested_connectors` (a hint only — not a configured connector).
 
 ### 6.4 Method 4 — Conversation Import (Slack / Teams / Email)
 Paste a Slack thread, Teams meeting transcript, or email chain where a process was discussed.

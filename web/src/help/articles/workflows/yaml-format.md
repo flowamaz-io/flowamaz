@@ -77,6 +77,4 @@ caught early.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/workflows/yaml-format.md)

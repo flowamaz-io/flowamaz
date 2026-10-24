@@ -52,6 +52,4 @@ example, all `Failed` instances from the last 24 hours when investigating an iss
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/instances/monitoring-instances.md)

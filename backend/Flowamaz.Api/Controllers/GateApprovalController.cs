@@ -182,6 +182,12 @@ public sealed class GateApprovalController : ControllerBase
 
             return Ok(new { text = $"Decision recorded: {decision}." });
         }
+        catch (Flowamaz.Core.Exceptions.AppException ex)
+        {
+            // Already decided / run ended: tell the approver exactly why, in Slack.
+            _logger.LogInformation("GateApprovalController.SlackActions not recorded gate={GateId} code={Code}", gateId, ex.ErrorCode);
+            return Ok(new { text = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "GateApprovalController.SlackActions error gate={GateId}", gateId);

@@ -148,6 +148,17 @@ watch(() => ws.currentWorkspaceId.value, () => {
   page.value = 1;
   void load();
 });
+
+/**
+ * The summary starts with the actor ("Olivia Owner (…) created workflow 'X'"), which the Actor column already
+ * shows (run 5: "the audit log repeats the actor"). Show just what happened; the CSV keeps the full summary.
+ */
+function eventText(row: { actor?: string | null; summary: string }): string {
+  const actor = row.actor?.trim();
+  if (!actor || !row.summary.startsWith(actor)) return row.summary;
+  const rest = row.summary.slice(actor.length).trim();
+  return rest.length > 0 ? rest.charAt(0).toUpperCase() + rest.slice(1) : row.summary;
+}
 </script>
 
 <template>
@@ -316,7 +327,7 @@ watch(() => ws.currentWorkspaceId.value, () => {
                 <span class="ml-1 text-xs font-normal text-slate-400">{{ row.actorType }}</span>
               </td>
               <td class="px-4 py-3 text-slate-600">
-                {{ row.summary }}
+                {{ eventText(row) }}
               </td>
               <td class="px-4 py-3 text-slate-500">
                 {{ row.resource || row.resourceType }}

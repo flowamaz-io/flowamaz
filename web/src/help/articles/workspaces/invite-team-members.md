@@ -53,6 +53,4 @@ You need the **Admin** role (or OrgOwner) to manage members.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/workspaces/invite-team-members.md)

@@ -18,10 +18,11 @@ public class AuditServiceTests
 {
     // ── Fakes ────────────────────────────────────────────────────────────────
 
-    private sealed class FakeRequestContext(string? ip, string? userAgent) : IRequestContextAccessor
+    private sealed class FakeRequestContext(string? ip, string? userAgent, string? apiKeyLabel = null) : IRequestContextAccessor
     {
         public string? GetIpAddress() => ip;
         public string? GetUserAgent() => userAgent;
+        public string? GetApiKeyAuditLabel() => apiKeyLabel;
     }
 
     // The root must be kept alive for the test's duration — the InMemory provider holds it weakly,
@@ -79,6 +80,48 @@ public class AuditServiceTests
         stored.UserAgent.Should().Be("vitest");
         stored.Metadata.Should().Contain("bar");
         GC.KeepAlive(root);
+    }
+
+    // ── 1b. O4: API-key requests are attributed to the key ───────────────────
+
+    [Fact]
+    public async Task RecordAsync_attributes_actions_without_a_user_to_the_api_key_of_the_request()
+    {
+        var root = new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot();
+        var services = new ServiceCollection();
+        services.AddDbContext<FlowAmazDbContext>(o => o.UseInMemoryDatabase("api-key-actor", root));
+        var sp = services.BuildServiceProvider();
+        var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+        const string label = "API key \"Loan app\" (fmz_live_loans_…)";
+        var service = new AuditService(scopeFactory, new FakeRequestContext("203.0.113.7", "curl", label), NullLogger<AuditService>.Instance);
+
+        var orgId = Guid.NewGuid();
+        service.RecordAsync(new AuditEventRequest
+        {
+            OrgId = orgId,
+            ActorUserId = Guid.Empty, // public API gate decision passes no human
+            ActorType = "system",
+            EventType = "gate.approved",
+            ResourceType = "gate",
+            Action = "approved",
+        });
+
+        await Task.Delay(1500);
+
+        using var verifyScope = scopeFactory.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+        var stored = await verifyDb.AuditEvents.AsNoTracking().SingleAsync(e => e.OrgId == orgId);
+        stored.ActorType.Should().Be("api_key");
+        stored.ActorLabel.Should().Be(label);
+        stored.ActorUserId.Should().BeNull();
+        GC.KeepAlive(root);
+    }
+
+    [Fact]
+    public void ApiKey_audit_label_uses_name_and_display_prefix_only()
+    {
+        var result = new WorkspaceApiKeyValidationResult(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), [], "Loan app", "fmz_live_loans_");
+        result.AuditLabel.Should().Be("API key \"Loan app\" (fmz_live_loans_…)");
     }
 
     // ── 2. Error in storage does not propagate (fire-and-forget) ─────────────

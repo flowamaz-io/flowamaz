@@ -207,6 +207,11 @@ if (backgroundWorkersEnabled)
         q.AddTrigger(t => t.ForJob(gateKey)
             .WithSimpleSchedule(s => s.WithIntervalInSeconds(60).RepeatForever()));
 
+        // Schedule triggers — every minute; exactly-once per occurrence via idempotency key.
+        var scheduleKey = new JobKey(nameof(ScheduleTriggerJob));
+        q.AddJob<ScheduleTriggerJob>(scheduleKey);
+        q.AddTrigger(t => t.ForJob(scheduleKey).WithCronSchedule("5 * * * * ?"));
+
         // Process Intelligence hourly, with up to 5min jitter to avoid a thundering herd (prompt 02-07).
         var intelKey = new JobKey(nameof(ProcessIntelligenceJob));
         q.AddJob<ProcessIntelligenceJob>(intelKey);
@@ -274,6 +279,16 @@ builder.Services
     });
 
 var app = builder.Build();
+
+// Make AI stub mode impossible to miss: stub output looks plausible and must never be mistaken for
+// real provider responses in a demo or in production.
+{
+    var aiOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Flowamaz.Core.Configuration.AiOptions>>().Value;
+    if (aiOptions.UseStubCompletion)
+        app.Logger.LogWarning("AI STUB MODE (Ai:UseStubCompletion=true) — all AI responses are canned, no provider is called.");
+    else if (aiOptions.AllowStubWithoutKey && string.IsNullOrEmpty(aiOptions.AnthropicPlatformKey))
+        app.Logger.LogWarning("AI STUB MODE (no platform key, Ai:AllowStubWithoutKey=true) — AI responses without a workspace key are canned.");
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // 14. Pipeline: Serilog → CorrelationId → CORS → Exception → ResponseWrapper → Auth → Endpoints.
@@ -362,6 +377,17 @@ if (!app.Environment.IsDevelopment())
     {
         if (string.IsNullOrWhiteSpace(read()))
             missing.Add($"  - {envVar}: {how}");
+    }
+
+    // Connector sandbox (FUNCTIONAL.md §9.5): if a runner URL is configured the shared secret must be
+    // too (32+ chars, identical on the runner) — otherwise every sandboxed step would fail at run time.
+    if (!string.IsNullOrWhiteSpace(app.Configuration[Flowamaz.Application.Connectors.Services.ConnectorDispatcher.UrlKey]))
+    {
+        var runnerSecret = app.Configuration[Flowamaz.Application.Connectors.Services.ConnectorDispatcher.SecretKey]
+            ?? app.Configuration["CONNECTOR_RUNNER_SECRET"];
+        if (string.IsNullOrWhiteSpace(runnerSecret) || runnerSecret.Length < 32)
+            missing.Add("  - CONNECTOR_RUNNER_SECRET: Connectors__Sandbox__Url is set, so the API needs the runner's shared secret " +
+                "(32+ characters, same value on the connector-runner). Generate with: openssl rand -hex 32");
     }
 
     if (missing.Count > 0)

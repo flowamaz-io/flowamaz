@@ -1,19 +1,21 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Flowamaz.Core.Entities.Connector;
+using Flowamaz.Application.Connectors.Security;
 using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Flowamaz.Application.Connectors.Handlers;
 
 /// <summary>
-/// Emits a webhook to an external URL with an optional HMAC-SHA256 signature.
-/// Input: { url: string, payload: object, secret?: string }
-/// Returns: { status_code: int, success: bool }
+/// POSTs a JSON payload to a URL. When an HmacSecret credential is set, the body is signed:
+/// <c>X-Flowamaz-Signature: sha256=&lt;hex&gt;</c> plus <c>X-Flowamaz-Timestamp</c> (signature covers
+/// "timestamp.body" so a captured request cannot be replayed later). Input: { url, payload }.
 /// </summary>
 public sealed class WebhookEmitHandler : IConnectorOperationHandler
 {
+    public const string HttpClientName = "webhook-emit-connector";
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WebhookEmitHandler> _logger;
 
@@ -26,42 +28,35 @@ public sealed class WebhookEmitHandler : IConnectorOperationHandler
     public string ConnectorId => "webhook-emit";
     public string OperationId => "send-webhook";
 
-    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, WorkspaceCredential? credential, CancellationToken ct)
+    public async Task<JsonDocument> ExecuteAsync(JsonDocument input, ConnectorCredential? credential, CancellationToken ct)
     {
         _logger.LogInformation("[WebhookEmit:send-webhook] ExecuteAsync entry");
-
+        const string op = "webhook-emit/send-webhook";
         var root = input.RootElement;
-        var url = root.GetProperty("url").GetString() ?? throw new InvalidOperationException("'url' is required.");
-        var payloadEl = root.GetProperty("payload");
-        var payloadJson = payloadEl.GetRawText();
+        ConnectorInput.RejectSecretInput(root, op, "secret");
+        var url = EgressGuard.RequireHttpUrl(ConnectorInput.Optional(root, "url"));
+        if (!root.TryGetProperty("payload", out var payloadEl))
+            throw new Flowamaz.Core.Exceptions.ConnectorOperationException($"{op}: input 'payload' is required.");
+        var payloadJson = payloadEl.ValueKind == JsonValueKind.String ? payloadEl.GetString() ?? "null" : payloadEl.GetRawText();
 
-        var secret = root.TryGetProperty("secret", out var secretEl) ? secretEl.GetString() : null;
-
-        using var client = _httpClientFactory.CreateClient("webhook-emit-connector");
+        using var client = _httpClientFactory.CreateClient(HttpClientName);
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(payloadJson, Encoding.UTF8, "application/json")
         };
 
-        if (!string.IsNullOrEmpty(secret))
+        if (credential is not null)
         {
-            var sig = ComputeHmacSha256(payloadJson, secret);
-            request.Headers.Add("X-Flowamaz-Signature", $"sha256={sig}");
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+            request.Headers.Add("X-Flowamaz-Timestamp", timestamp);
+            request.Headers.Add("X-Flowamaz-Signature", $"sha256={Sign($"{timestamp}.{payloadJson}", credential.Secret)}");
         }
 
-        using var response = await client.SendAsync(request, ct);
-        var statusCode = (int)response.StatusCode;
-        var success = response.IsSuccessStatusCode;
-
-        _logger.LogInformation("[WebhookEmit:send-webhook] ExecuteAsync exit status={Status}", statusCode);
-        return JsonDocument.Parse($"{{\"status_code\":{statusCode},\"success\":{success.ToString().ToLowerInvariant()}}}");
+        var result = await ConnectorHttp.SendAsync(client, request, op, ct);
+        _logger.LogInformation("[WebhookEmit:send-webhook] ExecuteAsync exit");
+        return result;
     }
 
-    private static string ComputeHmacSha256(string payload, string secret)
-    {
-        var keyBytes = Encoding.UTF8.GetBytes(secret);
-        var payloadBytes = Encoding.UTF8.GetBytes(payload);
-        var hash = HMACSHA256.HashData(keyBytes, payloadBytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
+    internal static string Sign(string message, string secret) =>
+        Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(secret), Encoding.UTF8.GetBytes(message))).ToLowerInvariant();
 }

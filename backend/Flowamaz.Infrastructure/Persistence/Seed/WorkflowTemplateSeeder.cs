@@ -640,6 +640,9 @@ public static class WorkflowTemplateSeeder
         spec:
           trigger:
             type: schedule
+            config:
+              cron: "0 9 1 * *"   # 09:00 on the 1st of every month — edit after installing
+              timezone: "UTC"
           variables:
             period:
               type: string

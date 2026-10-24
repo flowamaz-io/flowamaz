@@ -183,6 +183,54 @@ public class CredentialVaultServiceTests
     }
 
     [Fact]
+    public async Task Retrieve_RevokedCredential_Throws()
+    {
+        // Regression: revoking used to hide the credential in the UI but it still decrypted for workflows.
+        var db = NewDb();
+        db.ConnectorDefinitions.Add(HttpConnector(Guid.NewGuid()));
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+        var workspaceId = Guid.NewGuid();
+        var credId = await service.StoreAsync(workspaceId, "http-rest", "Revoked Key", "ApiKey", "secret");
+        await service.RevokeAsync(workspaceId, credId);
+
+        var act = () => service.RetrieveAsync(workspaceId, credId);
+
+        (await act.Should().ThrowAsync<UnauthorizedAccessException>()).Which.Message.Should().Contain("revoked");
+    }
+
+    [Fact]
+    public async Task UpdateValue_ReEncrypts_AndRetrieveReturnsNewValue()
+    {
+        var db = NewDb();
+        db.ConnectorDefinitions.Add(HttpConnector(Guid.NewGuid()));
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+        var workspaceId = Guid.NewGuid();
+        var credId = await service.StoreAsync(workspaceId, "http-rest", "Rotating", "OAuth2AuthCode", "old-token");
+        var oldCipher = (await db.WorkspaceCredentials.FindAsync(credId))!.EncryptedValue.ToArray();
+
+        await service.UpdateValueAsync(workspaceId, credId, "new-token");
+
+        (await service.RetrieveAsync(workspaceId, credId)).Should().Be("new-token");
+        (await db.WorkspaceCredentials.FindAsync(credId))!.EncryptedValue.Should().NotEqual(oldCipher);
+    }
+
+    [Fact]
+    public async Task UpdateValue_OtherWorkspace_Throws()
+    {
+        var db = NewDb();
+        db.ConnectorDefinitions.Add(HttpConnector(Guid.NewGuid()));
+        await db.SaveChangesAsync();
+        var service = NewService(db);
+        var credId = await service.StoreAsync(Guid.NewGuid(), "http-rest", "Mine", "ApiKey", "secret");
+
+        var act = () => service.UpdateValueAsync(Guid.NewGuid(), credId, "hijack");
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
     public async Task RetrieveAsync_WrongWorkspaceId_ThrowsUnauthorised()
     {
         // Arrange
