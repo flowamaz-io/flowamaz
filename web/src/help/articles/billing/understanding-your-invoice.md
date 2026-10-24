@@ -49,6 +49,4 @@ For how charges change when you move plans, see the [Upgrade guide](upgrade-guid
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/billing/understanding-your-invoice.md)

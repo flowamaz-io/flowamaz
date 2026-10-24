@@ -54,6 +54,4 @@ skip already-completed work, or use a `TryCatch` to handle the failure inline.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/instances/replaying-instances.md)

@@ -85,6 +85,4 @@ capacity, see [Migrate Community to Cloud](migrate-community-to-cloud).
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/getting-started/install-community-edition.md)

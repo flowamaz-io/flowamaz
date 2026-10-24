@@ -54,6 +54,4 @@ exported copies are unaffected.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/settings/audit-log.md)

@@ -58,6 +58,4 @@ access in case the IdP is unavailable.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/settings/sso.md)

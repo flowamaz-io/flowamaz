@@ -55,6 +55,4 @@ see [Understanding your invoice](understanding-your-invoice).
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/billing/upgrade-guide.md)

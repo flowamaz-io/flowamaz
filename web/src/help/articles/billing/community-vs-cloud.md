@@ -50,6 +50,4 @@ When you're ready, the move is one command and your work comes with you. See
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/billing/community-vs-cloud.md)

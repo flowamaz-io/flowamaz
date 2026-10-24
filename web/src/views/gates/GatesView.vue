@@ -51,9 +51,13 @@ const pendingCount = computed(() =>
   allGates.value.filter((g) => g.decision === 'Pending').length,
 );
 
+// Run 5: approving on the Pending tab made the row vanish, so the decision was never seen. Rows decided
+// here stay (showing Approved/Rejected) until the list is reloaded or the tab changes.
+const decidedHere = ref<Set<string>>(new Set());
+
 const displayedGates = computed<GateResponse[]>(() =>
   activeTab.value === 'pending'
-    ? allGates.value.filter((g) => g.decision === 'Pending')
+    ? allGates.value.filter((g) => g.decision === 'Pending' || decidedHere.value.has(rowKey(g)))
     : allGates.value,
 );
 
@@ -63,6 +67,7 @@ async function load(): Promise<void> {
 
   loading.value = true;
   error.value = null;
+  decidedHere.value = new Set();
 
   try {
     // "All" needs decided gates too; the default endpoint returns only the pending queue.
@@ -99,6 +104,7 @@ async function decide(
       (g) => g.instanceId === gate.instanceId && g.nodeId === gate.nodeId,
     );
     if (idx !== -1) allGates.value[idx] = updated;
+    decidedHere.value = new Set(decidedHere.value).add(key);
 
     delete notes.value[key];
   } catch (err: unknown) {
@@ -158,7 +164,7 @@ onMounted(load);
               ? 'bg-white text-slate-900 shadow-sm'
               : 'text-slate-500 hover:text-slate-700',
           ]"
-          @click="activeTab = 'pending'"
+          @click="activeTab = 'pending'; decidedHere = new Set()"
         >
           Pending
           <span

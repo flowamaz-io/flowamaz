@@ -59,6 +59,4 @@ Whatever you start with, the result is a **draft** you refine before publishing.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/workflows/creation-methods.md)

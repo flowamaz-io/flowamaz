@@ -61,6 +61,4 @@ This guarantees one event produces exactly one run, even if your sender retries.
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/settings/webhooks.md)

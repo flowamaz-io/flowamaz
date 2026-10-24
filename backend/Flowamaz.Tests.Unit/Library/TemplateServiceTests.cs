@@ -152,7 +152,8 @@ public sealed class TemplateServiceTests
 
         added.Should().NotBeNull();
         added!.WorkspaceId.Should().Be(_ws);
-        added.YamlContent.Should().Be(ValidYaml);
+        // The installed copy carries the chosen name in its YAML; everything else is the template's YAML.
+        added.YamlContent.Should().Be(ValidYaml.Replace("name: \"Sample\"", "name: \"My Purchase Flow\""));
         added.Name.Should().Be("My Purchase Flow");
         workflowId.Should().Be(added.Id);
         _definitions.Verify(r => r.AddAsync(It.IsAny<WorkflowDefinition>(), It.IsAny<CancellationToken>()), Times.Once);

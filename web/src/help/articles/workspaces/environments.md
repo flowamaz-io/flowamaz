@@ -47,6 +47,4 @@ For how environments sit inside the hierarchy, see
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/workspaces/environments.md)

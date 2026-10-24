@@ -144,7 +144,7 @@ public sealed partial class TemplateService : ITemplateService
             new CreateWorkflowDefinitionRequest(
                 workflowName,
                 slug,
-                template.YamlContent,
+                WithMetadataName(template.YamlContent, workflowName),
                 $"Installed from template: {template.Name}",
                 WorkflowCreatedByMethod.Canvas),
             ct);
@@ -168,6 +168,37 @@ public sealed partial class TemplateService : ITemplateService
         _logger.LogInformation("TemplateService.InstallTemplateAsync exit template={TemplateId} workflow={WorkflowId}",
             templateId, created.Id);
         return created.Id;
+    }
+
+    /// <summary>
+    /// Sets metadata.name in the installed copy to the name the user chose (run 5: "Q4 Purchase Approval" kept
+    /// "Purchase Approval" in its YAML). The value's position comes from the YamlDotNet parse; only that
+    /// scalar is replaced, so the template's comments and layout survive.
+    /// </summary>
+    internal static string WithMetadataName(string yaml, string name)
+    {
+        try
+        {
+            var stream = new YamlDotNet.RepresentationModel.YamlStream();
+            stream.Load(new StringReader(yaml));
+            if (stream.Documents.Count == 0
+                || stream.Documents[0].RootNode is not YamlDotNet.RepresentationModel.YamlMappingNode root
+                || !root.Children.TryGetValue(new YamlDotNet.RepresentationModel.YamlScalarNode("metadata"), out var m)
+                || m is not YamlDotNet.RepresentationModel.YamlMappingNode metadata
+                || !metadata.Children.TryGetValue(new YamlDotNet.RepresentationModel.YamlScalarNode("name"), out var n)
+                || n is not YamlDotNet.RepresentationModel.YamlScalarNode value)
+                return yaml;
+
+            var start = (int)value.Start.Index;
+            var end = (int)value.End.Index;
+            if (start < 0 || end > yaml.Length || end <= start) return yaml;
+            var quoted = "\"" + name.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+            return string.Concat(yaml.AsSpan(0, start), quoted, yaml.AsSpan(end));
+        }
+        catch (YamlDotNet.Core.YamlException)
+        {
+            return yaml;
+        }
     }
 
     public async Task<PublishTemplateResult> PublishTemplateAsync(

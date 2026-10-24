@@ -52,6 +52,4 @@ To remove Flowamaz's access from the provider's side:
 
 ---
 
-Was this helpful? 👍 👎
-
 [Edit on GitHub ↗](https://github.com/flowamaz-io/docs/blob/main/docs/connectors/oauth-credential-setup.md)
