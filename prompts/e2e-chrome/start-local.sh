@@ -66,6 +66,9 @@ export GIT_REPOS_BASE_PATH="$ROOT/prompts/e2e-chrome/results/git-repos"
 export CREDENTIAL_MASTER_KEY="e2e-local-only-credential-master-key-0123456789abcdef"   # dev only
 export GATE_SIGNING_KEY="e2e-local-only-gate-signing-key-0123456789abcdef0123"          # dev only
 export Ai__AllowStubWithoutKey=true                 # non-generation AI features answer with canned text
+# Test orgs register on the Community plan (10 public API calls/minute, FUNCTIONAL.md §13.2), which an app syncing
+# with Flowamaz (e.g. the loan application) uses up on its own. Set ENFORCE_PLAN_RATE_LIMITS=true to test the limits.
+export PublicApi__EnforcePlanRateLimits="${ENFORCE_PLAN_RATE_LIMITS:-false}"
 if [[ -n "${ANTHROPIC_KEY:-}" ]]; then
   code=$(curl -s -o /dev/null -w "%{http_code}" https://api.anthropic.com/v1/models \
     -H "x-api-key: $ANTHROPIC_KEY" -H "anthropic-version: 2023-06-01" || echo 000)

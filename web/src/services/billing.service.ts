@@ -12,6 +12,8 @@ export interface BillingPlan {
   maxMembers: number;
   maxWorkspaces: number;
   features: string[];
+  /** Public API calls per minute across the organisation; 0 = custom (agreed per organisation). */
+  apiCallsPerMinute?: number;
 }
 
 export interface CurrentSubscription {

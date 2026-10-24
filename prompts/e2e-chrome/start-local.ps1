@@ -49,6 +49,8 @@ $env:GIT_REPOS_BASE_PATH = Join-Path $Root "prompts\e2e-chrome\results\git-repos
 $env:CREDENTIAL_MASTER_KEY = "e2e-local-only-credential-master-key-0123456789abcdef"   # dev only
 $env:GATE_SIGNING_KEY = "e2e-local-only-gate-signing-key-0123456789abcdef0123"          # dev only
 $env:Ai__AllowStubWithoutKey = "true"
+# Test orgs are on the Community plan (10 public API calls/minute); set $env:ENFORCE_PLAN_RATE_LIMITS="true" to test the limits.
+$env:PublicApi__EnforcePlanRateLimits = if ($env:ENFORCE_PLAN_RATE_LIMITS) { $env:ENFORCE_PLAN_RATE_LIMITS } else { "false" }
 if ($env:ANTHROPIC_KEY) {
   try {
     Invoke-WebRequest https://api.anthropic.com/v1/models -UseBasicParsing -TimeoutSec 10 `
