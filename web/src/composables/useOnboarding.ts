@@ -63,15 +63,25 @@ export function useOnboarding(orgId: string) {
   };
 }
 
-/** Reads onboarding completion for guards (no reactive ref needed). */
-export function isOnboardingComplete(orgId: string): boolean {
+/**
+ * Whether this user still needs the onboarding wizard (create the first workspace, invite a teammate).
+ *
+ * Wizard progress lives in this browser's localStorage, but the org may already be set up without it: a workspace
+ * created through the API, by another admin, or in another browser, or a member who was invited into one. So a
+ * user who already belongs to a workspace is past onboarding — unless they are part-way through the wizard in this
+ * browser, which then resumes where they left off.
+ */
+export function isOnboardingComplete(orgId: string, workspaceCount = 0): boolean {
+  let saved: Partial<OnboardingState> | null = null;
   try {
     const raw = localStorage.getItem(ONBOARDING_KEY(orgId));
-    if (!raw) return false;
-    return Boolean((JSON.parse(raw) as Partial<OnboardingState>).completed);
+    saved = raw ? (JSON.parse(raw) as Partial<OnboardingState>) : null;
   } catch {
-    return false;
+    saved = null;
   }
+  if (saved?.completed) return true;
+  const wizardInProgress = saved !== null && (saved.step ?? 1) > 1;
+  return workspaceCount > 0 && !wizardInProgress;
 }
 
 /** Getting-started checklist dismissal (per org). */

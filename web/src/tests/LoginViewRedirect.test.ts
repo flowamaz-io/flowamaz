@@ -12,7 +12,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => rout
 const login = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/composables/useAuth', async () => {
   const { ref } = await import('vue');
-  return { useAuth: () => ({ login, user: ref({ orgId: 'org-1' }) }) };
+  return { useAuth: () => ({ login, user: ref({ orgId: 'org-1' }), workspaces: ref([]) }) };
 });
 
 const onboardingDone = { value: true };
