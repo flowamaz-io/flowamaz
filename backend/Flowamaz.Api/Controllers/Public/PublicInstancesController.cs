@@ -32,7 +32,7 @@ public sealed class PublicInstancesController : PublicApiController
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        if (await GuardAsync(ApiKeyScope.InstancesRead, "read", DefaultHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.InstancesRead, ReadBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         var instance = await _instances.GetByIdForWorkspaceAsync(id, ws, ct);
@@ -43,7 +43,7 @@ public sealed class PublicInstancesController : PublicApiController
     [HttpGet("{id:guid}/events")]
     public async Task<IActionResult> Events(Guid id, CancellationToken ct)
     {
-        if (await GuardAsync(ApiKeyScope.InstancesRead, "read", DefaultHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.InstancesRead, ReadBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         var instance = await _instances.GetByIdForWorkspaceAsync(id, ws, ct);
@@ -65,7 +65,7 @@ public sealed class PublicInstancesController : PublicApiController
     [HttpPost("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
     {
-        if (await GuardAsync(ApiKeyScope.InstancesWrite, "trigger", TriggerHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.InstancesWrite, DecideBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         var instance = await _instances.GetByIdForWorkspaceAsync(id, ws, ct);

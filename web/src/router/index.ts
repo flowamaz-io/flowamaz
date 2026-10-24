@@ -107,7 +107,7 @@ router.beforeEach(async (to) => {
   // requiresOnboarding: send new orgs through the wizard first.
   if (to.meta.requiresOnboarding && auth.isAuthenticated) {
     const orgId = auth.user?.orgId ?? '';
-    if (!isOnboardingComplete(orgId)) {
+    if (!isOnboardingComplete(orgId, auth.workspaces.length)) {
       // Carry the original destination through the wizard (OnboardingView validates it).
       return to.fullPath !== '/' ? { path: '/onboarding', query: { redirect: to.fullPath } } : { path: '/onboarding' };
     }

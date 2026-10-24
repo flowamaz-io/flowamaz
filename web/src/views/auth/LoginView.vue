@@ -70,7 +70,7 @@ async function submit(): Promise<void> {
   try {
     await auth.login({ email: email.value.trim(), password: password.value, orgSlug: orgSlug.value.trim() });
     const orgId = auth.user.value?.orgId ?? '';
-    await router.push(postLoginTarget(route.query.redirect, isOnboardingComplete(orgId)));
+    await router.push(postLoginTarget(route.query.redirect, isOnboardingComplete(orgId, auth.workspaces.value.length)));
   } catch (e) {
     error.value = toUserFacingError(e).message;
   } finally {
