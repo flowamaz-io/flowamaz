@@ -96,6 +96,8 @@ public class PublicGateDecisionTests : ApiTestBase
 
         var body = await resp.Content.ReadAsStringAsync();
         resp.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        // Decisions use their own budget (1000/h by default), not the 100/h one for starting runs.
+        resp.Headers.GetValues("X-RateLimit-Limit").Single().Should().Be("1000");
         using var doc = JsonDocument.Parse(body);
         doc.RootElement.GetProperty("data").GetProperty("decided_by_label").GetString()
             .Should().Be("Aisha Rahman (Branch Manager)");

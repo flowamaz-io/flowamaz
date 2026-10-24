@@ -93,6 +93,7 @@ public class Phase6PublicApiTests : ApiTestBase
         var resp = await KeyClient(key).PostAsync($"/api/public/v1/workflows/{slug}/trigger", null);
 
         resp.StatusCode.Should().Be(HttpStatusCode.Accepted, await resp.Content.ReadAsStringAsync());
+        resp.Headers.GetValues("X-RateLimit-Limit").Single().Should().Be("100", "starting runs has its own, smaller budget");
     }
 
     [Fact]

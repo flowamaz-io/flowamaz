@@ -26,7 +26,7 @@ public sealed class PublicGatesController : PublicApiController
     [HttpGet("pending")]
     public async Task<IActionResult> Pending(CancellationToken ct)
     {
-        if (await GuardAsync(ApiKeyScope.InstancesRead, "read", DefaultHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.InstancesRead, ReadBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         // Production approvals only — test-run gates never reach API integrations (O2).
@@ -37,7 +37,8 @@ public sealed class PublicGatesController : PublicApiController
     [HttpPost("{id:guid}/decide")]
     public async Task<IActionResult> Decide(Guid id, [FromBody] PublicGateDecisionRequest request, CancellationToken ct)
     {
-        if (await GuardAsync(ApiKeyScope.InstancesWrite, "trigger", TriggerHourlyLimit, ct) is { } blocked) return blocked;
+        // Own bucket: one run needs several decisions; they mustn't use up the budget for starting runs.
+        if (await GuardAsync(ApiKeyScope.InstancesWrite, DecideBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         var validation = await _decisionValidator.ValidateAsync(request, ct);

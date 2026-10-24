@@ -31,7 +31,7 @@ public sealed class PublicWorkflowsController : PublicApiController
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] int? page, [FromQuery(Name = "per_page")] int? perPage, CancellationToken ct)
     {
-        if (await GuardAsync(ApiKeyScope.WorkflowsRead, "read", DefaultHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.WorkflowsRead, ReadBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         var published = (await _definitions.GetForWorkspaceAsync(ws, ct))
@@ -48,7 +48,7 @@ public sealed class PublicWorkflowsController : PublicApiController
     [HttpGet("{slug}")]
     public async Task<IActionResult> Get(string slug, CancellationToken ct)
     {
-        if (await GuardAsync(ApiKeyScope.WorkflowsRead, "read", DefaultHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.WorkflowsRead, ReadBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         var definition = await _definitions.GetBySlugForWorkspaceAsync(ws, slug, ct);
@@ -62,7 +62,7 @@ public sealed class PublicWorkflowsController : PublicApiController
     [HttpPost("{slug}/trigger")]
     public async Task<IActionResult> Trigger(string slug, CancellationToken ct)
     {
-        if (await GuardAsync(ApiKeyScope.WorkflowsTrigger, "trigger", TriggerHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.WorkflowsTrigger, TriggerBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         var definition = await _definitions.GetBySlugForWorkspaceAsync(ws, slug, ct);
@@ -84,7 +84,7 @@ public sealed class PublicWorkflowsController : PublicApiController
     public async Task<IActionResult> Instances(
         string slug, [FromQuery] int? page, [FromQuery(Name = "per_page")] int? perPage, CancellationToken ct)
     {
-        if (await GuardAsync(ApiKeyScope.InstancesRead, "read", DefaultHourlyLimit, ct) is { } blocked) return blocked;
+        if (await GuardAsync(ApiKeyScope.InstancesRead, ReadBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
 
         var definition = await _definitions.GetBySlugForWorkspaceAsync(ws, slug, ct);
