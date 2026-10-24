@@ -209,14 +209,19 @@ public sealed class VisualInputService : IVisualInputService
             var outgoing = work.Where(e => e.From == removed && e.To != removed).ToList();
             work.RemoveAll(e => e.From == removed || e.To == removed);
 
+            // The incoming edge's label wins: it is the predecessor's branch ("yes" out of "Over 1000?"), and
+            // the bridged edge still leaves that predecessor.
             foreach (var inEdge in incoming)
                 foreach (var outEdge in outgoing)
                     if (inEdge.From != outEdge.To)
-                        work.Add(new DetectedEdge(inEdge.From, outEdge.To, outEdge.Label ?? inEdge.Label));
+                        work.Add(new DetectedEdge(inEdge.From, outEdge.To, inEdge.Label ?? outEdge.Label));
         }
 
+        // De-duplicate on the branch label too. Removing "Finance approves" bridges "Over 1000? —yes→ Pay
+        // employee", which has the same ends as the existing "—no→" edge; keying on (from, to) alone dropped
+        // the "yes" branch and left the decision with one exit.
         return work
-            .GroupBy(e => (e.From, e.To))
+            .GroupBy(e => (e.From, e.To, e.Label))
             .Select(g => g.First())
             .ToList();
     }

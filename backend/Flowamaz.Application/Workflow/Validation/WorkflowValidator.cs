@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Flowamaz.Core.Interfaces.Workflow;
@@ -66,6 +68,19 @@ public sealed class WorkflowValidator : IWorkflowValidator
 
         // Convert YAML → JSON string (NullNamingConvention preserves YAML keys as-is)
         var jsonString = ConvertYamlToJson(yamlContent);
+        if (jsonString is not null)
+        {
+            try
+            {
+                var tree = JsonNode.Parse(jsonString);
+                CoerceToSchema(tree, await GetSchemaAsync(ct));
+                jsonString = tree?.ToJsonString() ?? jsonString;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log.LogWarning(ex, "[WorkflowValidator] type coercion skipped");
+            }
+        }
 
         // Layer 1 — JSON Schema validation
         await RunLayer1Async(jsonString, errors, ct);
@@ -111,13 +126,15 @@ public sealed class WorkflowValidator : IWorkflowValidator
         try
         {
             var schema = await GetSchemaAsync(ct);
-            var issues = schema.Validate(jsonString);
+            // An array item error ("spec.nodes[3]: ArrayItemNotValid") hides the field that is actually wrong,
+            // so report the innermost errors with their full path instead.
+            var issues = schema.Validate(jsonString).SelectMany(Innermost);
             foreach (var issue in issues)
             {
                 errors.Add(new ValidationIssue(
                     Layer: 1,
                     Code: $"SCH-{(int)issue.Kind:D3}",
-                    Message: $"{issue.Path}: {issue.Kind} — fix this field per the workflow-v1 specification",
+                    Message: DescribeSchemaIssue(issue),
                     NodeId: null,
                     Line: issue.HasLineInfo ? issue.LineNumber : null,
                     Column: issue.HasLineInfo ? issue.LinePosition : null));
@@ -128,6 +145,84 @@ public sealed class WorkflowValidator : IWorkflowValidator
             _log.LogError(ex, "[WorkflowValidator] Layer 1 schema load error");
             errors.Add(new ValidationIssue(1, "SCH-000", $"Schema validation unavailable: {ex.Message}", null, null, null));
         }
+    }
+
+    private static IEnumerable<ValidationError> Innermost(ValidationError error) =>
+        error is ChildSchemaValidationError child && child.Errors.Count > 0
+            ? child.Errors.SelectMany(kv => kv.Value).SelectMany(Innermost)
+            : [error];
+
+    /// <summary>Plain-language schema error: which field, what is wrong with it, and how to fix it.</summary>
+    internal static string DescribeSchemaIssue(ValidationError issue)
+    {
+        var path = string.IsNullOrEmpty(issue.Path) ? "the document" : issue.Path.TrimStart('#', '/');
+        var field = issue.Property is { Length: > 0 } p && !path.EndsWith(p, StringComparison.Ordinal) ? $"{path}.{p}" : path;
+        var allowed = issue.Schema?.ActualSchema.Enumeration is { Count: > 0 } values
+            ? string.Join(", ", values.Select(v => v?.ToString()))
+            : null;
+        return issue.Kind switch
+        {
+            ValidationErrorKind.NoAdditionalPropertiesAllowed =>
+                $"'{field}' is not a field the workflow format recognises. Remove it, or move step settings under that step's config.",
+            ValidationErrorKind.PropertyRequired => $"'{field}' is required but missing. Add it.",
+            ValidationErrorKind.NotInEnumeration =>
+                $"'{field}' has a value that isn't allowed." + (allowed is null ? "" : $" Use one of: {allowed}."),
+            ValidationErrorKind.IntegerExpected => $"'{field}' must be a whole number (for example 30).",
+            ValidationErrorKind.NumberExpected => $"'{field}' must be a number.",
+            ValidationErrorKind.BooleanExpected => $"'{field}' must be true or false.",
+            ValidationErrorKind.StringExpected => $"'{field}' must be text.",
+            ValidationErrorKind.ObjectExpected => $"'{field}' must be a set of named fields (a mapping).",
+            ValidationErrorKind.ArrayExpected => $"'{field}' must be a list.",
+            ValidationErrorKind.PatternMismatch when issue.Schema?.ActualSchema.Pattern == "^[a-z0-9-]+$" =>
+                $"'{field}' must use only lowercase letters, numbers and hyphens (for example manager-approval).",
+            ValidationErrorKind.PatternMismatch => $"'{field}' is not in the required format.",
+            ValidationErrorKind.StringTooShort => $"'{field}' must not be empty.",
+            ValidationErrorKind.TooFewItems => $"'{field}' needs at least one item.",
+            _ => $"'{field}': {issue.Kind}. Fix this field per the workflow-v1 specification.",
+        };
+    }
+
+    /// <summary>
+    /// YAML has no types without a schema: the untyped YamlDotNet pass turns every scalar into a string, so
+    /// "timeout: { seconds: 30 }" reached the JSON schema as "30" and failed IntegerExpected. The runtime parser
+    /// reads those fields as numbers, so convert a string where the schema expects a number or boolean (and
+    /// does not also accept text). Free-form config objects have no property schema and are left untouched.
+    /// </summary>
+    internal static void CoerceToSchema(JsonNode? node, JsonSchema schema)
+    {
+        var actual = schema.ActualSchema;
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var key in obj.Select(p => p.Key).ToList())
+                {
+                    JsonSchema? child = actual.Properties.TryGetValue(key, out var prop) ? prop : actual.AdditionalPropertiesSchema;
+                    if (child is null) continue;
+                    if (obj[key] is JsonValue value && TryCoerce(value, child.ActualSchema.Type, out var typed)) obj[key] = typed;
+                    else CoerceToSchema(obj[key], child);
+                }
+                break;
+            case JsonArray array when actual.Item is not null:
+                for (var i = 0; i < array.Count; i++)
+                {
+                    if (array[i] is JsonValue value && TryCoerce(value, actual.Item.ActualSchema.Type, out var typed)) array[i] = typed;
+                    else CoerceToSchema(array[i], actual.Item);
+                }
+                break;
+        }
+    }
+
+    private static bool TryCoerce(JsonValue value, JsonObjectType type, out JsonNode? typed)
+    {
+        typed = null;
+        if (!value.TryGetValue<string>(out var text) || type.HasFlag(JsonObjectType.String)) return false;
+        if (type.HasFlag(JsonObjectType.Integer) && long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var l))
+            typed = JsonValue.Create(l);
+        else if (type.HasFlag(JsonObjectType.Number) && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
+            typed = JsonValue.Create(d);
+        else if (type.HasFlag(JsonObjectType.Boolean) && bool.TryParse(text, out var b))
+            typed = JsonValue.Create(b);
+        return typed is not null;
     }
 
     private static async Task<JsonSchema> GetSchemaAsync(CancellationToken ct)
@@ -322,6 +417,22 @@ public sealed class WorkflowValidator : IWorkflowValidator
             info.Add(new ValidationIssue(6, "BPR-004",
                 "No SLA threshold configured. Set spec.sla_threshold_ms to enable SLA monitoring.",
                 null, null, null));
+
+        // BPR-011 — a decision with a single exit: every case that doesn't match that one path has nowhere to go
+        // (for example, removing "Finance approves" from a photo left "Over 1000?" with only its "no" exit).
+        var edges = doc.Spec?.Edges ?? [];
+        foreach (var router in doc.Spec?.Nodes?.Where(n => n.Type?.Equals("router", StringComparison.OrdinalIgnoreCase) == true) ?? [])
+        {
+            var exits = edges.Where(e => string.Equals(e.From, router.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (exits.Count != 1) continue;
+            var only = exits[0];
+            var branch = string.IsNullOrWhiteSpace(only.Via) ? "" : $" (\"{only.Via}\")";
+            var label = string.IsNullOrWhiteSpace(router.Label) ? router.Id : router.Label;
+            warnings.Add(new ValidationIssue(6, "BPR-011",
+                $"Decision '{router.Id}' ({label}) has only one exit{branch}, to '{only.To}', so any case that doesn't take it has nowhere to go. " +
+                "Connect the missing branch, or remove the decision and connect the steps directly.",
+                router.Id, null, null));
+        }
 
         // BPR-010 — runtime-readiness: action/AI nodes without a connector configured
         foreach (var node in doc.Spec?.Nodes ?? [])

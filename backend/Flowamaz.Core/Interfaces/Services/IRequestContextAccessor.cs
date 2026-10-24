@@ -20,4 +20,7 @@ public interface IRequestContextAccessor
 
     /// <summary>"Name (email)" of the signed-in user for audit rows, or null outside a user request.</summary>
     string? GetUserAuditLabel() => null;
+
+    /// <summary>Org user id of the signed-in human caller, or null (API key, background job, no request).</summary>
+    Guid? GetUserId() => null;
 }

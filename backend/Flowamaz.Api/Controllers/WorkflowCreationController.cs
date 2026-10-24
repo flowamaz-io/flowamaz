@@ -217,8 +217,11 @@ public sealed class WorkflowCreationController : ControllerBase
                     method, validationResult.Errors.Count);
                 return UnprocessableEntity(new
                 {
-                    error = $"We couldn't build a valid workflow from that input ({validationResult.Errors.Count} problem(s); first: {first}). " +
-                            "Add more detail about the steps and who does them, then try again — or start from the canvas.",
+                    // Run 3: the old advice ("add more detail") blamed the user's input when the AI output was
+                    // at fault. Say what failed, that retrying helps, and the fallbacks.
+                    error = $"The AI's workflow draft failed validation, so nothing was saved ({validationResult.Errors.Count} problem(s); first: {first}). " +
+                            "Results vary between attempts, so try again. If it keeps failing, write one step per line in Steps, " +
+                            "or start from a template or Draw on canvas.",
                     code = "WORKFLOW_GENERATION_INVALID",
                     validation = validationResult,
                 });

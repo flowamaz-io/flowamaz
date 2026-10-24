@@ -39,6 +39,11 @@ public sealed class HttpRequestContextAccessor(IHttpContextAccessor accessor) : 
         return name is not null && email is not null ? $"{name} ({email})" : name ?? email;
     }
 
+    public Guid? GetUserId() =>
+        accessor.HttpContext?.Items[Core.Models.CurrentUserContext.HttpContextItemKey] is Core.Models.CurrentUserContext { IsApiKey: false } ctx
+            ? ctx.OrgUserId
+            : null;
+
     public string? GetUserAgent()
     {
         var context = accessor.HttpContext;

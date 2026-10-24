@@ -210,6 +210,62 @@ public sealed class VisualInputServiceTests
     }
 
     [Fact]
+    public async Task BuildYamlFromConfirmedGraph_RemovingABranchStep_KeepsBothDecisionExits()
+    {
+        // Run 3, J12: the expense-claim whiteboard. Removing "Finance approves" left "Over 1000?" with only
+        // its "no" exit because the bridged "yes → Pay employee" edge was de-duplicated away.
+        var (sut, _) = BuildSut(ValidParseJson);
+        var graph = new ConfirmedVisualGraph(
+            [
+                new ConfirmedVisualNode("submit", "Employee submits claim", "trigger"),
+                new ConfirmedVisualNode("manager", "Manager reviews", "human-gate"),
+                new ConfirmedVisualNode("over-1000", "Over 1000?", "router"),
+                new ConfirmedVisualNode("pay", "Pay employee", "action"),
+                new ConfirmedVisualNode("done", "Done", "end"),
+            ],
+            [
+                new DetectedEdge("submit", "manager"),
+                new DetectedEdge("manager", "over-1000"),
+                new DetectedEdge("over-1000", "finance", "yes"),   // "finance" was removed in review
+                new DetectedEdge("over-1000", "pay", "no"),
+                new DetectedEdge("finance", "pay"),
+                new DetectedEdge("pay", "done"),
+            ]);
+
+        var yaml = sut.BuildYamlFromConfirmedGraph(graph, "expense-claim", "Expense claim");
+
+        var edges = Edges(yaml);
+        edges.Should().Contain(("over-1000", "pay", "yes"));
+        edges.Should().Contain(("over-1000", "pay", "no"));
+        var validation = await new WorkflowValidator(NullLogger<WorkflowValidator>.Instance).ValidateAsync(yaml, WorkspaceId);
+        validation.Warnings.Should().NotContain(w => w.Code == "BPR-011");
+    }
+
+    [Fact]
+    public async Task Validator_warns_when_a_decision_has_a_single_exit()
+    {
+        const string yaml = """
+            apiVersion: flowamaz/v1
+            kind: Workflow
+            metadata: { id: one-exit, name: One exit, description: d }
+            spec:
+              trigger: { type: manual }
+              nodes:
+                - { id: start, type: trigger, label: Start }
+                - { id: over-1000, type: router, label: "Over 1000?" }
+                - { id: pay, type: action, label: Pay, config: { url: "https://pay.example/api" } }
+                - { id: done, type: end, label: Done }
+              edges:
+                - { id: e1, from: start, to: over-1000 }
+                - { id: e2, from: over-1000, to: pay, via: "no" }
+                - { id: e3, from: pay, to: done }
+            """;
+        var validation = await new WorkflowValidator(NullLogger<WorkflowValidator>.Instance).ValidateAsync(yaml, WorkspaceId);
+        validation.Warnings.Should().ContainSingle(w => w.Code == "BPR-011" && w.NodeId == "over-1000")
+            .Which.Message.Should().Contain("only one exit (\"no\")");
+    }
+
+    [Fact]
     public async Task BuildYamlFromConfirmedGraph_NoTriggerOrEnd_AddsThemWiredToEntryAndExit()
     {
         var (sut, _) = BuildSut(ValidParseJson);

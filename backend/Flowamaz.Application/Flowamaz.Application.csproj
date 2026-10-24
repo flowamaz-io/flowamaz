@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Flowamaz.Tests.Unit" />
+    <InternalsVisibleTo Include="Flowamaz.Tests.Integration" />
   </ItemGroup>
 
 </Project>

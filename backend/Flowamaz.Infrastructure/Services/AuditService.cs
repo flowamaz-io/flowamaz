@@ -54,6 +54,10 @@ public sealed class AuditService : IAuditService
             actorType = "api_key";
             actorLabel = string.IsNullOrWhiteSpace(actorLabel) ? apiKeyLabel : actorLabel;
         }
+        // Some services record a user action without passing the user (API key revoked, webhook created), so
+        // the row read "— user · A user". Take the signed-in caller from the request in that case.
+        else if (actorUserId is null && actorType == "user" && _requestContext.GetUserId() is { } callerId)
+            actorUserId = callerId;
         // UI actions recorded only the user id, so the log read "A user" with no name or email.
         if (actorUserId is not null && string.IsNullOrWhiteSpace(actorLabel))
             actorLabel = _requestContext.GetUserAuditLabel();
