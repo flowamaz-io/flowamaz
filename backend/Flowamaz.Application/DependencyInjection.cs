@@ -35,6 +35,8 @@ public static class DependencyInjection
         services.AddScoped<IOrgUserService, OrgUserService>();
         services.AddScoped<IWorkspaceService, WorkspaceService>();
         services.AddScoped<IEditionService, Platform.Services.EditionService>();
+        services.AddSingleton<Platform.Services.PublicApiPlanLimitCache>(_ => new Platform.Services.PublicApiPlanLimitCache());
+        services.AddScoped<IPublicApiPlanLimits, Platform.Services.PublicApiPlanLimits>();
         services.AddScoped<IWorkspaceMemberService, WorkspaceMemberService>();
         services.AddScoped<IWebhookService, Webhooks.WebhookService>();
         services.AddScoped<Library.Services.ConnectorMarketplaceService>();

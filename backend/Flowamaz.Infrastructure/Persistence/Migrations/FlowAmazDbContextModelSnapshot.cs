@@ -2719,6 +2719,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int?>("ApiRateLimitPerMinute")
+                        .HasColumnType("integer")
+                        .HasColumnName("api_rate_limit_per_minute");
+
                     b.Property<string>("BillingEmail")
                         .IsRequired()
                         .HasMaxLength(256)

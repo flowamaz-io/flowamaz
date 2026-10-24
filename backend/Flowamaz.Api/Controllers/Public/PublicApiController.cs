@@ -87,19 +87,76 @@ public abstract class PublicApiController : ControllerBase
                 $"This API key doesn't have the '{requiredScope}' scope. Create a key with that scope in " +
                 "Settings → API keys and use it for this call.", "errors#insufficient_scope");
 
-        var limits = HttpContext?.RequestServices?.GetService<IOptions<PublicApiLimits>>()?.Value ?? new PublicApiLimits();
-        var maxPerHour = limits.PerHour(bucketSuffix);
-        var result = await _rateLimiter.CheckAsync($"{ws}:{bucketSuffix}", maxPerHour, ct);
-        Response.Headers["X-RateLimit-Limit"] = result.Limit.ToString();
-        Response.Headers["X-RateLimit-Remaining"] = result.Remaining.ToString();
-        Response.Headers["X-RateLimit-Reset"] = result.ResetUnixSeconds.ToString();
+        var services = HttpContext?.RequestServices;
+        var limits = services?.GetService<IOptions<PublicApiLimits>>()?.Value ?? new PublicApiLimits();
 
-        if (!result.Allowed)
+        // 1. The plan's per-minute limit for the whole organisation (FUNCTIONAL.md §13.2).
+        PublicApiRateLimit? minute = null;
+        PlanApiLimit? plan = null;
+        if (limits.EnforcePlanRateLimits && services?.GetService<IPublicApiPlanLimits>() is { } planLimits)
+        {
+            plan = await planLimits.ResolveAsync(ws, ct);
+            if (plan is { PerMinute: > 0 })
+                minute = await _rateLimiter.CheckAsync($"org:{plan.OrgId}:minute", plan.PerMinute, windowSeconds: 60, ct);
+        }
+
+        // 2. The workspace's hourly budget for this kind of call.
+        var hour = minute is { Allowed: false } ? null
+            : await _rateLimiter.CheckAsync($"{ws}:{bucketSuffix}", limits.PerHour(bucketSuffix), ct);
+
+        WriteRateLimitHeaders(minute, hour);
+        if ((minute is { Allowed: false } ? minute : hour is { Allowed: false } ? hour : null) is { } blocked)
+            Response.Headers.RetryAfter = Math.Max(1, blocked.ResetUnixSeconds - DateTimeOffset.UtcNow.ToUnixTimeSeconds()).ToString();
+
+        if (minute is { Allowed: false })
             return ApiError(StatusCodes.Status429TooManyRequests, "rate_limited",
-                "Rate limit exceeded. Wait until the time in X-RateLimit-Reset before retrying.", "errors#rate_limited");
+                $"Your {plan!.PlanName} plan allows {plan.PerMinute} API calls a minute across your organisation. " +
+                "Wait until the time in X-RateLimit-Reset, or upgrade your plan in Settings → Billing for a higher limit.",
+                "errors#rate_limited");
+        if (hour is { Allowed: false })
+            return ApiError(StatusCodes.Status429TooManyRequests, "rate_limited",
+                $"This workspace has used its hourly budget for {BucketDescription(bucketSuffix)} ({hour.Limit} an hour). " +
+                "Wait until the time in X-RateLimit-Reset before retrying.", "errors#rate_limited");
 
         return null;
     }
+
+    /// <summary>
+    /// X-RateLimit-* report whichever limit is closer to blocking (what a client should back off on);
+    /// X-RateLimit-Minute-* (plan) and X-RateLimit-Hour-* (workspace budget) give both.
+    /// </summary>
+    private void WriteRateLimitHeaders(PublicApiRateLimit? minute, PublicApiRateLimit? hour)
+    {
+        if (minute is not null)
+        {
+            Response.Headers["X-RateLimit-Minute-Limit"] = minute.Limit.ToString();
+            Response.Headers["X-RateLimit-Minute-Remaining"] = minute.Remaining.ToString();
+        }
+        if (hour is not null)
+        {
+            Response.Headers["X-RateLimit-Hour-Limit"] = hour.Limit.ToString();
+            Response.Headers["X-RateLimit-Hour-Remaining"] = hour.Remaining.ToString();
+        }
+
+        var binding = (minute, hour) switch
+        {
+            ({ } m, { } h) => m.Remaining <= h.Remaining ? m : h,
+            ({ } m, null) => m,
+            (null, { } h) => h,
+            _ => null,
+        };
+        if (binding is null) return;
+        Response.Headers["X-RateLimit-Limit"] = binding.Limit.ToString();
+        Response.Headers["X-RateLimit-Remaining"] = binding.Remaining.ToString();
+        Response.Headers["X-RateLimit-Reset"] = binding.ResetUnixSeconds.ToString();
+    }
+
+    private static string BucketDescription(string bucket) => bucket switch
+    {
+        TriggerBucket => "starting runs",
+        DecideBucket => "decisions and cancellations",
+        _ => "reads",
+    };
 
     protected async Task<string> ReadRawBodyAsync(CancellationToken ct)
     {
@@ -134,6 +191,12 @@ public sealed class PublicApiLimits
 
     /// <summary>Deciding gates and cancelling runs.</summary>
     public int DecidePerHour { get; set; } = 1000;
+
+    /// <summary>
+    /// Apply each plan's per-minute limit (Community 10, Starter 60, Pro 300, Enterprise custom). Turn off only for
+    /// local testing against an org on the Community plan.
+    /// </summary>
+    public bool EnforcePlanRateLimits { get; set; } = true;
 
     public int PerHour(string bucket) => bucket switch
     {

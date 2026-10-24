@@ -67,7 +67,7 @@ public sealed class BillingController : ControllerBase
             plans.Add(new PlanResponse(
                 plan.Id, plan.Name, plan.Slug, plan.PriceMonthlyUsd, plan.PriceAnnualUsd,
                 plan.Limits.MaxWorkflowDefinitions, plan.Limits.MaxRunsPerMonth, plan.Limits.MaxMembersPerWorkspace,
-                plan.Limits.MaxWorkspaces, FeatureList(plan.Features)));
+                plan.Limits.MaxWorkspaces, FeatureList(plan.Features), plan.Limits.ApiRateLimitPerMinute));
         }
 
         _logger.LogInformation("BillingController.GetPlans exit count={Count}", plans.Count);
@@ -220,7 +220,9 @@ public sealed record PlanResponse(
     long MaxRunsMonth,
     int MaxMembers,
     int MaxWorkspaces,
-    IReadOnlyList<string> Features);
+    IReadOnlyList<string> Features,
+    /// <summary>Public API calls per minute across the organisation; 0 = custom (agreed per organisation).</summary>
+    int ApiCallsPerMinute = 0);
 
 public sealed record CurrentSubscriptionResponse(
     Guid PlanId,

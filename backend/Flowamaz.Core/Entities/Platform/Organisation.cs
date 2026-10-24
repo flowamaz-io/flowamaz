@@ -15,6 +15,12 @@ public class Organisation : BaseEntity
     public string BillingEmail { get; set; } = string.Empty;
     public string? StripeCustomerId { get; set; }
     public Guid PlanId { get; set; }
+
+    /// <summary>
+    /// Public API calls per minute agreed for this organisation (Enterprise "Custom", FUNCTIONAL.md §13.2).
+    /// Null: the plan's limit applies. 0: no per-minute limit.
+    /// </summary>
+    public int? ApiRateLimitPerMinute { get; set; }
     public OrgStatus Status { get; set; } = OrgStatus.Trial;
     public DateTime TrialEndsAt { get; set; }
     public DataRegion DataRegion { get; set; } = DataRegion.ApSoutheast1;
