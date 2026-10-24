@@ -206,6 +206,13 @@ function ctaLabel(plan: BillingPlan): string {
               {{ limitLabel(plan.maxMembers, 'members') }}
             </li>
             <li
+              v-if="plan.apiCallsPerMinute !== undefined"
+              class="flex items-start gap-2"
+            >
+              <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+              {{ plan.apiCallsPerMinute > 0 ? `${plan.apiCallsPerMinute.toLocaleString()} API calls / minute` : 'Custom API rate limit' }}
+            </li>
+            <li
               v-for="feature in plan.features"
               :key="feature"
               class="flex items-start gap-2"
