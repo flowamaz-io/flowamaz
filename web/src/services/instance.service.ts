@@ -27,8 +27,6 @@ export interface InstanceListFilters {
   includeTest?: boolean;
   /** Only test runs (the Instances "Test" tab). */
   testOnly?: boolean;
-  /** Rows per page (default 20). */
-  pageSize?: number;
   page?: number;
   pageSize?: number;
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import FmBadge from '@/components/common/FmBadge.vue';
@@ -102,8 +102,8 @@ async function resolveShortId(): Promise<string | null> {
   }
 }
 
-let ws: InstanceWebSocket | null = null;
-onUnmounted(() => ws?.disconnect());
+const ws = shallowRef<InstanceWebSocket | null>(null);
+onUnmounted(() => ws.value?.disconnect());
 
 onMounted(async () => {
   if (!currentWorkspaceId.value) await loadWorkspaces();
@@ -118,7 +118,7 @@ onMounted(async () => {
     notFound.value = true;
     return;
   }
-  ws = useInstanceWebSocket(
+  ws.value = useInstanceWebSocket(
     currentWorkspaceId.value ?? '',
     fullId,
     () => auth.accessToken,
@@ -127,7 +127,7 @@ onMounted(async () => {
       void store.loadTimeline(fullId);
     },
   );
-  ws.connect();
+  ws.value.connect();
 });
 </script>
 
@@ -173,11 +173,11 @@ onMounted(async () => {
             </FmBadge>
             <span class="text-slate-500">{{ formatDuration(currentInstance.startedAt, currentInstance.completedAt) }}</span>
             <span
-              v-if="ws.connectionState.value === 'live'"
+              v-if="ws?.connectionState.value === 'live'"
               class="text-xs text-teal-600"
             >● Live</span>
             <span
-              v-else-if="ws.connectionState.value === 'reconnecting'"
+              v-else-if="ws?.connectionState.value === 'reconnecting'"
               class="text-xs text-amber-600"
             >Reconnecting…</span>
           </div>
