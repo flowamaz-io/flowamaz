@@ -19,13 +19,21 @@ export function useHelp() {
     ui.openHelp(slug);
   }
 
+  /** Open the panel on search + the article list (the generic "Help" entry point). */
+  function openBrowse(): void {
+    ui.openHelp();
+  }
+
   return {
     isOpen: computed(() => ui.helpPanelOpen),
+    view: computed(() => ui.helpPanelView),
+    requestSeq: computed(() => ui.helpRequestSeq),
     currentSlug: computed(() => ui.helpPanelArticle),
     currentArticle,
     tree: helpTree(),
     openForRoute,
     openArticle,
+    openBrowse,
     selectArticle: ui.setHelpArticle,
     close: ui.closeHelp,
   };

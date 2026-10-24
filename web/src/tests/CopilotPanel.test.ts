@@ -54,4 +54,17 @@ describe('CopilotPanel', () => {
     await wrapper.vm.$nextTick();
     expect(wrapper.text()).toContain('add-timeout');
   });
+
+  it('opens on the first toggle and focuses the command box', async () => {
+    const wrapper = mount(CopilotPanel, {
+      props: { open: false, history: [] },
+      attachTo: document.body,
+    });
+    await wrapper.setProps({ open: true });
+    await wrapper.vm.$nextTick();
+    const input = wrapper.find('input');
+    expect(input.exists()).toBe(true);
+    expect(document.activeElement).toBe(input.element);
+    wrapper.unmount();
+  });
 });

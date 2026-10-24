@@ -3,6 +3,7 @@ import { useDebounceFn } from '@vueuse/core';
 import * as jsYaml from 'js-yaml';
 import { workflowService } from '@/services/workflow.service';
 import { creationService } from '@/services/creation.service';
+import { dumpWorkflowYaml, expandYamlAliases } from '@/utils/yaml.util';
 
 export type SaveState = 'saved' | 'unsaved' | 'saving';
 
@@ -19,7 +20,9 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
 
   async function loadWorkflow() {
     const wf = await workflowService.get(workspaceId, workflowId);
-    yaml.value = wf.yamlContent ?? '';
+    // Expand anchors/aliases (e.g. a server skeleton's `nodes: &o0 []` / `edges: *o0`) so the
+    // editor shows plain YAML and nodes/edges never share one array.
+    yaml.value = expandYamlAliases(wf.yamlContent ?? '');
     originalYaml.value = yaml.value;
     healthScore.value = wf.healthScore ?? null;
   }
@@ -143,7 +146,7 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
 
       current.spec = currentSpec;
       validationErrors.value = []; // clear stale markers before patch lands
-      yaml.value = jsYaml.dump(current, { indent: 2, lineWidth: -1, quotingType: '"', forceQuotes: false });
+      yaml.value = dumpWorkflowYaml(current, { quotingType: '"', forceQuotes: false });
       return null;
     } catch {
       return 'Could not apply — invalid YAML patch.';

@@ -138,8 +138,10 @@ function badgeCount(item: NavItem): number {
 onMounted(loadPendingGates);
 watch(currentWorkspaceId, loadPendingGates);
 
+// The generic Help button opens on search + the article list; contextual entry points
+// (Shift+?, "?" links, error states) open straight on their article.
 function openHelp(): void {
-  help.openForRoute(window.location.pathname);
+  help.openBrowse();
 }
 
 function closeMobile(): void {

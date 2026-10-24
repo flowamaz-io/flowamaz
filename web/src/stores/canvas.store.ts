@@ -93,7 +93,9 @@ export const useCanvasStore = defineStore('canvas', () => {
     const idx = nodes.value.findIndex(n => n.id === id);
     if (idx !== -1) {
       nodes.value[idx] = { ...nodes.value[idx], ...updates };
-      isDirty.value = true;
+      // A position-only update (node drag) is not a document change: positions are not stored in
+      // the workflow YAML, so there is nothing to save and the editor must keep saying "Saved".
+      if (Object.keys(updates).some((k) => k !== 'position')) isDirty.value = true;
     }
   }
 

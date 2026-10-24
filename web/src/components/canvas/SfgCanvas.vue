@@ -6,7 +6,7 @@
       :can-undo="canvasStore.canUndo"
       :can-redo="canvasStore.canRedo"
       :undo-count="canvasStore.undoCount"
-      :is-dirty="canvasStore.isDirty"
+      :is-dirty="props.isDirty ?? canvasStore.isDirty"
       :show-minimap="showMinimap"
       :snap-to-grid="snapToGridEnabled"
       :saving="props.saving ?? false"
@@ -144,9 +144,18 @@ import CanvasMinimap from './CanvasMinimap.vue';
 import { GRID_SIZE, gridDotSpacing, loadSnapPreference, renderedToModel, saveSnapPreference } from '@/utils/canvas.util';
 import type { WorkflowVariable } from './shared/VariableAutocomplete.vue';
 import { Clipboard } from 'lucide-vue-next';
+import { buildCanvasSkeleton, dumpWorkflowYaml, expandYamlAliases } from '@/utils/yaml.util';
 import type { NodeType, CanvasNode } from '@/types/canvas.types';
 
-const props = defineProps<{ initialYaml?: string; saving?: boolean }>();
+const props = defineProps<{
+  initialYaml?: string;
+  saving?: boolean;
+  /**
+   * The host editor's dirty flag (its YAML differs from the last save). When given, the toolbar's
+   * "Saved / Unsaved changes" reads it, so the canvas and the editor top bar always agree.
+   */
+  isDirty?: boolean;
+}>();
 const emit = defineEmits<{ save: []; yamlChange: [yaml: string] }>();
 
 const route = useRoute();
@@ -264,7 +273,7 @@ function applyNodeConfig(payload: { id: string; label: string; config: Record<st
     } else {
       nodes.push({ id: payload.id, type: configPanel.value.node?.type ?? 'action', label: payload.label, config: payload.config });
     }
-    yamlContent.value = jsYaml.dump(parsed, { indent: 2, lineWidth: -1 });
+    yamlContent.value = dumpWorkflowYaml(parsed);
   } catch { /* leave YAML unchanged on parse failure */ }
 
   canvas.cy.value?.getElementById(payload.id).data('label', payload.label);
@@ -284,15 +293,17 @@ async function loadWorkflow(options: { startHistory?: boolean } = {}) {
   try {
     const wf = await workflowService.get(workspaceId, workflowId);
     if (wf.name) workflowName.value = wf.name;
-    if (wf.yamlContent) {
-      yamlContent.value = wf.yamlContent;
+    // Anchors/aliases (`nodes: &o0 []` / `edges: *o0`) would make nodes and edges one shared array.
+    const loadedYaml = wf.yamlContent ? expandYamlAliases(wf.yamlContent) : '';
+    if (loadedYaml) {
+      yamlContent.value = loadedYaml;
       await nextTick();
-      syncYamlToCanvas(wf.yamlContent);
+      syncYamlToCanvas(loadedYaml);
       // Wait for sync debounce to settle, then tidy the layout, then update minimap
       // (the minimap re-renders itself on layoutstop)
       setTimeout(() => { canvas.runLayout(); }, 350);
     }
-    if (options.startHistory) canvasStore.resetHistory(wf.yamlContent || buildYamlFromState());
+    if (options.startHistory) canvasStore.resetHistory(loadedYaml || buildYamlFromState());
     canvasStore.setDirty(false);
   } catch {
     // canvas stays empty if load fails
@@ -565,15 +576,7 @@ function buildYamlFromState(): string {
 
   // Start from the current YAML to preserve all metadata (trigger, variables, node configs).
   // Only replace spec.nodes and spec.edges.
-  let parsed: Record<string, unknown> = {
-    apiVersion: 'flowamaz/v1',
-    kind: 'Workflow',
-    metadata: {
-      id: workflowName.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-      name: workflowName.value,
-    },
-    spec: { trigger: { type: 'manual' }, nodes: [], edges: [] },
-  };
+  let parsed: Record<string, unknown> = buildCanvasSkeleton(workflowName.value);
 
   if (yamlContent.value) {
     try {
@@ -625,6 +628,6 @@ function buildYamlFromState(): string {
   }
 
   parsed.spec = spec;
-  return jsYaml.dump(parsed, { indent: 2, lineWidth: -1 });
+  return dumpWorkflowYaml(parsed);
 }
 </script>

@@ -232,7 +232,6 @@ export function useCytoscapeCanvas(containerRef: Ref<HTMLElement | null>, option
       if (snapEnabled() && !node.isParent()) node.position(snapPosition(node.position()));
       const pos = node.position();
       store.updateNode(node.id(), { position: { x: pos.x, y: pos.y } });
-      store.setDirty(true);
     });
 
     cy.value.on('viewport', () => {

@@ -42,6 +42,16 @@ describe('canvas.store', () => {
     expect(store.isDirty).toBe(true);
   });
 
+  it('a node drag (position-only update) does not mark the document dirty', () => {
+    const store = useCanvasStore();
+    store.setNodes([makeNode('n1')]);
+    store.updateNode('n1', { position: { x: 40, y: 80 } });
+    expect(store.nodes[0].position).toEqual({ x: 40, y: 80 });
+    expect(store.isDirty).toBe(false);
+    store.updateNode('n1', { label: 'Renamed' });
+    expect(store.isDirty).toBe(true);
+  });
+
   it('reset clears everything', () => {
     const store = useCanvasStore();
     store.addNode(makeNode('n1'));

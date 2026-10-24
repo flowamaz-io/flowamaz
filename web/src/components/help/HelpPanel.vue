@@ -36,18 +36,15 @@ async function backToBrowse(): Promise<void> {
   scroller.value?.scrollTo({ top: 0 });
 }
 
-// Contextual help (openForRoute / openArticle from elsewhere) opens straight on the article.
+// Every open request decides the view: contextual help (openForRoute / openArticle) opens
+// straight on its article; the generic Help button opens on search + the article list. The route
+// keeps `currentSlug` up to date in the background, which only highlights it in the list.
 watch(
-  () => help.isOpen.value,
-  (open) => {
-    if (open) browsing.value = false;
+  [() => help.isOpen.value, () => help.requestSeq.value],
+  ([open]) => {
+    if (open) browsing.value = help.view.value === 'browse';
   },
-);
-watch(
-  () => help.currentSlug.value,
-  () => {
-    browsing.value = false;
-  },
+  { immediate: true },
 );
 
 const supportMailto = computed(() => {

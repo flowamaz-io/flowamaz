@@ -277,7 +277,10 @@ onUnmounted(() => {
         </button>
 
         <button
+          type="button"
           class="text-xs bg-violet-900 hover:bg-violet-800 text-violet-300 rounded-lg px-3 py-1.5"
+          data-test="copilot-toggle"
+          :aria-expanded="copilotOpen"
           @click="copilotOpen = !copilotOpen"
         >
           ✦ Co-pilot <kbd class="ml-1 text-neutral-400">⌘K</kbd>
@@ -288,8 +291,11 @@ onUnmounted(() => {
           ref="validationBadgeRef"
           class="relative shrink-0"
         >
+          <!-- Fixed minimum width: the label changes when async validation lands ("Valid" →
+               "2 errors"); without it every toolbar button to the left shifted under the cursor
+               and a click aimed at Co-pilot could land beside it. -->
           <button
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            class="flex min-w-[8.5rem] items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
             :class="validationErrorCount > 0
               ? 'bg-red-100 text-red-700 hover:bg-red-200'
               : validationWarningCount > 0
@@ -392,6 +398,7 @@ onUnmounted(() => {
             :key="workflowId"
             :initial-yaml="yaml"
             :saving="saveState === 'saving'"
+            :is-dirty="isDirty"
             @yaml-change="yaml = $event"
             @save="save"
           />
