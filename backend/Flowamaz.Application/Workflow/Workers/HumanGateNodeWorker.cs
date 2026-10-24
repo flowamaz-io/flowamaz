@@ -20,7 +20,7 @@ namespace Flowamaz.Application.Workflow.Workers;
 /// </summary>
 public sealed class HumanGateNodeWorker : INodeWorker
 {
-    private const int DefaultTimeoutHours = 48;
+    private const int DefaultTimeoutHours = GateTimeoutActions.DefaultTimeoutHours;
 
     private readonly IGateDecisionRepository _gateRepo;
     private readonly IUnitOfWork _unitOfWork;

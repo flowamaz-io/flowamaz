@@ -54,6 +54,9 @@ public sealed class AuditService : IAuditService
             actorType = "api_key";
             actorLabel = string.IsNullOrWhiteSpace(actorLabel) ? apiKeyLabel : actorLabel;
         }
+        // UI actions recorded only the user id, so the log read "A user" with no name or email.
+        if (actorUserId is not null && string.IsNullOrWhiteSpace(actorLabel))
+            actorLabel = _requestContext.GetUserAuditLabel();
 
         var record = new AuditEvent
         {

@@ -1,3 +1,4 @@
+using Flowamaz.Core.Exceptions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -55,6 +56,7 @@ public sealed partial class ConversationImportService : IConversationImportServi
 
         var normalised = NormaliseConversation(conversationText, sourceType);
         var modelConfig = await _models.ResolveModelConfigAsync(AiFunctionIds.NlYaml, workspaceId, cancellationToken);
+        AiNotConfiguredException.ThrowIfNoKey(modelConfig, "Extracting a workflow from a conversation");
         var result = await _ai.CompleteAsync(modelConfig, ExtractionSystemPrompt, normalised, cancellationToken);
 
         _metering.RecordUsage(AiFunctionIds.NlYaml, modelConfig.ModelId, modelConfig.Provider,

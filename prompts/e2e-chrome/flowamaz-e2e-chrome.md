@@ -116,7 +116,8 @@ never enter card details and never complete a Stripe page.
    **Expect:** a dropdown showing Finance Ops with an **Admin** role badge.
 2. Click **"Create workspace"**. Enter "Workspace name" `HR Ops` and check the URL preview shows
    `flowamaz.io/hr-ops`. Click **"Create workspace"**.
-   **Expect:** the modal closes (no toast is expected).
+   **Expect:** the modal closes, the toast "Workspace created — switched to HR Ops." appears, and
+   the switcher now shows HR Ops.
 3. Open `/workspaces`. **Expect:** two cards, Finance Ops and HR Ops, each with a role badge, a
    workflow count and an **"Open"** button.
 4. Switch back to **Finance Ops** with the switcher. Do all the following journeys in Finance Ops.
@@ -133,7 +134,9 @@ never enter card details and never complete a Stripe page.
    rejection, Complete. The YAML is on the right and the minimap is at the bottom-right.
 4. **Minimap:** click the top-left corner of the minimap, then its centre.
    **Expect:** the main canvas view moves each time.
-5. **Grid snap:** click the toolbar button titled "Snap to grid: off".
+5. **Grid snap:** the setting is remembered in this browser, so the button may already read
+   "Snap to grid: on (20px)". If it does, click it once to turn it off first. Then click the button
+   titled "Snap to grid: off".
    **Expect:** its title changes to "Snap to grid: on (20px)". Drag any node a little and release.
    **Expect:** it settles onto the dot grid.
 6. **Box select:** hold Shift and drag a rectangle around "Create purchase order" and "Notify
@@ -485,6 +488,7 @@ The loan application doesn't exist yet. `samples/loan-app-mock` stands in for it
 ### Known, expected behaviour (don't log these as bugs)
 - No toast after saving in the editor or approving/rejecting a gate. The status text or row
   updates instead.
+- Inviting someone who is not yet an organisation member is not built yet (J15 records the message). Log it as a known gap, not a new bug.
 - Emails (password reset, gate notifications, invites) are not sent locally. The API log shows
   `NOT sent`.
 - A 401 in the console on `/register` or `/login` is the background session check.

@@ -55,6 +55,25 @@ public static class WorkflowTriggerReader
         return fromSpec ?? fromNode ?? new(WorkflowTriggerType.Manual, null, null);
     }
 
+    /// <summary>metadata.description (or legacy workflow.description), for the workflow overview.</summary>
+    public static string? ReadDescription(string? yaml)
+    {
+        if (string.IsNullOrWhiteSpace(yaml)) return null;
+        try
+        {
+            var stream = new YamlStream();
+            stream.Load(new StringReader(yaml));
+            if (stream.Documents.Count == 0 || stream.Documents[0].RootNode is not YamlMappingNode root) return null;
+            var meta = Map(root, "metadata") ?? Map(root, "workflow");
+            var text = meta is null ? null : Scalar(meta, "description")?.Trim();
+            return string.IsNullOrEmpty(text) ? null : (text.Length > 2000 ? text[..2000] : text);
+        }
+        catch (YamlDotNet.Core.YamlException)
+        {
+            return null;
+        }
+    }
+
     private static WorkflowTriggerType Parse(string? value) =>
         Enum.TryParse<WorkflowTriggerType>(value?.Replace("-", string.Empty).Replace("_", string.Empty), ignoreCase: true, out var t)
             ? t : WorkflowTriggerType.Manual;

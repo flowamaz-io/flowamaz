@@ -26,6 +26,7 @@ public sealed class SfgParser
     // Re-serialises a YAML config subtree to JSON so node config is exposed as a JsonDocument.
     private static readonly ISerializer YamlToJson = new SerializerBuilder()
         .JsonCompatible()
+        .DisableAliases()
         .Build();
 
     public Task<WorkflowGraph> ParseAsync(string yamlContent, CancellationToken cancellationToken = default)

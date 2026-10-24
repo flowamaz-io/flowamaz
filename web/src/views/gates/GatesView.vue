@@ -52,12 +52,13 @@ async function load(): Promise<void> {
   error.value = null;
 
   try {
-    allGates.value = await gateService.getPendingGates(currentWorkspaceId.value);
+    // "All" needs decided gates too; the default endpoint returns only the pending queue.
+    allGates.value = await gateService.getAllGates(currentWorkspaceId.value);
   } catch (err: unknown) {
     error.value =
       err instanceof Error
         ? err.message
-        : 'Failed to load pending gates. Check your network connection and try again.';
+        : 'Could not load approval gates. Check that the Flowamaz API is reachable, then select "Try again".';
   } finally {
     loading.value = false;
   }

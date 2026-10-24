@@ -32,6 +32,17 @@ public sealed class GateDecisionRepository(FlowAmazDbContext db) : IGateDecision
                 && (i.Status == InstanceStatus.Waiting || i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Pending)))
             .OrderBy(g => g.CreatedAt).ToListAsync(cancellationToken);
 
+    public Task<List<GateDecision>> GetRecentForWorkspaceAsync(Guid workspaceId, bool includeTest, int take, CancellationToken cancellationToken = default) =>
+        db.GateDecisions.AsNoTracking()
+            .Where(g => g.WorkspaceId == workspaceId)
+            .Where(g => db.WorkflowInstances.Any(i => i.Id == g.InstanceId && i.WorkspaceId == workspaceId
+                && (includeTest || !i.IsTest)
+                && (g.Decision != GateDecisionStatus.Pending
+                    || i.Status == InstanceStatus.Waiting || i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Pending)))
+            .OrderByDescending(g => g.CreatedAt)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
     public async Task<HashSet<Guid>> GetTestInstanceIdsAsync(
         Guid workspaceId, IReadOnlyCollection<Guid> instanceIds, CancellationToken cancellationToken = default)
     {

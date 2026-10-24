@@ -259,6 +259,7 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
         // A hardcoded "simple workflows use Haiku" swap used to override it silently (and broke CLAUDE.md
         // rule 4). To use a cheaper model for F2, set it in Settings → Workspace → AI model configuration.
         var modelConfig = await _models.ResolveModelConfigAsync(AiFunctionIds.NlYaml, workspaceId, cancellationToken);
+        AiNotConfiguredException.ThrowIfNoKey(modelConfig, "Generating a workflow from plain English");
         var complexity = ComplexityScore(request);
 
         // FIX 6: Cap output tokens based on estimated workflow size (nodes * 200, max 4096)

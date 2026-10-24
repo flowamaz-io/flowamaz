@@ -461,7 +461,7 @@ public sealed class WorkflowCreationController : ControllerBase
         "Nothing was saved. Try once more; if it fails again, start from the canvas instead and contact support@flowamaz.io " +
         "with the time of the request.";
 
-    private static readonly ISerializer YamlWriter = new SerializerBuilder().Build();
+    private static readonly ISerializer YamlWriter = new SerializerBuilder().DisableAliases().Build();
 
     /// <summary>Empty canvas definition, serialised via YamlDotNet (CLAUDE.md rule 5) so the
     /// user-supplied name can never break or inject into the YAML document.</summary>
@@ -475,8 +475,8 @@ public sealed class WorkflowCreationController : ControllerBase
             ["spec"] = new Dictionary<string, object>
             {
                 ["trigger"] = new Dictionary<string, object> { ["type"] = "manual" },
-                ["nodes"] = Array.Empty<object>(),
-                ["edges"] = Array.Empty<object>(),
+                ["nodes"] = new List<object>(),
+                ["edges"] = new List<object>(),
             },
         };
         return YamlWriter.Serialize(doc);

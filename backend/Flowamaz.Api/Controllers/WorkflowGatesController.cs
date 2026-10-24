@@ -32,9 +32,16 @@ public sealed class WorkflowGatesController : ControllerBase
 
     [HttpGet]
     [RequireWorkspaceRole(WorkspaceRole.Operator)]
+    /// <summary>
+    /// Approval gates. <c>status=pending</c> (default): the actionable queue. <c>status=all</c>: decided
+    /// gates too (newest first, up to 200) for the Gates "All" tab.
+    /// </summary>
     public async Task<ActionResult<IReadOnlyList<GateResponse>>> ListPending(
-        Guid workspaceId, [FromQuery] bool includeTest = false, CancellationToken cancellationToken = default) =>
-        Ok(await _gates.ListPendingAsync(workspaceId, includeTest, cancellationToken));
+        Guid workspaceId, [FromQuery] bool includeTest = false, [FromQuery] string? status = null,
+        CancellationToken cancellationToken = default) =>
+        string.Equals(status, "all", StringComparison.OrdinalIgnoreCase)
+            ? Ok(await _gates.ListRecentAsync(workspaceId, includeTest, cancellationToken))
+            : Ok(await _gates.ListPendingAsync(workspaceId, includeTest, cancellationToken));
 
     [HttpGet("{instanceId:guid}/{nodeId}")]
     [RequireWorkspaceRole(WorkspaceRole.Operator)]

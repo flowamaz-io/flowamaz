@@ -1,3 +1,4 @@
+using Flowamaz.Core.Exceptions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -50,7 +51,7 @@ public sealed class VisualInputService : IVisualInputService
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
-    private static readonly ISerializer YamlWriter = new SerializerBuilder().Build();
+    private static readonly ISerializer YamlWriter = new SerializerBuilder().DisableAliases().Build();
     private static readonly Regex InvalidIdChars = new("[^a-z0-9-]+", RegexOptions.Compiled);
 
     private const string SystemPrompt = """
@@ -123,6 +124,7 @@ public sealed class VisualInputService : IVisualInputService
         {
             var imageBase64 = Convert.ToBase64String(imageBytes);
             var modelConfig = await _models.ResolveModelConfigAsync(AiFunctionIds.VisualInput, workspaceId, cancellationToken);
+            AiNotConfiguredException.ThrowIfNoKey(modelConfig, "Reading a diagram or whiteboard photo");
 
             var result = await _ai.CompleteWithImageAsync(
                 modelConfig, SystemPrompt, imageBase64, mimeType,

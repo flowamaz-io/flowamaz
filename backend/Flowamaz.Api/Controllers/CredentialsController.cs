@@ -107,6 +107,8 @@ public sealed class CredentialsController : ControllerBase
     public async Task<IActionResult> Revoke(Guid workspaceId, Guid credentialId, CancellationToken ct)
     {
         _log.LogInformation("CredentialsController.Revoke entry workspace={WorkspaceId} credential={CredentialId}", workspaceId, credentialId);
+        // Name (alias only — never the value) so the audit row says which credential was revoked.
+        var alias = (await _vault.ListAsync(workspaceId, ct)).FirstOrDefault(c => c.Id == credentialId)?.Name;
         try
         {
             await _vault.RevokeAsync(workspaceId, credentialId, ct);
@@ -124,6 +126,7 @@ public sealed class CredentialsController : ControllerBase
             EventType = "credential.revoked",
             ResourceType = "credential",
             ResourceId = credentialId,
+            ResourceLabel = alias,
             Action = "revoked",
         }, ct);
 

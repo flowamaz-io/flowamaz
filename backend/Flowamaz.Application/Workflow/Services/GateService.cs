@@ -64,6 +64,27 @@ public sealed class GateService
         }
     }
 
+    /// <summary>Gates for the "All" tab: decided ones plus actionable pending ones, newest first (max 200).</summary>
+    public async Task<List<GateResponse>> ListRecentAsync(Guid workspaceId, bool includeTest = false, CancellationToken ct = default)
+    {
+        _logger.LogDebug("GateService.ListRecentAsync entry workspace={WorkspaceId} includeTest={IncludeTest}", workspaceId, includeTest);
+        try
+        {
+            var gates = await _gates.GetRecentForWorkspaceAsync(workspaceId, includeTest, 200, ct);
+            var testIds = includeTest && gates.Count > 0
+                ? await _gates.GetTestInstanceIdsAsync(workspaceId, gates.Select(g => g.InstanceId).Distinct().ToList(), ct) ?? []
+                : [];
+            var result = gates.Select(g => ToResponse(g) with { IsTest = testIds.Contains(g.InstanceId) }).ToList();
+            _logger.LogDebug("GateService.ListRecentAsync exit workspace={WorkspaceId} count={Count}", workspaceId, result.Count);
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "GateService.ListRecentAsync error workspace={WorkspaceId}", workspaceId);
+            throw;
+        }
+    }
+
     public async Task<GateResponse?> GetAsync(Guid workspaceId, Guid instanceId, string nodeId, CancellationToken ct = default)
     {
         var gate = await _gates.GetByNodeAsync(instanceId, nodeId, ct);

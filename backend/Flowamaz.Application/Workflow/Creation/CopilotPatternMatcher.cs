@@ -372,7 +372,7 @@ public sealed partial class CopilotPatternMatcher : ICopilotPatternMatcher
     private const int MaxGateTimeoutHours = 24 * 365;
 
     private static readonly IDeserializer PatchYamlReader = new DeserializerBuilder().Build();
-    private static readonly ISerializer PatchYamlWriter = new SerializerBuilder().Build();
+    private static readonly ISerializer PatchYamlWriter = new SerializerBuilder().DisableAliases().Build();
 
     /// <summary>
     /// Builds a "modify existing node" patch (spec.nodes[] with the COMPLETE node, matched by id — the

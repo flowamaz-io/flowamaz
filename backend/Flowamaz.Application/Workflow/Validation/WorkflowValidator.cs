@@ -169,7 +169,7 @@ public sealed class WorkflowValidator : IWorkflowValidator
                 .Deserialize(yaml);
 
             if (obj == null) return null;
-            return new SerializerBuilder().JsonCompatible().Build().Serialize(obj);
+            return new SerializerBuilder().JsonCompatible().DisableAliases().Build().Serialize(obj);
         }
         catch
         {
@@ -301,7 +301,8 @@ public sealed class WorkflowValidator : IWorkflowValidator
             if (gate.Timeout == null && (gate.Config == null
                 || !(gate.Config.ContainsKey("timeout") || gate.Config.ContainsKey("timeout_hours") || gate.Config.ContainsKey("timeoutHours") || gate.Config.ContainsKey("timeoutValue"))))
                 warnings.Add(new ValidationIssue(6, "BPR-001",
-                    $"Human gate '{gate.Id}' has no timeout. Without a timeout the gate waits forever and may block the workflow.",
+                    $"Human gate '{gate.Id}' sets no timeout, so it uses the default of {Flowamaz.Core.Entities.Workflow.GateTimeoutActions.DefaultTimeoutHours} hours " +
+                    "and the run fails if nobody decides by then. Set timeout_hours (and on_timeout: escalate, auto-approve or auto-reject) to choose the deadline and what happens.",
                     gate.Id, null, null));
         }
 

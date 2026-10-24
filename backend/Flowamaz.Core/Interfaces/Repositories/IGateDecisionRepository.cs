@@ -27,6 +27,12 @@ public interface IGateDecisionRepository
     Task<List<GateDecision>> GetPendingForWorkspaceAsync(Guid workspaceId, bool includeTest = false, CancellationToken cancellationToken = default);
 
     /// <summary>Which of <paramref name="instanceIds"/> (in this workspace) are test runs.</summary>
+    /// <summary>
+    /// Recent gates for the Gates "All" tab: every decided gate plus pending gates whose run is still
+    /// active (an ended run's open approval is not actionable). Newest first, capped at <paramref name="take"/>.
+    /// </summary>
+    Task<List<GateDecision>> GetRecentForWorkspaceAsync(Guid workspaceId, bool includeTest, int take, CancellationToken cancellationToken = default);
+
     Task<HashSet<Guid>> GetTestInstanceIdsAsync(Guid workspaceId, IReadOnlyCollection<Guid> instanceIds, CancellationToken cancellationToken = default);
 
     /// <summary>Pending gates whose <c>ExpiresAt</c> is at or before <paramref name="asOf"/> (timer scanner).</summary>

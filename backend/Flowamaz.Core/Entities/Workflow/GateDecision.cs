@@ -38,6 +38,9 @@ public class GateDecision : WorkspaceEntity
 /// <summary>Allowed values for <see cref="GateDecision.OnTimeout"/>.</summary>
 public static class GateTimeoutActions
 {
+    /// <summary>Deadline applied when a gate sets no timeout (engine and validator share it).</summary>
+    public const int DefaultTimeoutHours = 48;
+
     public const string Fail = "fail";
     public const string Escalate = "escalate";
     public const string AutoApprove = "auto-approve";

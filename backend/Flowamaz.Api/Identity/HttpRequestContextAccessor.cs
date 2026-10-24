@@ -30,6 +30,15 @@ public sealed class HttpRequestContextAccessor(IHttpContextAccessor accessor) : 
             ? ctx.ApiKeyAuditLabel ?? "API key"
             : null;
 
+    public string? GetUserAuditLabel()
+    {
+        if (accessor.HttpContext?.Items[Core.Models.CurrentUserContext.HttpContextItemKey] is not Core.Models.CurrentUserContext { IsApiKey: false } ctx)
+            return null;
+        var name = string.IsNullOrWhiteSpace(ctx.Name) ? null : ctx.Name.Trim();
+        var email = string.IsNullOrWhiteSpace(ctx.Email) ? null : ctx.Email.Trim();
+        return name is not null && email is not null ? $"{name} ({email})" : name ?? email;
+    }
+
     public string? GetUserAgent()
     {
         var context = accessor.HttpContext;

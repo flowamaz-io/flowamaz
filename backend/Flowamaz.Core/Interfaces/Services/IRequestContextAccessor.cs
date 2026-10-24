@@ -17,4 +17,7 @@ public interface IRequestContextAccessor
     /// (name + display prefix). Null for human (JWT) callers and outside a request.
     /// </summary>
     string? GetApiKeyAuditLabel() => null;
+
+    /// <summary>"Name (email)" of the signed-in user for audit rows, or null outside a user request.</summary>
+    string? GetUserAuditLabel() => null;
 }
