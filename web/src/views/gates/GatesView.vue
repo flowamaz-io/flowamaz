@@ -373,6 +373,10 @@ onMounted(load);
               >
                 <Clock class="h-3.5 w-3.5" />
                 {{ gate.decidedAt ? formatDate(gate.decidedAt) : gate.decision }}
+                <span
+                  v-if="gate.decidedByLabel"
+                  class="text-slate-500"
+                >· by {{ gate.decidedByLabel }}</span>
               </div>
             </td>
           </tr>

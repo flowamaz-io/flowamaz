@@ -14,6 +14,14 @@ public class GateDecision : WorkspaceEntity
     public string? AssignedToEmail { get; set; }
     public GateDecisionStatus Decision { get; set; } = GateDecisionStatus.Pending;
     public Guid? DecidedBy { get; set; }
+
+    /// <summary>
+    /// Who decided, as named by the external application that called the public API
+    /// (<c>decided_by</c>), e.g. "Aisha Rahman (Branch Manager)". Null for decisions made by a
+    /// Flowamaz user (see <see cref="DecidedBy"/>) or by a timeout.
+    /// </summary>
+    public string? DecidedByLabel { get; set; }
+
     public DateTime? DecidedAt { get; set; }
     public string? DecisionNote { get; set; }
     public GateDeliveryChannel DeliveryChannel { get; set; } = GateDeliveryChannel.Portal;
@@ -33,6 +41,13 @@ public class GateDecision : WorkspaceEntity
 
     /// <summary>Times this gate has been escalated (escalation happens at most once).</summary>
     public int EscalationCount { get; set; }
+}
+
+/// <summary>Field limits for <see cref="GateDecision"/> shared by the EF mapping and request validators.</summary>
+public static class GateDecisionLimits
+{
+    public const int DecidedByMaxLength = 200;
+    public const int NoteMaxLength = 2000;
 }
 
 /// <summary>Allowed values for <see cref="GateDecision.OnTimeout"/>.</summary>

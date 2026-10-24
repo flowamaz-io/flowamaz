@@ -118,6 +118,70 @@ public class AuditServiceTests
     }
 
     [Fact]
+    public async Task RecordAsync_keeps_a_caller_named_actor_and_adds_the_api_key()
+    {
+        // Public-API gate decision with decided_by: the person's name, then the key that sent it.
+        var root = new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot();
+        var services = new ServiceCollection();
+        services.AddDbContext<FlowAmazDbContext>(o => o.UseInMemoryDatabase("api-key-named-actor", root));
+        var sp = services.BuildServiceProvider();
+        var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+        const string keyLabel = "API key \"Loan app\" (fmz_live_loans_…)";
+        var service = new AuditService(scopeFactory, new FakeRequestContext("203.0.113.7", "curl", keyLabel), NullLogger<AuditService>.Instance);
+
+        var orgId = Guid.NewGuid();
+        service.RecordAsync(new AuditEventRequest
+        {
+            OrgId = orgId,
+            ActorType = "system",
+            ActorLabel = "Aisha Rahman (Branch Manager)",
+            EventType = "gate.approved",
+            ResourceType = "gate",
+            Action = "approved",
+        });
+
+        await Task.Delay(1500);
+
+        using var verifyScope = scopeFactory.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+        var stored = await verifyDb.AuditEvents.AsNoTracking().SingleAsync(e => e.OrgId == orgId);
+        stored.ActorType.Should().Be("api_key");
+        stored.ActorLabel.Should().Be($"Aisha Rahman (Branch Manager) via {keyLabel}");
+        GC.KeepAlive(root);
+    }
+
+    [Fact]
+    public async Task RecordAsync_truncates_an_actor_label_longer_than_the_column()
+    {
+        var root = new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot();
+        var services = new ServiceCollection();
+        services.AddDbContext<FlowAmazDbContext>(o => o.UseInMemoryDatabase("long-actor-label", root));
+        var sp = services.BuildServiceProvider();
+        var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+        var service = new AuditService(scopeFactory, new FakeRequestContext(null, null, new string('k', 120)), NullLogger<AuditService>.Instance);
+
+        var orgId = Guid.NewGuid();
+        service.RecordAsync(new AuditEventRequest
+        {
+            OrgId = orgId,
+            ActorType = "system",
+            ActorLabel = new string('n', 200),
+            EventType = "gate.rejected",
+            ResourceType = "gate",
+            Action = "rejected",
+        });
+
+        await Task.Delay(1500);
+
+        using var verifyScope = scopeFactory.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+        var stored = await verifyDb.AuditEvents.AsNoTracking().SingleAsync(e => e.OrgId == orgId);
+        stored.ActorLabel!.Length.Should().Be(256);
+        stored.ActorLabel.Should().EndWith("…");
+        GC.KeepAlive(root);
+    }
+
+    [Fact]
     public void ApiKey_audit_label_uses_name_and_display_prefix_only()
     {
         var result = new WorkspaceApiKeyValidationResult(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), [], "Loan app", "fmz_live_loans_");

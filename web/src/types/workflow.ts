@@ -216,6 +216,8 @@ export interface GateResponse {
   createdAt: string;
   decidedAt: string | null;
   decisionNote: string | null;
+  /** Who decided, as named by an external application through the public API (`decided_by`). */
+  decidedByLabel?: string | null;
   /** Optional display label of the gate node (not sent by every API version). */
   gateLabel?: string | null;
   label?: string | null;

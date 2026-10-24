@@ -1,4 +1,7 @@
+using System.Text.Json;
 using FluentAssertions;
+using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Models;
 using Flowamaz.Application.Workflow.Services;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
@@ -122,5 +125,93 @@ public class GateServiceTests
         gate.Decision.Should().Be(GateDecisionStatus.Rejected);
         // A rejection is a decision, not a transient failure — never retried.
         _orchestrator.Verify(o => o.FailNodeAsync(_instanceId, Node, It.Is<string>(s => s.Contains("budget exceeded")), "gate", It.IsAny<CancellationToken>(), false), Times.Once);
+    }
+
+    // ── decided_by (public API names the person who decided) ─────────────────────────────
+
+    [Fact]
+    public async Task DecideAsync_with_decided_by_stores_it_and_returns_it()
+    {
+        var gate = Gate();
+        _gates.Setup(r => r.GetByNodeAsync(_instanceId, Node, It.IsAny<CancellationToken>())).ReturnsAsync(gate);
+
+        var result = await NewService().DecideAsync(
+            _ws, _instanceId, Node, "approved", null, Guid.Empty, decidedByLabel: "  Aisha Rahman (Branch Manager)  ");
+
+        gate.DecidedBy.Should().BeNull();
+        gate.DecidedByLabel.Should().Be("Aisha Rahman (Branch Manager)");
+        result!.DecidedByLabel.Should().Be("Aisha Rahman (Branch Manager)");
+    }
+
+    [Fact]
+    public async Task DecideAsync_with_decided_by_puts_it_on_the_event_as_valid_json()
+    {
+        var gate = Gate();
+        _gates.Setup(r => r.GetByNodeAsync(_instanceId, Node, It.IsAny<CancellationToken>())).ReturnsAsync(gate);
+        WorkflowEvent? appended = null;
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowEvent, CancellationToken>((e, _) => appended = e).Returns(Task.CompletedTask);
+
+        // Quotes and braces in caller text must not break (or inject into) the event payload.
+        await NewService().DecideAsync(_ws, _instanceId, Node, "rejected", null, Guid.Empty,
+            decidedByLabel: "Lee \"LJ\" {Credit}");
+
+        using var doc = JsonDocument.Parse(appended!.Payload!);
+        doc.RootElement.GetProperty("decision").GetString().Should().Be("Rejected");
+        doc.RootElement.GetProperty("decided_by").GetString().Should().Be("Lee \"LJ\" {Credit}");
+    }
+
+    [Fact]
+    public async Task DecideAsync_without_decided_by_keeps_the_event_payload_unchanged()
+    {
+        var gate = Gate();
+        _gates.Setup(r => r.GetByNodeAsync(_instanceId, Node, It.IsAny<CancellationToken>())).ReturnsAsync(gate);
+        WorkflowEvent? appended = null;
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowEvent, CancellationToken>((e, _) => appended = e).Returns(Task.CompletedTask);
+
+        await NewService().DecideAsync(_ws, _instanceId, Node, "approved", null, Guid.NewGuid(), decidedByLabel: "   ");
+
+        appended!.Payload.Should().Be("""{"decision":"Approved"}""");
+        gate.DecidedByLabel.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DecideAsync_with_decided_by_names_the_person_in_the_audit_row()
+    {
+        var gate = Gate();
+        _gates.Setup(r => r.GetByNodeAsync(_instanceId, Node, It.IsAny<CancellationToken>())).ReturnsAsync(gate);
+        var audit = new Mock<IAuditService>();
+        AuditEventRequest? recorded = null;
+        audit.Setup(a => a.RecordAsync(It.IsAny<AuditEventRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<AuditEventRequest, CancellationToken>((r, _) => recorded = r);
+        var service = new GateService(
+            _gates.Object, _events.Object, _orchestrator.Object, _unitOfWork.Object, NullLogger<GateService>.Instance, audit.Object);
+
+        await service.DecideAsync(_ws, _instanceId, Node, "approved", null, Guid.Empty, decidedByLabel: "Aisha Rahman");
+
+        recorded!.ActorUserId.Should().BeNull();
+        recorded.ActorLabel.Should().Be("Aisha Rahman");
+        recorded.EventType.Should().Be("gate.approved");
+    }
+
+    [Fact]
+    public async Task DecideAsync_by_a_flowamaz_user_ignores_decided_by_in_the_audit_row()
+    {
+        // A signed-in user is named by AuditService from their account; caller text must not override it.
+        var gate = Gate();
+        _gates.Setup(r => r.GetByNodeAsync(_instanceId, Node, It.IsAny<CancellationToken>())).ReturnsAsync(gate);
+        var audit = new Mock<IAuditService>();
+        AuditEventRequest? recorded = null;
+        audit.Setup(a => a.RecordAsync(It.IsAny<AuditEventRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<AuditEventRequest, CancellationToken>((r, _) => recorded = r);
+        var service = new GateService(
+            _gates.Object, _events.Object, _orchestrator.Object, _unitOfWork.Object, NullLogger<GateService>.Instance, audit.Object);
+        var userId = Guid.NewGuid();
+
+        await service.DecideAsync(_ws, _instanceId, Node, "approved", null, userId, decidedByLabel: "Someone else");
+
+        recorded!.ActorUserId.Should().Be(userId);
+        recorded.ActorLabel.Should().BeNull();
     }
 }

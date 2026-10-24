@@ -37,7 +37,7 @@ with the scopes **workflows:read, workflows:trigger, instances:read, instances:w
 | Find the workflow | `GET /api/public/v1/workflows` → the `slug` of "Loan Approval" |
 | Customer submits the form | `POST /api/public/v1/workflows/{slug}/trigger` with the form JSON as the body (`X-Idempotency-Key: <application id>` prevents double submits) → `instance_id` |
 | Show the reviewer or approver their queue | `GET /api/public/v1/gates/pending` → each item has `id`, `instance_id`, `node_id` (`credit-review`, `l1-approval`, `l2-approval`, `l3-approval`, `lo-acceptance`) |
-| Reviewer, approver or customer decides | `POST /api/public/v1/gates/{id}/decide` with `{ "decision": "approved" \| "rejected", "note": "…" }` |
+| Reviewer, approver or customer decides | `POST /api/public/v1/gates/{id}/decide` with `{ "decision": "approved" \| "rejected", "note": "…", "decided_by": "Aisha Rahman (Branch Manager)" }`. `decided_by` is optional (max 200 characters, one line): Flowamaz stores it on the gate (`decided_by_label`) and the audit log shows "Aisha Rahman (Branch Manager) via API key …". Any other `decision` value is a 400 `validation_error`. |
 | Track progress | `GET /api/public/v1/instances/{id}` (status) and `GET /api/public/v1/instances/{id}/events` (Server-Sent Events: the steps taken) |
 | Withdraw an application | `POST /api/public/v1/instances/{id}/cancel` |
 

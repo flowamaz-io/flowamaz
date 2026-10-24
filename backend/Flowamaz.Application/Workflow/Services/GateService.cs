@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flowamaz.Application.Workflow.DTOs;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
@@ -106,8 +107,15 @@ public sealed class GateService
         return new GateInfoDto(gate.Id, gate.WorkspaceId, gate.InstanceId, gate.NodeId, gate.ExpiresAt);
     }
 
+    /// <summary>
+    /// Records an approve/reject decision and resumes the run. <paramref name="decidedBy"/> is the Flowamaz
+    /// user, or <see cref="Guid.Empty"/> for public-API and signed-link decisions. <paramref name="decidedByLabel"/>
+    /// is the decider as named by an external application through the public API (<c>decided_by</c>); it is
+    /// stored on the gate, carried on the GateDecided event and shown in the audit log next to the API key.
+    /// </summary>
     public async Task<GateResponse?> DecideAsync(
-        Guid workspaceId, Guid instanceId, string nodeId, string decision, string? note, Guid decidedBy, CancellationToken ct = default)
+        Guid workspaceId, Guid instanceId, string nodeId, string decision, string? note, Guid decidedBy,
+        CancellationToken ct = default, string? decidedByLabel = null)
     {
         _logger.LogInformation(
             "GateService.DecideAsync enter workspace={WorkspaceId} instance={InstanceId} node={NodeId} decision={Decision}",
@@ -123,6 +131,7 @@ public sealed class GateService
         // Public-API decisions pass Guid.Empty (no human); the audit row is attributed to the API key (O4).
         Guid? decider = decidedBy == Guid.Empty ? null : decidedBy;
         gate.DecidedBy = decider;
+        gate.DecidedByLabel = string.IsNullOrWhiteSpace(decidedByLabel) ? null : decidedByLabel.Trim();
         gate.DecidedAt = DateTime.UtcNow;
         gate.DecisionNote = note;
         _gates.Update(gate);
@@ -136,7 +145,10 @@ public sealed class GateService
             EventType = "GateDecided",
             NodeId = nodeId,
             NodeType = nameof(NodeType.HumanGate),
-            Payload = $$"""{"decision":"{{gate.Decision}}"}""",
+            // Serialized (not interpolated): decided_by is caller-supplied text.
+            Payload = JsonSerializer.Serialize(gate.DecidedByLabel is null
+                ? new Dictionary<string, string> { ["decision"] = gate.Decision.ToString() }
+                : new Dictionary<string, string> { ["decision"] = gate.Decision.ToString(), ["decided_by"] = gate.DecidedByLabel }),
             OccurredAt = DateTime.UtcNow,
         }, ct);
         await _unitOfWork.SaveChangesAsync(ct);
@@ -161,12 +173,16 @@ public sealed class GateService
             WorkspaceId = workspaceId,
             ActorUserId = decider,
             ActorType = decider.HasValue ? "user" : "system",
+            // Named decider from the calling application; AuditService adds the API key ("… via API key …").
+            ActorLabel = decider.HasValue ? null : gate.DecidedByLabel,
             EventType = approved ? "gate.approved" : "gate.rejected",
             ResourceType = "gate",
             ResourceId = gate.Id,
             ResourceLabel = nodeId,
             Action = approved ? "approved" : "rejected",
-            Metadata = new { instanceId, nodeId },
+            Metadata = gate.DecidedByLabel is null
+                ? new { instanceId, nodeId }
+                : (object)new { instanceId, nodeId, decidedBy = gate.DecidedByLabel },
         }, ct);
 
         _logger.LogInformation("GateService.DecideAsync exit instance={InstanceId} node={NodeId} approved={Approved}", instanceId, nodeId, approved);
@@ -175,5 +191,6 @@ public sealed class GateService
 
     private static GateResponse ToResponse(GateDecision g) => new(
         g.Id, g.InstanceId, g.NodeId, g.Decision.ToString(), g.AssignedToEmail,
-        g.DeliveryChannel.ToString(), g.DeliveryStatus.ToString(), g.ExpiresAt, g.CreatedAt, g.DecidedAt, g.DecisionNote);
+        g.DeliveryChannel.ToString(), g.DeliveryStatus.ToString(), g.ExpiresAt, g.CreatedAt, g.DecidedAt, g.DecisionNote,
+        DecidedByLabel: g.DecidedByLabel);
 }

@@ -3163,6 +3163,11 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("decided_by");
 
+                    b.Property<string>("DecidedByLabel")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("decided_by_label");
+
                     b.Property<string>("Decision")
                         .IsRequired()
                         .HasMaxLength(32)

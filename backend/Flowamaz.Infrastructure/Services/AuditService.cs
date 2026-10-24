@@ -34,6 +34,8 @@ public sealed class AuditService : IAuditService
         _logger = logger;
     }
 
+    private const int ActorLabelMaxLength = 256;
+
     public void RecordAsync(AuditEventRequest request, CancellationToken ct = default)
     {
         _logger.LogDebug(
@@ -52,7 +54,8 @@ public sealed class AuditService : IAuditService
         if (actorUserId is null && _requestContext.GetApiKeyAuditLabel() is { } apiKeyLabel)
         {
             actorType = "api_key";
-            actorLabel = string.IsNullOrWhiteSpace(actorLabel) ? apiKeyLabel : actorLabel;
+            // A caller-named actor (e.g. a public-API gate decision with decided_by) keeps the key next to the name.
+            actorLabel = string.IsNullOrWhiteSpace(actorLabel) ? apiKeyLabel : $"{actorLabel} via {apiKeyLabel}";
         }
         // Some services record a user action without passing the user (API key revoked, webhook created), so
         // the row read "— user · A user". Take the signed-in caller from the request in that case.
@@ -61,6 +64,10 @@ public sealed class AuditService : IAuditService
         // UI actions recorded only the user id, so the log read "A user" with no name or email.
         if (actorUserId is not null && string.IsNullOrWhiteSpace(actorLabel))
             actorLabel = _requestContext.GetUserAuditLabel();
+        // audit_events.actor_label is varchar(256); a long caller-named actor plus the key name must not
+        // make the insert fail (it runs fire-and-forget, so the row would be silently lost).
+        if (actorLabel is { Length: > ActorLabelMaxLength })
+            actorLabel = actorLabel[..(ActorLabelMaxLength - 1)] + "…";
 
         var record = new AuditEvent
         {
