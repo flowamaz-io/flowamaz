@@ -10,6 +10,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Flowamaz.Tests.Unit" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Flowamaz.Core\Flowamaz.Core.csproj" />
     <ProjectReference Include="..\Flowamaz.Application\Flowamaz.Application.csproj" />
     <ProjectReference Include="..\Flowamaz.Infrastructure\Flowamaz.Infrastructure.csproj" />

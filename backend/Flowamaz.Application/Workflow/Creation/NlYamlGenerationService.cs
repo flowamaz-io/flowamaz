@@ -63,7 +63,9 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
             delivery_channel: Portal
             gate_label: "<what the approver is asked>"
             timeout_hours: <whole number>
-            on_timeout: <fail|escalate|auto-approve|auto-reject>
+            on_timeout: <fail|auto-approve|auto-reject|escalate>
+          Use on_timeout: escalate ONLY when the description names who to escalate to, and then also set
+          escalate_to: <their email>. Otherwise use fail (or auto-reject when a missed deadline means no).
         - router: a decision. Two kinds:
             a) After a human-gate, a router with NO config whose outgoing edges use via: approved and via: rejected.
             b) A rule on data: config.branches lists one entry per exit:
@@ -114,7 +116,7 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
                 delivery_channel: Portal
                 gate_label: "Approve purchase of {{ item }} for {{ amount }}"
                 timeout_hours: 48
-                on_timeout: escalate
+                on_timeout: auto-reject
             - id: manager-decision
               type: router
               label: "Manager approved?"
@@ -205,6 +207,7 @@ public sealed class NlYamlGenerationService : INlYamlGenerationService
                 gate_label: "Confirm {{ employee_name }} completed orientation"
                 timeout_hours: 120
                 on_timeout: escalate
+                escalate_to: hr-manager@example.com
             - id: onboarding-complete
               type: end
               label: "Onboarding complete"

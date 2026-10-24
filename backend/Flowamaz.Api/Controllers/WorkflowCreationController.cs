@@ -85,13 +85,16 @@ public sealed class WorkflowCreationController : ControllerBase
     {
         _log.LogInformation("WorkflowCreationController.CreateWorkflow entry workspaceId={WorkspaceId} method={Method}", workspaceId, request.Method);
 
-        if (string.IsNullOrWhiteSpace(request.Name))
+        // Generated workflows may leave the name to the AI: run 4 showed conversation and photo workflows
+        // saved as "Untitled Workflow" although the AI had named them. Canvas still needs a name.
+        var givenName = IsPlaceholderName(request.Name) ? null : request.Name.Trim();
+        if (givenName is null && request.Method == "canvas")
             return BadRequest(new { error = "Provide a workflow name to continue." });
 
         if (!ValidMethods.Contains(request.Method))
             return BadRequest(new { error = $"Unknown method '{request.Method}'. Use: nl, voice, visual, conversation, document, or canvas." });
 
-        var slug = UniqueSlug(request.Name);
+        var slug = UniqueSlug(givenName ?? "untitled");
         string yamlContent;
         ValidationResult? validationResult = null;
         int tokensUsed = 0;
@@ -124,7 +127,7 @@ public sealed class WorkflowCreationController : ControllerBase
                     if (request.VisualGraph is not null)
                     {
                         await _graphValidator.ValidateAndThrowAsync(request.VisualGraph, cancellationToken);
-                        yamlContent = _visualInput.BuildYamlFromConfirmedGraph(request.VisualGraph, slug, request.Name);
+                        yamlContent = _visualInput.BuildYamlFromConfirmedGraph(request.VisualGraph, slug, givenName ?? "Visual Workflow");
                         break;
                     }
 
@@ -188,7 +191,7 @@ public sealed class WorkflowCreationController : ControllerBase
                 }
 
                 default: // "canvas"
-                    yamlContent = BuildCanvasSkeleton(slug, request.Name);
+                    yamlContent = BuildCanvasSkeleton(slug, givenName!);
                     break;
             }
         }
@@ -228,6 +231,15 @@ public sealed class WorkflowCreationController : ControllerBase
             }
         }
 
+        var name = givenName ?? NameFromYaml(yamlContent) ?? method switch
+        {
+            "visual" => "Workflow from photo",
+            "conversation" => "Workflow from conversation",
+            "document" => "Workflow from document",
+            _ => "Generated workflow",
+        };
+        if (givenName is null) slug = UniqueSlug(name);
+
         var createdByMethod = method switch
         {
             "nl" => WorkflowCreatedByMethod.NaturalLanguage,
@@ -241,7 +253,7 @@ public sealed class WorkflowCreationController : ControllerBase
         try
         {
             var definition = await _workflows.CreateAsync(workspaceId, _currentUser.UserId!.Value,
-                new CreateWorkflowDefinitionRequest(request.Name, slug, yamlContent, null, createdByMethod),
+                new CreateWorkflowDefinitionRequest(name, slug, yamlContent, null, createdByMethod),
                 cancellationToken);
 
             _log.LogInformation("WorkflowCreationController.CreateWorkflow exit workflowId={WorkflowId} method={Method} tokens={Tokens}", definition.Id, method, tokensUsed);
@@ -249,7 +261,7 @@ public sealed class WorkflowCreationController : ControllerBase
         }
         catch (WorkflowSlugExistsException)
         {
-            return Conflict(new { error = $"A workflow named '{request.Name}' already exists in this workspace. Choose a different name." });
+            return Conflict(new { error = $"A workflow named '{name}' already exists in this workspace. Choose a different name." });
         }
     }
 
@@ -483,6 +495,33 @@ public sealed class WorkflowCreationController : ControllerBase
             },
         };
         return YamlWriter.Serialize(doc);
+    }
+
+    private static readonly HashSet<string> GenericNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Untitled Workflow", "Untitled", "Visual Workflow", "Imported Workflow", "Workflow",
+    };
+
+    internal static bool IsPlaceholderName(string? name) => string.IsNullOrWhiteSpace(name) || GenericNames.Contains(name.Trim());
+
+    /// <summary>metadata.name from generated YAML, unless it is empty or a generic placeholder.</summary>
+    internal static string? NameFromYaml(string? yaml)
+    {
+        if (string.IsNullOrWhiteSpace(yaml)) return null;
+        try
+        {
+            var doc = new DeserializerBuilder().Build().Deserialize<Dictionary<object, object?>>(yaml);
+            var name = doc?.GetValueOrDefault("metadata") is Dictionary<object, object?> metadata
+                ? metadata.GetValueOrDefault("name") as string
+                : null;
+            if (IsPlaceholderName(name)) return null;
+            var trimmed = name!.Trim();
+            return trimmed.Length > 120 ? trimmed[..120] : trimmed;
+        }
+        catch (YamlDotNet.Core.YamlException)
+        {
+            return null;
+        }
     }
 
     private static string UniqueSlug(string name)

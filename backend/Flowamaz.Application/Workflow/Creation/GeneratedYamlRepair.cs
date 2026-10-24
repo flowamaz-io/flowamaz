@@ -135,6 +135,12 @@ internal static class GeneratedYamlRepair
             node["config"] = config;
         }
         if (node.TryGetValue("config", out var cfg) && cfg is not Dictionary<object, object?>) node["config"] = new Dictionary<object, object?>();
+
+        // A gate that "escalates" to nobody fails at the deadline anyway; say so instead of promising an escalation.
+        if (node["type"]!.Equals("human-gate") && node.TryGetValue("config", out var gc) && gc is Dictionary<object, object?> gateConfig
+            && gateConfig.TryGetValue("on_timeout", out var ot) && ot is string action && action.Trim().Equals("escalate", StringComparison.OrdinalIgnoreCase)
+            && !(gateConfig.TryGetValue("escalate_to", out var to) && to is string email && email.Contains('@')))
+            gateConfig["on_timeout"] = "fail";
         if (!node["type"]!.Equals("annotation")) node.Remove("content");
     }
 

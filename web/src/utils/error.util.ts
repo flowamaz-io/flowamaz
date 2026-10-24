@@ -37,6 +37,12 @@ export function toUserFacingError(error: unknown): UserFacingError {
         code: 'NETWORK_ERROR',
       };
     }
+    if (error.response?.status === 404) {
+      return {
+        message: "That item wasn't found (HTTP 404). It may have been deleted, or the link or ID is wrong. Go back to the list and open it from there.",
+        code: 'NOT_FOUND',
+      };
+    }
     return {
       message: `Request failed (HTTP ${error.response?.status ?? '???'}). Please try again, or contact support if it persists.`,
       code: 'HTTP_ERROR',

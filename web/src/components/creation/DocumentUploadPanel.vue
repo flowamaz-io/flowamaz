@@ -59,7 +59,8 @@ async function handleFile(file: File) {
   try {
     const documentBase64 = await fileToBase64(file);
     const result = await createWorkflow(props.workspaceId, {
-      name: props.workflowName || 'Untitled Workflow',
+      // Blank lets the server use the name the AI gave the workflow.
+      name: props.workflowName.trim(),
       method: 'document',
       documentBase64,
       documentMimeType: file.type,

@@ -61,7 +61,9 @@ public sealed class VisualInputService : IVisualInputService
         x, y coordinates (approximate), confidence (0-1), annotations (system names, notes), conditions (for routers),
         and reason — one short sentence explaining any confidence below 0.8 (e.g. "handwriting is smudged",
         "shape could be a decision or an action"). Omit reason when confident.
-        Format: {"nodes":[...],"edges":[{"from":"id","to":"id","label":null}],"low_confidence":["id",...]}
+        Also return "title": the diagram's heading if it has one (e.g. "Expense claim process"), else a short
+        name for the process; leave out words like "draft".
+        Format: {"title":"...","nodes":[...],"edges":[{"from":"id","to":"id","label":null}],"low_confidence":["id",...]}
         """;
 
     private readonly IAiCompletionService _ai;
@@ -105,7 +107,7 @@ public sealed class VisualInputService : IVisualInputService
             var yaml = BuildYaml(
                 preview.Nodes.Select(n => new BuildNode(n.Id, n.Label, n.Type, n.SuggestedConnectors,
                     n.ReviewNeeded, n.ReviewNeeded ? n.Reason : null)).ToList(),
-                preview.Edges, wfId, "Visual Workflow");
+                preview.Edges, wfId, preview.SuggestedName ?? "Visual Workflow");
 
             _log.LogInformation("VisualInputService.ProcessImageAsync exit nodes={N} lowConf={L}", preview.Nodes.Count, lowConfidence.Count);
             return new VisualInputResult(yaml, lowConfidence, preview.CostUsd, preview.TokensUsed);
@@ -256,7 +258,9 @@ public sealed class VisualInputService : IVisualInputService
             .Select(e => new DetectedEdge(idMap[e.From], idMap[e.To], string.IsNullOrWhiteSpace(e.Label) ? null : e.Label.Trim()))
             .ToList();
 
-        return new VisualPreviewResult(nodes, edges, ConfidenceThreshold, cost, tokens);
+        var title = string.IsNullOrWhiteSpace(parse.Title) ? null : parse.Title.Trim();
+        if (title is { Length: > 120 }) title = title[..120];
+        return new VisualPreviewResult(nodes, edges, ConfidenceThreshold, cost, tokens, title);
     }
 
     private static string DescribeReason(ParsedNode raw, double confidence, bool typeKnown)
@@ -407,6 +411,7 @@ public sealed class VisualInputService : IVisualInputService
     // DTOs for parsing Claude's JSON response
     private sealed class VisualParseResult
     {
+        [JsonPropertyName("title")] public string? Title { get; set; }
         [JsonPropertyName("nodes")] public List<ParsedNode> Nodes { get; set; } = [];
         [JsonPropertyName("edges")] public List<ParsedEdge> Edges { get; set; } = [];
         [JsonPropertyName("low_confidence")] public List<string> LowConfidence { get; set; } = [];

@@ -137,4 +137,32 @@ public class ThirdRunFindingsTests : ApiTestBase
             row.Value.GetProperty("summary").GetString().Should().NotStartWith("A user", eventType);
         }
     }
+
+    [Fact]
+    public async Task Photo_workflow_without_a_name_is_not_saved_as_untitled()
+    {
+        var owner = await RegisterOwnerAsync("e2e4-name");
+        var ws = await CreateWorkspaceAsync(owner.Client, "Ops", "e2e4-name");
+        var graph = new
+        {
+            nodes = new[]
+            {
+                new { id = "submit", label = "Employee submits claim", type = "trigger" },
+                new { id = "pay", label = "Pay employee", type = "action" },
+                new { id = "done", label = "Done", type = "end" },
+            },
+            edges = new[] { new { from = "submit", to = "pay", label = (string?)null }, new { from = "pay", to = "done", label = (string?)null } },
+        };
+        foreach (var given in new[] { "Untitled Workflow", "Expense claim process" })
+        {
+            var create = await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/workflows/create",
+                new { name = given, method = "visual", visualGraph = graph });
+            create.StatusCode.Should().Be(HttpStatusCode.OK, await create.Content.ReadAsStringAsync());
+            var saved = (await DataAsync(create)).GetProperty("workflowName").GetString();
+            saved.Should().Be(given == "Untitled Workflow" ? "Workflow from photo" : "Expense claim process");
+        }
+
+        var canvas = await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/workflows/create", new { name = "", method = "canvas" });
+        canvas.StatusCode.Should().Be(HttpStatusCode.BadRequest, "drawing on the canvas still needs a name");
+    }
 }

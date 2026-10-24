@@ -90,6 +90,37 @@ public class GeneratedYamlRepairTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task Escalate_without_an_email_becomes_fail_and_the_validator_warns_before_repair()
+    {
+        const string yaml = """
+            apiVersion: flowamaz/v1
+            kind: Workflow
+            metadata: { id: esc, name: Esc, description: d }
+            spec:
+              trigger: { type: form }
+              nodes:
+                - { id: start, type: trigger, label: Start }
+                - id: approve
+                  type: human-gate
+                  label: Approve
+                  config: { delivery_channel: Portal, timeout_hours: 24, on_timeout: escalate }
+                - { id: done, type: end, label: Done }
+              edges:
+                - { id: e1, from: start, to: approve }
+                - { id: e2, from: approve, to: done }
+            """;
+        (await Validator.ValidateAsync(yaml, Guid.NewGuid())).Warnings.Should().ContainSingle(w => w.Code == "BPR-012" && w.NodeId == "approve");
+
+        var repaired = GeneratedYamlRepair.Repair(yaml);
+        repaired.Should().Contain("on_timeout: fail");
+        (await Validator.ValidateAsync(repaired, Guid.NewGuid())).Warnings.Should().NotContain(w => w.Code == "BPR-012");
+
+        var withEmail = yaml.Replace("on_timeout: escalate }", "on_timeout: escalate, escalate_to: boss@acme.test }");
+        (await Validator.ValidateAsync(withEmail, Guid.NewGuid())).Warnings.Should().NotContain(w => w.Code == "BPR-012");
+        GeneratedYamlRepair.Repair(withEmail).Should().Contain("escalate_to: boss@acme.test").And.Contain("on_timeout: escalate");
+    }
+
+    [Fact]
     public void Valid_yaml_is_returned_byte_for_byte()
     {
         const string yaml = "apiVersion: flowamaz/v1\nkind: Workflow\n# a comment\nmetadata: { id: a, name: A }\nspec:\n  trigger: { type: manual }\n  nodes: []\n  edges: []\n";

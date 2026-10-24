@@ -31,6 +31,13 @@ describe('toUserFacingError', () => {
     const e = axiosErrorWith(500, {});
     expect(toUserFacingError(e).message).toContain('HTTP 500');
   });
+
+  it('says a 404 means the item is missing or the link/ID is wrong, not "try again"', () => {
+    const r = toUserFacingError(axiosErrorWith(404, {}));
+    expect(r.code).toBe('NOT_FOUND');
+    expect(r.message).toContain("wasn't found");
+    expect(r.message).not.toContain('try again');
+  });
 });
 
 describe('copilotErrorMessage', () => {

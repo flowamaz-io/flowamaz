@@ -102,7 +102,8 @@ async function submit() {
 
   try {
     const result = await createWorkflow(props.workspaceId, {
-      name: props.workflowName || 'Untitled Workflow',
+      // Blank lets the server use the name the AI gave the workflow.
+      name: props.workflowName.trim(),
       method: 'conversation',
       conversationText: text.value,
       sourceType: sourceType.value,

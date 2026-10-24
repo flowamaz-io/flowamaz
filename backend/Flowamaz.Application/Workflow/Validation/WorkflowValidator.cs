@@ -39,6 +39,7 @@ public sealed class WorkflowValidator : IWorkflowValidator
     ];
 
     private static readonly Regex ExpressionPattern = new(@"\{\{\s*([^}]+?)\s*\}\}", RegexOptions.Compiled);
+    private static readonly Regex EmailPattern = new(@"^[^\s@]+@[^\s@]+\.[^\s@]+$", RegexOptions.Compiled);
     private static readonly Regex ExternalUrlPattern = new(@"https?://\S+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -401,6 +402,26 @@ public sealed class WorkflowValidator : IWorkflowValidator
                     gate.Id, null, null));
         }
 
+        // BPR-012 — "escalate" with nobody to escalate to: at the deadline the run fails instead (run 4: every
+        // AI-built gate was set this way). The gate panel warned; Validate did not.
+        foreach (var gate in doc.Spec?.Nodes?.Where(n => n.Type?.Equals("human-gate", StringComparison.OrdinalIgnoreCase) == true) ?? [])
+        {
+            var cfg = gate.Config;
+            var onTimeout = cfg is not null && cfg.TryGetValue("on_timeout", out var ot) && ot.ValueKind == JsonValueKind.String ? ot.GetString()
+                : cfg is not null && cfg.TryGetValue("onTimeout", out var ot2) && ot2.ValueKind == JsonValueKind.String ? ot2.GetString()
+                : gate.Timeout?.OnTimeout;
+            if (Flowamaz.Core.Entities.Workflow.GateTimeoutActions.Normalize(onTimeout) != Flowamaz.Core.Entities.Workflow.GateTimeoutActions.Escalate) continue;
+            var target = cfg is null ? null
+                : HasText(cfg, "escalate_to") ? cfg["escalate_to"].GetString()
+                : HasText(cfg, "escalateTo") ? cfg["escalateTo"].GetString() : null;
+            if (target is not null && EmailPattern.IsMatch(target.Trim())) continue;
+            var label = string.IsNullOrWhiteSpace(gate.Label) ? gate.Id : gate.Label;
+            warnings.Add(new ValidationIssue(6, "BPR-012",
+                $"Human gate '{gate.Id}' ({label}) escalates on timeout but has no escalation email, so the run fails at the deadline instead. " +
+                "Set escalate_to to the person's email, or change on_timeout to fail, auto-approve or auto-reject.",
+                gate.Id, null, null));
+        }
+
         foreach (var node in doc.Spec?.Nodes?.Where(n => n.Retry?.MaxAttempts > 10) ?? [])
         {
             warnings.Add(new ValidationIssue(6, "BPR-002",
@@ -510,6 +531,7 @@ public sealed class WorkflowValidator : IWorkflowValidator
     private sealed class TimeoutDto
     {
         [JsonPropertyName("seconds")] public int Seconds { get; set; }
+        [JsonPropertyName("on_timeout")] public string? OnTimeout { get; set; }
     }
 
     private sealed class EdgeDto

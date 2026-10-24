@@ -59,6 +59,8 @@ export interface VisualPreviewResult {
   confidenceThreshold: number;
   costUsd: number;
   tokensUsed: number;
+  /** The diagram's title, used as the workflow name when the user didn't type one. */
+  suggestedName?: string | null;
 }
 
 export interface ConfirmedVisualNode {

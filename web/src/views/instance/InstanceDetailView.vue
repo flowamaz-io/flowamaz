@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import FmBadge from '@/components/common/FmBadge.vue';
@@ -15,7 +15,8 @@ import { useWorkflowStore } from '@/stores/workflow.store';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useAuthStore } from '@/stores/auth.store';
 import { useToast } from '@/composables/useToast';
-import { useInstanceWebSocket } from '@/composables/useInstanceWebSocket';
+import { useInstanceWebSocket, type InstanceWebSocket } from '@/composables/useInstanceWebSocket';
+import { instanceService } from '@/services/instance.service';
 import { toUserFacingError } from '@/utils/error.util';
 import { fromNow } from '@/utils/date.util';
 import { formatDuration, instanceStatusVariant } from '@/utils/workflow.util';
@@ -82,27 +83,65 @@ async function retry(): Promise<void> {
   }
 }
 
-const ws = useInstanceWebSocket(
-  currentWorkspaceId.value ?? '',
-  id.value,
-  () => auth.accessToken,
-  (frame) => {
-    store.applyStatusUpdate(id.value, frame.status as InstanceStatus, frame.nodeId);
-    void store.loadTimeline(id.value);
-  },
-);
+const FULL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SHORT_ID = /^[0-9a-f]{4,35}$/i;
+// Run 4: opening a run by the short id shown in lists gave a bare "HTTP 404". Resolve a unique short id to
+// the run, and otherwise say plainly that the run wasn't found and where to find it.
+const notFound = ref(false);
+
+async function resolveShortId(): Promise<string | null> {
+  const raw = id.value.trim().toLowerCase();
+  if (FULL_ID.test(raw)) return raw;
+  if (!SHORT_ID.test(raw.replace(/-/g, '')) || !currentWorkspaceId.value) return null;
+  try {
+    const page = await instanceService.list(currentWorkspaceId.value, { includeTest: true, pageSize: 200 });
+    const matches = page.data.filter((i) => i.id.toLowerCase().startsWith(raw));
+    return matches.length === 1 ? matches[0].id : null;
+  } catch {
+    return null;
+  }
+}
+
+let ws: InstanceWebSocket | null = null;
+onUnmounted(() => ws?.disconnect());
 
 onMounted(async () => {
   if (!currentWorkspaceId.value) await loadWorkspaces();
+  const fullId = await resolveShortId();
+  if (!fullId) {
+    notFound.value = true;
+    return;
+  }
+  if (fullId !== id.value) await router.replace(`/instances/${fullId}`);
   await refresh();
+  if (error.value && !currentInstance.value && /HTTP 404/.test(error.value)) {
+    notFound.value = true;
+    return;
+  }
+  ws = useInstanceWebSocket(
+    currentWorkspaceId.value ?? '',
+    fullId,
+    () => auth.accessToken,
+    (frame) => {
+      store.applyStatusUpdate(fullId, frame.status as InstanceStatus, frame.nodeId);
+      void store.loadTimeline(fullId);
+    },
+  );
   ws.connect();
 });
 </script>
 
 <template>
   <div class="space-y-6 px-8 py-6">
+    <FmErrorState
+      v-if="notFound"
+      title="Run not found"
+      :description="`There's no run with ID '${id}' in this workspace. Check the ID (a short ID must match only one run), or open the run from Instances.`"
+      action-label="Go to Instances"
+      @action="router.push('/instances')"
+    />
     <div
-      v-if="loading && !currentInstance"
+      v-else-if="loading && !currentInstance"
       class="flex justify-center py-12"
     >
       <FmSpinner size="lg" />

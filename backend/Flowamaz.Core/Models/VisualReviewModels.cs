@@ -27,7 +27,9 @@ public sealed record VisualPreviewResult(
     IReadOnlyList<DetectedEdge> Edges,
     double ConfidenceThreshold,
     decimal CostUsd,
-    int TokensUsed);
+    int TokensUsed,
+    /// <summary>The diagram's title when it has one (e.g. "Expense claim process"), used as the workflow name.</summary>
+    string? SuggestedName = null);
 
 /// <summary>A node the user confirmed in the review step (possibly renamed).</summary>
 public sealed record ConfirmedVisualNode(

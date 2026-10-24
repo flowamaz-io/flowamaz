@@ -34,6 +34,7 @@ public class NlYamlPromptTests(ITestOutputHelper output)
         foreach (var e in result.Errors) output.WriteLine($"{e.Code} {e.NodeId} {e.Message}");
         result.Errors.Should().BeEmpty();
         result.Warnings.Should().NotContain(w => w.Code == "BPR-011", "examples must not teach single-exit decisions");
+        result.Warnings.Should().NotContain(w => w.Code == "BPR-012", "examples must not escalate to nobody");
     }
 
     [Fact]

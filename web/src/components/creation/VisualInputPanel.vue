@@ -105,6 +105,7 @@ import { initReview, reviewProblems, toConfirmedGraph, type ReviewState } from '
 import VisualReviewList from './VisualReviewList.vue';
 
 const props = defineProps<{ workspaceId: string; workflowName: string }>();
+const suggestedName = ref('');
 
 type Stage = 'upload' | 'analysing' | 'review' | 'creating';
 
@@ -135,6 +136,7 @@ async function processFile(file: File) {
     const imageBase64 = await fileToBase64(resized);
     const preview = await previewVisual(props.workspaceId, imageBase64, resized.type || 'image/jpeg');
     review.value = initReview(preview);
+    suggestedName.value = preview.suggestedName?.trim() || '';
     stage.value = 'review';
   } catch (e) {
     error.value = toUserFacingError(e).message;
@@ -148,7 +150,8 @@ async function createFromReview() {
   error.value = null;
   try {
     const result = await createWorkflow(props.workspaceId, {
-      name: props.workflowName || 'Untitled Workflow',
+      // Blank lets the server name it from the photo's title instead of "Untitled Workflow".
+      name: props.workflowName.trim() || suggestedName.value,
       method: 'visual',
       visualGraph: toConfirmedGraph(review.value),
     });

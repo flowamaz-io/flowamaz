@@ -30,6 +30,19 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const activeTab = ref<Tab>('pending');
 
+// Run 4: a test run stopped at an approval could only be moved on through the API, because test-run gates
+// are kept out of the queue. This switch brings them in (tagged TEST). Remembered per browser.
+const SHOW_TEST_KEY = 'fmz_gates_show_test';
+function readShowTest(): boolean {
+  try { return localStorage.getItem(SHOW_TEST_KEY) === 'true'; } catch { return false; }
+}
+const showTest = ref(readShowTest());
+function toggleShowTest(): void {
+  showTest.value = !showTest.value;
+  try { localStorage.setItem(SHOW_TEST_KEY, String(showTest.value)); } catch { /* storage unavailable */ }
+  load();
+}
+
 // Per-row note inputs and submitting state.
 const notes = ref<Record<string, string>>({});
 const submitting = ref<Record<string, boolean>>({});
@@ -53,7 +66,7 @@ async function load(): Promise<void> {
 
   try {
     // "All" needs decided gates too; the default endpoint returns only the pending queue.
-    allGates.value = await gateService.getAllGates(currentWorkspaceId.value);
+    allGates.value = await gateService.getAllGates(currentWorkspaceId.value, showTest.value);
   } catch (err: unknown) {
     error.value =
       err instanceof Error
@@ -136,35 +149,47 @@ onMounted(load);
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit">
-      <button
-        :class="[
-          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
-          activeTab === 'pending'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700',
-        ]"
-        @click="activeTab = 'pending'"
-      >
-        Pending
-        <span
-          v-if="pendingCount > 0"
-          class="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700"
+    <div class="flex flex-wrap items-center gap-4">
+      <div class="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit">
+        <button
+          :class="[
+            'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+            activeTab === 'pending'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700',
+          ]"
+          @click="activeTab = 'pending'"
         >
-          {{ pendingCount }}
-        </span>
-      </button>
-      <button
-        :class="[
-          'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
-          activeTab === 'all'
-            ? 'bg-white text-slate-900 shadow-sm'
-            : 'text-slate-500 hover:text-slate-700',
-        ]"
-        @click="activeTab = 'all'"
-      >
-        All
-      </button>
+          Pending
+          <span
+            v-if="pendingCount > 0"
+            class="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700"
+          >
+            {{ pendingCount }}
+          </span>
+        </button>
+        <button
+          :class="[
+            'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+            activeTab === 'all'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700',
+          ]"
+          @click="activeTab = 'all'"
+        >
+          All
+        </button>
+      </div>
+      <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+        <input
+          type="checkbox"
+          class="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-200"
+          :checked="showTest"
+          data-testid="gates-show-test"
+          @change="toggleShowTest"
+        >
+        Include test runs
+      </label>
     </div>
 
     <!-- Loading -->
@@ -191,7 +216,9 @@ onMounted(load);
       :title="activeTab === 'pending' ? 'No pending approvals' : 'No gates yet'"
       :description="
         activeTab === 'pending'
-          ? 'All caught up — no workflows are waiting for your approval right now.'
+          ? (showTest
+            ? 'All caught up — no workflows are waiting for your approval right now.'
+            : 'All caught up — no workflows are waiting for your approval right now. Approvals from test runs are hidden; tick Include test runs above to see them.')
           : 'Gates will appear here once workflows reach a human-approval step.'
       "
       cta-label="Learn about human gates"

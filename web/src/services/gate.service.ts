@@ -11,8 +11,10 @@ export const gateService = {
   },
 
   /** Decided gates plus the actionable pending ones, newest first — for the "All" tab. */
-  async getAllGates(workspaceId: string): Promise<GateResponse[]> {
-    const res = await http.get<ApiEnvelope<GateResponse[]>>(gatesBase(workspaceId), { params: { status: 'all' } });
+  async getAllGates(workspaceId: string, includeTest = false): Promise<GateResponse[]> {
+    const params: Record<string, string> = { status: 'all' };
+    if (includeTest) params.includeTest = 'true';
+    const res = await http.get<ApiEnvelope<GateResponse[]>>(gatesBase(workspaceId), { params });
     return unwrap(res);
   },
 
