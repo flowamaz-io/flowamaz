@@ -2,6 +2,8 @@ using Flowamaz.Application.Auth.Services;
 using Flowamaz.Core.Entities.Auth;
 using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Entities.Workspaces;
+using Flowamaz.Core.Enums;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
@@ -13,129 +15,391 @@ using Moq;
 
 namespace Flowamaz.Tests.Unit.Auth;
 
+/// <summary>
+/// SSO decisions (protocol checks are tested in Sso/SamlProcessorTests and Sso/OidcClientTests): Enterprise-only,
+/// just-in-time accounts on/off, group → role mapping, the SAML response tied to its request and never replayed,
+/// the OIDC callback tied to its state, return paths kept on-site, and "require SSO" sparing org owners.
+/// </summary>
 public class SsoServiceTests
 {
     private readonly Mock<IOrgSsoConfigRepository> _configs = new();
     private readonly Mock<IOrganisationRepository> _orgs = new();
+    private readonly Mock<IPlanRepository> _plans = new();
     private readonly Mock<IOrgUserRepository> _orgUsers = new();
     private readonly Mock<IWorkspaceRepository> _workspaces = new();
     private readonly Mock<IWorkspaceMemberRepository> _members = new();
-    private readonly Mock<IJwtService> _jwt = new();
     private readonly Mock<ISecretProtector> _protector = new();
     private readonly Mock<ISamlProcessor> _saml = new();
     private readonly Mock<IOidcClient> _oidc = new();
-    private readonly Mock<IOidcStateStore> _stateStore = new();
+    private readonly Mock<ISsoStateStore> _states = new();
+    private readonly Mock<ISsoReplayCache> _replay = new();
     private readonly Mock<IUnitOfWork> _uow = new();
 
     private static readonly Guid OrgId = Guid.NewGuid();
+    private static readonly Guid PlanId = Guid.NewGuid();
     private const string OrgSlug = "acme";
+    private readonly Organisation _org = new() { Id = OrgId, Slug = OrgSlug, PlanId = PlanId };
+    private OrgSsoConfig _config = new();
+    private bool _enterprise = true;
 
     public SsoServiceTests()
     {
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _orgs.Setup(o => o.GetBySlugAsync(OrgSlug, It.IsAny<CancellationToken>())).ReturnsAsync(_org);
+        _orgs.Setup(o => o.GetByIdAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(_org);
+        _plans.Setup(p => p.GetByIdAsync(PlanId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new Plan { Id = PlanId, Name = _enterprise ? "Enterprise" : "Pro", Features = new PlanFeatures { Sso = _enterprise } });
+        _configs.Setup(c => c.GetByOrgIdAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(() => _config);
         _workspaces.Setup(w => w.GetForOrgAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        _members.Setup(m => m.GetActiveMembershipsForUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        _jwt.Setup(j => j.GenerateAccessToken(It.IsAny<OrgUser>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<WorkspaceMembership>>()))
-            .Returns("jwt-token");
         _protector.Setup(p => p.Unprotect(It.IsAny<Guid>(), It.IsAny<string>())).Returns("decrypted");
+        _protector.Setup(p => p.Protect(It.IsAny<Guid>(), It.IsAny<string>())).Returns("encrypted");
+        _replay.Setup(r => r.TryRecordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _states.Setup(s => s.CreateAsync(It.IsAny<SsoLoginState>(), It.IsAny<CancellationToken>())).ReturnsAsync("state-key");
     }
 
-    private SsoService CreateService()
+    private SsoService Service() => new(
+        _configs.Object, _orgs.Object, _plans.Object, _orgUsers.Object, _workspaces.Object, _members.Object,
+        _protector.Object, _saml.Object, _oidc.Object, _states.Object, _replay.Object, _uow.Object,
+        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Platform:BaseUrl"] = "https://app.flowamaz.io" }).Build(),
+        NullLogger<SsoService>.Instance);
+
+    private void Saml(Action<OrgSsoConfig>? change = null)
     {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Platform:BaseUrl"] = "https://app.flowamaz.io" })
-            .Build();
-        return new SsoService(
-            _configs.Object, _orgs.Object, _orgUsers.Object, _workspaces.Object, _members.Object,
-            _jwt.Object, _protector.Object, _saml.Object, _oidc.Object, _stateStore.Object,
-            _uow.Object, config, NullLogger<SsoService>.Instance);
+        _config = new OrgSsoConfig
+        {
+            OrgId = OrgId, Provider = "saml", IsActive = true, IdpEntityId = "https://idp", IdpSsoUrl = "https://idp/sso",
+            EncryptedIdpCertificate = "enc",
+        };
+        change?.Invoke(_config);
     }
 
-    private void SetupActiveOrg(string provider)
+    private void Oidc() => _config = new OrgSsoConfig
     {
-        _orgs.Setup(o => o.GetBySlugAsync(OrgSlug, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Organisation { Id = OrgId, Slug = OrgSlug });
-        _configs.Setup(c => c.GetByOrgIdAsync(OrgId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OrgSsoConfig
-            {
-                OrgId = OrgId, Provider = provider, IsActive = true,
-                IdpSsoUrl = "https://idp.example/sso", SpEntityId = "https://app.flowamaz.io/saml/acme",
-                EncryptedIdpCertificate = "enc-cert",
-                IssuerUrl = "https://idp.example", ClientId = "client", EncryptedClientSecret = "enc-secret",
-            });
+        OrgId = OrgId, Provider = "oidc", IsActive = true, IssuerUrl = "https://idp", ClientId = "c", EncryptedClientSecret = "enc",
+    };
+
+    private void SamlReturns(string email = "jane@acme.test", string? inResponseTo = null, string assertionId = "_a1", params string[] groups) =>
+        _saml.Setup(s => s.ValidateResponse(It.IsAny<string>(), It.IsAny<SamlExpectations>()))
+            .Returns(new SamlAssertion(new SsoClaims(email, "Jane", groups), assertionId, DateTime.UtcNow.AddMinutes(5), inResponseTo));
+
+    private void NoUser(string email = "jane@acme.test") =>
+        _orgUsers.Setup(r => r.GetByEmailAndOrgAsync(email, OrgId, It.IsAny<CancellationToken>())).ReturnsAsync((OrgUser?)null);
+
+    // ── Enterprise only ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Status_reports_sso_off_when_the_plan_lacks_it_even_if_configured()
+    {
+        Saml(c => c.RequireSso = true);
+        _enterprise = false;
+        (await Service().GetStatusAsync(OrgSlug)).Should().Be(new SsoStatus(false, null, false));
     }
 
     [Fact]
-    public async Task ProvisionUserFromSso_creates_new_user_with_viewer_role()
+    public async Task Configuring_on_a_plan_without_sso_is_refused()
     {
-        _orgUsers.Setup(r => r.GetByEmailAndOrgAsync("new@acme.com", OrgId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((OrgUser?)null);
+        _enterprise = false;
+        var act = () => Service().ConfigureAsync(OrgId, OrgSlug, new ConfigureSsoRequest("saml", false, null, null, null, null, null, null, null), Guid.NewGuid());
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_NOT_ON_PLAN");
+    }
+
+    [Fact]
+    public async Task Signing_in_on_a_plan_without_sso_is_refused()
+    {
+        Saml();
+        _enterprise = false;
+        var act = () => Service().InitiateSamlLoginAsync(OrgSlug, null);
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_NOT_ON_PLAN");
+    }
+
+    // ── Configuration ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Turning_sso_on_without_the_idp_details_is_refused()
+    {
+        _config = null!;
+        _configs.Setup(c => c.GetByOrgIdAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync((OrgSsoConfig?)null);
+        var act = () => Service().ConfigureAsync(OrgId, OrgSlug,
+            new ConfigureSsoRequest("saml", true, "https://idp", "https://idp/sso", null, null, null, null, null), Guid.NewGuid());
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.Message.Should().Contain("certificate");
+    }
+
+    [Fact]
+    public async Task A_certificate_that_isnt_one_is_refused()
+    {
+        _configs.Setup(c => c.GetByOrgIdAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync((OrgSsoConfig?)null);
+        var act = () => Service().ConfigureAsync(OrgId, OrgSlug,
+            new ConfigureSsoRequest("saml", false, null, null, "not a certificate", null, null, null, null), Guid.NewGuid());
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.Message.Should().Contain("X.509");
+    }
+
+    [Fact]
+    public async Task A_group_mapping_to_another_organisations_workspace_is_refused()
+    {
+        Saml();
+        var act = () => Service().ConfigureAsync(OrgId, OrgSlug, new ConfigureSsoRequest("saml", true, null, null, null, null, null, null, null,
+            GroupRoleMappings: [new SsoGroupRoleMapping("Credit", Guid.NewGuid(), WorkspaceRole.Admin)]), Guid.NewGuid());
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.Message.Should().Contain("isn't in this organisation");
+    }
+
+    [Fact]
+    public async Task Require_sso_cannot_stay_on_while_sso_is_off()
+    {
+        Saml(c => c.RequireSso = true);
+        var dto = await Service().ConfigureAsync(OrgId, OrgSlug, new ConfigureSsoRequest("saml", false, null, null, null, null, null, null, null), Guid.NewGuid());
+        dto.RequireSso.Should().BeFalse();
+    }
+
+    // ── Who gets in ───────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_new_user_gets_the_default_role_in_every_workspace()
+    {
+        Saml(c => c.DefaultRole = WorkspaceRole.Runner);
+        NoUser();
         _workspaces.Setup(w => w.GetForOrgAsync(OrgId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new Workspace { Id = Guid.NewGuid(), OrgId = OrgId }]);
-        WorkspaceMember? assigned = null;
+            .ReturnsAsync([new Workspace { Id = Guid.NewGuid(), OrgId = OrgId }, new Workspace { Id = Guid.NewGuid(), OrgId = OrgId }]);
+        var added = new List<WorkspaceMember>();
         _members.Setup(m => m.AddAsync(It.IsAny<WorkspaceMember>(), It.IsAny<CancellationToken>()))
-            .Callback<WorkspaceMember, CancellationToken>((m, _) => assigned = m)
-            .Returns(Task.CompletedTask);
+            .Callback<WorkspaceMember, CancellationToken>((m, _) => added.Add(m)).Returns(Task.CompletedTask);
 
-        var user = await CreateService().ProvisionUserFromSsoAsync("new@acme.com", OrgId, new SsoClaims("new@acme.com", "New User"));
+        var user = await Service().ProvisionUserFromSsoAsync("Jane@Acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane"));
 
+        user.Email.Should().Be("jane@acme.test");
         user.IsSsoProvisioned.Should().BeTrue();
-        user.Name.Should().Be("New User");
-        _orgUsers.Verify(r => r.AddAsync(It.IsAny<OrgUser>(), It.IsAny<CancellationToken>()), Times.Once);
-        assigned.Should().NotBeNull();
-        assigned!.Role.Should().Be(Core.Enums.WorkspaceRole.Viewer);
+        added.Should().HaveCount(2).And.OnlyContain(m => m.Role == WorkspaceRole.Runner);
     }
 
     [Fact]
-    public async Task ProvisionUserFromSso_updates_existing_user_without_creating()
+    public async Task Without_just_in_time_accounts_an_unknown_person_is_refused()
     {
-        var existing = new OrgUser { Id = Guid.NewGuid(), OrgId = OrgId, Email = "jane@acme.com", Name = "Old Name" };
-        _orgUsers.Setup(r => r.GetByEmailAndOrgAsync("jane@acme.com", OrgId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existing);
-
-        var user = await CreateService().ProvisionUserFromSsoAsync("jane@acme.com", OrgId, new SsoClaims("jane@acme.com", "Jane New"));
-
-        user.Id.Should().Be(existing.Id);
-        user.Name.Should().Be("Jane New");
+        Saml(c => c.JitProvisioning = false);
+        NoUser();
+        var act = () => Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane"));
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_NO_ACCOUNT");
         _orgUsers.Verify(r => r.AddAsync(It.IsAny<OrgUser>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task HandleSamlCallback_invalid_signature_throws()
+    public async Task A_deactivated_account_is_refused()
     {
-        SetupActiveOrg("saml");
-        _saml.Setup(s => s.ValidateResponse(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-            .Throws(new InvalidOperationException("SAML signature validation failed"));
-
-        var act = () => CreateService().HandleSamlCallbackAsync(OrgSlug, "bad-response");
-
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*signature*");
+        Saml();
+        _orgUsers.Setup(r => r.GetByEmailAndOrgAsync("jane@acme.test", OrgId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OrgUser { Id = Guid.NewGuid(), OrgId = OrgId, Email = "jane@acme.test", IsActive = false });
+        var act = () => Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane"));
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_ACCOUNT_DEACTIVATED");
     }
 
     [Fact]
-    public async Task HandleOidcCallback_valid_code_returns_user_and_token()
+    public async Task Group_mappings_set_the_highest_matching_role_per_workspace()
     {
-        SetupActiveOrg("oidc");
-        _stateStore.Setup(s => s.ConsumeAsync("state-1", It.IsAny<CancellationToken>())).ReturnsAsync(OrgSlug);
-        _oidc.Setup(o => o.ExchangeCodeAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), "code-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SsoClaims("sso@acme.com", "SSO User"));
-        _orgUsers.Setup(r => r.GetByEmailAndOrgAsync("sso@acme.com", OrgId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((OrgUser?)null);
+        var lending = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        Saml(c => c.GroupRoleMappings =
+        [
+            new SsoGroupRoleMapping("Credit", lending, WorkspaceRole.Operator),
+            new SsoGroupRoleMapping("Credit-Leads", lending, WorkspaceRole.Admin),
+            new SsoGroupRoleMapping("Everyone", null, WorkspaceRole.Viewer),
+        ]);
+        var user = new OrgUser { Id = Guid.NewGuid(), OrgId = OrgId, Email = "jane@acme.test", IsActive = true };
+        _orgUsers.Setup(r => r.GetByEmailAndOrgAsync("jane@acme.test", OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _workspaces.Setup(w => w.GetForOrgAsync(OrgId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Workspace { Id = lending, OrgId = OrgId }, new Workspace { Id = other, OrgId = OrgId }]);
+        var lendingMember = new WorkspaceMember { WorkspaceId = lending, OrgUserId = user.Id, Role = WorkspaceRole.Viewer, IsActive = true };
+        _members.Setup(m => m.GetAsync(lending, user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(lendingMember);
+        _members.Setup(m => m.GetAsync(other, user.Id, It.IsAny<CancellationToken>())).ReturnsAsync((WorkspaceMember?)null);
+        WorkspaceMember? addedOther = null;
+        _members.Setup(m => m.AddAsync(It.IsAny<WorkspaceMember>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkspaceMember, CancellationToken>((m, _) => addedOther = m).Returns(Task.CompletedTask);
 
-        var result = await CreateService().HandleOidcCallbackAsync(OrgSlug, "code-1", "state-1");
+        await Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane", ["Credit", "Credit-Leads", "Everyone"]));
 
-        result.User.Email.Should().Be("sso@acme.com");
-        result.AccessToken.Should().Be("jwt-token");
+        lendingMember.Role.Should().Be(WorkspaceRole.Admin);
+        addedOther!.WorkspaceId.Should().Be(other);
+        addedOther.Role.Should().Be(WorkspaceRole.Viewer);
     }
 
     [Fact]
-    public async Task HandleOidcCallback_invalid_state_throws_unauthorized()
+    public async Task Group_mappings_never_demote_a_workspaces_last_admin()
     {
-        _stateStore.Setup(s => s.ConsumeAsync("bad-state", It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+        var ws = Guid.NewGuid();
+        Saml(c => c.GroupRoleMappings = [new SsoGroupRoleMapping("Credit", ws, WorkspaceRole.Operator)]);
+        var user = new OrgUser { Id = Guid.NewGuid(), OrgId = OrgId, Email = "jane@acme.test", IsActive = true };
+        _orgUsers.Setup(r => r.GetByEmailAndOrgAsync("jane@acme.test", OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _workspaces.Setup(w => w.GetForOrgAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync([new Workspace { Id = ws, OrgId = OrgId }]);
+        var member = new WorkspaceMember { WorkspaceId = ws, OrgUserId = user.Id, Role = WorkspaceRole.Admin, IsActive = true };
+        _members.Setup(m => m.GetAsync(ws, user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(member);
+        _members.Setup(m => m.CountActiveAdminsAsync(ws, It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
-        var act = () => CreateService().HandleOidcCallbackAsync(OrgSlug, "code-1", "bad-state");
+        await Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane", ["Credit"]));
 
-        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        member.Role.Should().Be(WorkspaceRole.Admin);
     }
+
+    [Fact]
+    public async Task Org_owners_roles_are_never_changed_by_sso()
+    {
+        Saml(c => c.GroupRoleMappings = [new SsoGroupRoleMapping("Anyone", null, WorkspaceRole.Viewer)]);
+        var owner = new OrgUser { Id = Guid.NewGuid(), OrgId = OrgId, Email = "jane@acme.test", IsActive = true, IsOrgOwner = true };
+        _orgUsers.Setup(r => r.GetByEmailAndOrgAsync("jane@acme.test", OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(owner);
+
+        await Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane", ["Anyone"]));
+
+        _workspaces.Verify(w => w.GetForOrgAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── SAML flow ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Saml_login_stores_the_request_id_and_a_safe_return_path()
+    {
+        Saml();
+        SsoLoginState? stored = null;
+        _states.Setup(s => s.CreateAsync(It.IsAny<SsoLoginState>(), It.IsAny<CancellationToken>()))
+            .Callback<SsoLoginState, CancellationToken>((s, _) => stored = s).ReturnsAsync("relay");
+        string? requestId = null;
+        _saml.Setup(s => s.BuildAuthnRequest("https://idp/sso", "https://app.flowamaz.io/saml/acme", "https://app.flowamaz.io/api/v1/saml/acme/acs",
+                It.IsAny<string>(), "relay"))
+            .Callback<string, string, string, string, string>((_, _, _, id, _) => requestId = id)
+            .Returns(new SamlAuthnRequest("https://idp/sso?SAMLRequest=x", "ignored"));
+
+        await Service().InitiateSamlLoginAsync(OrgSlug, "https://evil.example/steal");
+
+        stored!.ReturnPath.Should().Be("/", "only on-site paths are kept");
+        stored.SamlRequestId.Should().Be(requestId).And.StartWith("_");
+    }
+
+    [Fact]
+    public async Task A_saml_response_to_another_request_is_refused()
+    {
+        Saml();
+        SamlReturns(inResponseTo: "_other");
+        _states.Setup(s => s.ConsumeAsync("relay", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SsoLoginState(OrgSlug, "saml", "/workflows", SamlRequestId: "_mine"));
+
+        var act = () => Service().HandleSamlCallbackAsync(OrgSlug, "resp", "relay");
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_SIGNIN_EXPIRED");
+    }
+
+    [Fact]
+    public async Task A_saml_response_to_this_request_signs_in_and_returns_to_the_saved_path()
+    {
+        Saml();
+        NoUser();
+        SamlReturns(inResponseTo: "_mine");
+        _states.Setup(s => s.ConsumeAsync("relay", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SsoLoginState(OrgSlug, "saml", "/workflows", SamlRequestId: "_mine"));
+
+        var result = await Service().HandleSamlCallbackAsync(OrgSlug, "resp", "relay");
+
+        result.User.Email.Should().Be("jane@acme.test");
+        result.ReturnPath.Should().Be("/workflows");
+    }
+
+    [Fact]
+    public async Task An_idp_initiated_response_is_accepted_and_goes_home()
+    {
+        Saml();
+        NoUser();
+        SamlReturns(inResponseTo: null);
+        (await Service().HandleSamlCallbackAsync(OrgSlug, "resp", relayState: null)).ReturnPath.Should().Be("/");
+    }
+
+    [Fact]
+    public async Task A_replayed_assertion_is_refused()
+    {
+        Saml();
+        SamlReturns(assertionId: "_used");
+        _replay.Setup(r => r.TryRecordAsync(OrgSlug, "_used", It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var act = () => Service().HandleSamlCallbackAsync(OrgSlug, "resp", null);
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_SIGNIN_EXPIRED");
+        _orgUsers.Verify(r => r.AddAsync(It.IsAny<OrgUser>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task The_saml_check_uses_the_configured_idp_and_this_services_urls()
+    {
+        Saml(c => c.GroupsAttribute = "memberOf");
+        NoUser();
+        SamlExpectations? used = null;
+        _saml.Setup(s => s.ValidateResponse("resp", It.IsAny<SamlExpectations>()))
+            .Callback<string, SamlExpectations>((_, e) => used = e)
+            .Returns(new SamlAssertion(new SsoClaims("jane@acme.test", "Jane"), "_a", DateTime.UtcNow.AddMinutes(5), null));
+
+        await Service().HandleSamlCallbackAsync(OrgSlug, "resp", null);
+
+        used.Should().Be(new SamlExpectations("decrypted", "https://idp", "https://app.flowamaz.io/saml/acme",
+            "https://app.flowamaz.io/api/v1/saml/acme/acs", "memberOf"));
+    }
+
+    // ── OIDC flow ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task An_oidc_callback_with_an_unknown_state_is_refused()
+    {
+        Oidc();
+        _states.Setup(s => s.ConsumeAsync("bad", It.IsAny<CancellationToken>())).ReturnsAsync((SsoLoginState?)null);
+        var act = () => Service().HandleOidcCallbackAsync(OrgSlug, "code", "bad");
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_SIGNIN_EXPIRED");
+    }
+
+    [Fact]
+    public async Task An_oidc_callback_for_another_org_is_refused()
+    {
+        Oidc();
+        _states.Setup(s => s.ConsumeAsync("st", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SsoLoginState("other-org", "oidc", "/", OidcNonce: "n", OidcCodeVerifier: "v"));
+        var act = () => Service().HandleOidcCallbackAsync(OrgSlug, "code", "st");
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_SIGNIN_EXPIRED");
+    }
+
+    [Fact]
+    public async Task An_oidc_callback_passes_the_saved_nonce_and_verifier()
+    {
+        Oidc();
+        NoUser();
+        var discovery = new OidcDiscovery("https://idp", "https://idp/a", "https://idp/t", "https://idp/k");
+        _oidc.Setup(o => o.DiscoverAsync("https://idp", It.IsAny<CancellationToken>())).ReturnsAsync(discovery);
+        _states.Setup(s => s.ConsumeAsync("st", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SsoLoginState(OrgSlug, "oidc", "/runs", OidcNonce: "n-1", OidcCodeVerifier: "v-1"));
+        _oidc.Setup(o => o.ExchangeCodeAsync(discovery, "c", "decrypted", "https://app.flowamaz.io/api/v1/oidc/acme/callback",
+                "code", "v-1", "n-1", "groups", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SsoClaims("jane@acme.test", "Jane"));
+
+        var result = await Service().HandleOidcCallbackAsync(OrgSlug, "code", "st");
+
+        result.ReturnPath.Should().Be("/runs");
+    }
+
+    // ── Require SSO ───────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Require_sso_blocks_passwords_for_members_but_not_org_owners()
+    {
+        Saml(c => c.RequireSso = true);
+        var service = Service();
+        (await service.IsPasswordLoginBlockedAsync(OrgId, new OrgUser { IsOrgOwner = false })).Should().BeTrue();
+        (await service.IsPasswordLoginBlockedAsync(OrgId, new OrgUser { IsOrgOwner = true })).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Require_sso_has_no_effect_when_the_plan_lacks_sso()
+    {
+        Saml(c => c.RequireSso = true);
+        _enterprise = false;
+        (await Service().IsPasswordLoginBlockedAsync(OrgId, new OrgUser())).Should().BeFalse();
+    }
+
+    // ── Return paths ──────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null, "/")]
+    [InlineData("/workflows/1?tab=runs", "/workflows/1?tab=runs")]
+    [InlineData("https://evil.example", "/")]
+    [InlineData("//evil.example/x", "/")]
+    [InlineData("/\\evil.example", "/")]
+    [InlineData("javascript:alert(1)", "/")]
+    public void Return_paths_stay_on_site(string? input, string expected) =>
+        SsoService.SafeReturnPath(input).Should().Be(expected);
 }

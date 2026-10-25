@@ -7,9 +7,8 @@ using Microsoft.Extensions.Configuration;
 namespace Flowamaz.Api.Controllers;
 
 /// <summary>
-/// SSO: anonymous status check + SAML metadata/ACS, and org-owner-gated configuration. On a
-/// successful SAML login the user is JIT-provisioned and redirected to the app with a short-lived
-/// token fragment. Password login is unaffected for non-SSO orgs.
+/// SSO: anonymous status check + SAML metadata/login/ACS, and org-owner configuration of the caller's own
+/// organisation. A successful sign-in starts a normal session (refresh cookie) — no token in the URL.
 /// </summary>
 [ApiController]
 public sealed class SsoController : ControllerBase
@@ -17,15 +16,21 @@ public sealed class SsoController : ControllerBase
     private readonly ISsoService _sso;
     private readonly ICurrentUserService _currentUser;
     private readonly IConfiguration _configuration;
+    private readonly Application.Auth.Services.AuthService _auth;
+    private readonly IHostEnvironment _environment;
+    private readonly ILogger<SsoController> _logger;
 
-    public SsoController(ISsoService sso, ICurrentUserService currentUser, IConfiguration configuration)
+    public SsoController(
+        ISsoService sso, ICurrentUserService currentUser, IConfiguration configuration,
+        Application.Auth.Services.AuthService auth, IHostEnvironment environment, ILogger<SsoController> logger)
     {
         _sso = sso;
         _currentUser = currentUser;
         _configuration = configuration;
+        _auth = auth;
+        _environment = environment;
+        _logger = logger;
     }
-
-    private string AppBaseUrl => _configuration["Platform:BaseUrl"]?.TrimEnd('/') ?? "https://app.flowamaz.io";
 
     /// <summary>Returns whether SSO is enabled for the given organisation slug so the login page can offer the SSO option. Anonymous.</summary>
     [HttpGet("/api/v1/auth/sso/{orgSlug}")]
@@ -42,20 +47,33 @@ public sealed class SsoController : ControllerBase
         return Content(xml, "application/xml");
     }
 
-    /// <summary>Begins a SAML login by redirecting the browser to the organisation's identity provider. Anonymous.</summary>
+    /// <summary>Begins a SAML login: redirects the browser to the organisation's IdP with an AuthnRequest. Anonymous.</summary>
     [HttpGet("/api/v1/saml/{orgSlug}/login")]
     [AllowAnonymous]
-    public async Task<IActionResult> SamlLogin(string orgSlug, [FromQuery] string? returnUrl, CancellationToken ct) =>
-        Redirect(await _sso.InitiateSamlLoginAsync(orgSlug, returnUrl, ct));
+    public async Task<IActionResult> SamlLogin(string orgSlug, [FromQuery] string? returnUrl, CancellationToken ct)
+    {
+        try
+        {
+            return Redirect(await _sso.InitiateSamlLoginAsync(orgSlug, returnUrl, ct));
+        }
+        catch (Core.Exceptions.SsoLoginException ex)
+        {
+            return SsoSignInFlow.StartFailed(this, _configuration, orgSlug, ex);
+        }
+    }
 
-    /// <summary>SAML assertion consumer service: validates the IdP response, JIT-provisions the user, and redirects to the app with a short-lived token. Anonymous.</summary>
+    /// <summary>
+    /// SAML assertion consumer service: validates the IdP's response, signs the user in (refresh cookie) and sends
+    /// them into the app. Anonymous (the IdP posts here from the browser).
+    /// </summary>
     [HttpPost("/api/v1/saml/{orgSlug}/acs")]
     [AllowAnonymous]
-    public async Task<IActionResult> Acs(string orgSlug, [FromForm(Name = "SAMLResponse")] string samlResponse, CancellationToken ct)
-    {
-        var result = await _sso.HandleSamlCallbackAsync(orgSlug, samlResponse, ct);
-        return Redirect($"{AppBaseUrl}/#sso_token={Uri.EscapeDataString(result.AccessToken)}");
-    }
+    [IgnoreAntiforgeryToken]
+    public Task<IActionResult> Acs(
+        string orgSlug, [FromForm(Name = "SAMLResponse")] string samlResponse, [FromForm(Name = "RelayState")] string? relayState,
+        CancellationToken ct) =>
+        SsoSignInFlow.CompleteAsync(this, orgSlug, () => _sso.HandleSamlCallbackAsync(orgSlug, samlResponse, relayState, ct),
+            _auth, _environment, _configuration, _logger, ct);
 
     // ── Org-owner configuration ──────────────────────────────────────────────
 
@@ -89,8 +107,10 @@ public sealed class SsoController : ControllerBase
         if (config is null)
             return Ok(new { ok = false, message = "SSO is not configured yet. Save a configuration first." });
 
+        if (!config.PlanIncludesSso)
+            return Ok(new { ok = false, message = "Single sign-on is part of the Enterprise plan. Upgrade in Settings → Billing to use it." });
         var ready = config.Provider == "saml"
-            ? config is { IdpSsoUrl: not null, HasCertificate: true }
+            ? config is { IdpEntityId: not null, IdpSsoUrl: not null, HasCertificate: true }
             : config is { IssuerUrl: not null, ClientId: not null, HasClientSecret: true };
 
         return Ok(new

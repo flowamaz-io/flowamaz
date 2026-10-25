@@ -69,6 +69,8 @@ export Ai__AllowStubWithoutKey=true                 # non-generation AI features
 # Test orgs register on the Community plan (10 public API calls/minute, FUNCTIONAL.md §13.2), which an app syncing
 # with Flowamaz (e.g. the loan application) uses up on its own. Set ENFORCE_PLAN_RATE_LIMITS=true to test the limits.
 export PublicApi__EnforcePlanRateLimits="${ENFORCE_PLAN_RATE_LIMITS:-false}"
+# The web app's address: SSO builds its SAML ACS / OIDC redirect URLs from it (the web dev server proxies /api).
+export Platform__BaseUrl="http://localhost:5173"
 if [[ -n "${ANTHROPIC_KEY:-}" ]]; then
   code=$(curl -s -o /dev/null -w "%{http_code}" https://api.anthropic.com/v1/models \
     -H "x-api-key: $ANTHROPIC_KEY" -H "anthropic-version: 2023-06-01" || echo 000)

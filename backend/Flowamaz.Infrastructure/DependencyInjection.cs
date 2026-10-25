@@ -214,7 +214,8 @@ public static class DependencyInjection
         // Audit recording is fire-and-forget via a fresh scope per write (same pattern as metering).
         services.AddSingleton<IAuditService, AuditService>();
         services.AddSingleton<ISamlProcessor, Services.Sso.SamlProcessor>();
-        services.AddSingleton<IOidcStateStore, Services.Sso.RedisOidcStateStore>();
+        services.AddSingleton<ISsoStateStore, Services.Sso.RedisSsoStateStore>();
+        services.AddSingleton<ISsoReplayCache, Services.Sso.RedisSsoReplayCache>();
         services.AddHttpClient(Services.Sso.OidcClient.HttpClientName);
         services.AddScoped<IOidcClient, Services.Sso.OidcClient>();
         services.AddScoped<IConnectorCatalogueService, ConnectorCatalogueService>();

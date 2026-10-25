@@ -126,6 +126,10 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
 
     public HttpClient NewClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
 
+    /// <summary>A client that doesn't follow redirects, to inspect SSO redirects and cookies.</summary>
+    public HttpClient NewClientWithoutRedirects() =>
+        _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true, AllowAutoRedirect = false });
+
     public async Task ResetRedisAsync()
     {
         var endpoint = _redisClient.GetEndPoints()[0];

@@ -1,3 +1,4 @@
+using Flowamaz.Api.Identity;
 using Flowamaz.Application.Auth.DTOs;
 using Flowamaz.Application.Auth.Services;
 using Flowamaz.Core.Exceptions;
@@ -15,8 +16,7 @@ namespace Flowamaz.Api.Controllers;
 [Route("api/v1/auth")]
 public sealed class AuthController : ControllerBase
 {
-    private const string RefreshCookieName = "fmz_refresh";
-    private const string CookiePath = "/api/v1/auth";
+    private const string RefreshCookieName = RefreshCookie.Name;
     private const int RegisterMaxPerHour = 5;
     private const int LoginMaxPerMinute = 10;
     private const int ForgotPasswordMaxPerHour = 3;
@@ -123,21 +123,7 @@ public sealed class AuthController : ControllerBase
     }
 
     private void SetRefreshCookie(string plainToken, DateTime expiresAt) =>
-        Response.Cookies.Append(RefreshCookieName, plainToken, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = !_environment.IsDevelopment(),
-            SameSite = SameSiteMode.Lax,
-            Path = CookiePath,
-            Expires = expiresAt,
-        });
+        RefreshCookie.Append(Response, _environment, plainToken, expiresAt);
 
-    private void DeleteRefreshCookie() =>
-        Response.Cookies.Delete(RefreshCookieName, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = !_environment.IsDevelopment(),
-            SameSite = SameSiteMode.Lax,
-            Path = CookiePath,
-        });
+    private void DeleteRefreshCookie() => RefreshCookie.Delete(Response, _environment);
 }

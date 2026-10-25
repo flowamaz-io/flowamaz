@@ -15,5 +15,13 @@ public sealed class OrgSsoConfigConfiguration : IEntityTypeConfiguration<OrgSsoC
         builder.Property(c => c.Scopes)
             .HasConversion(JsonColumn.Converter<List<string>>(), JsonColumn.Comparer<List<string>>())
             .HasColumnType("jsonb");
+
+        builder.Property(c => c.DefaultRole).HasConversion<string>().HasMaxLength(16).HasDefaultValue(Core.Enums.WorkspaceRole.Viewer);
+        builder.Property(c => c.JitProvisioning).HasDefaultValue(true);
+        builder.Property(c => c.GroupsAttribute).HasMaxLength(256).HasDefaultValue("groups");
+        builder.Property(c => c.GroupRoleMappings)
+            .HasConversion(JsonColumn.Converter<List<Core.Interfaces.Services.SsoGroupRoleMapping>>(),
+                JsonColumn.Comparer<List<Core.Interfaces.Services.SsoGroupRoleMapping>>())
+            .HasColumnType("jsonb");
     }
 }

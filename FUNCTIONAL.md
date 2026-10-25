@@ -631,6 +631,14 @@ Credential values are NEVER:
 ### 12.6 SSO (Phase 6)
 SAML 2.0 + OIDC. Supported IdPs: Okta, Azure AD/Entra, Google Workspace, ADFS, PingFederate, OneLogin, Generic. SCIM 2.0 for automated provisioning. Group→role mapping. JIT provisioning option. SSO enforcement blocks password login. 14-day advance notice on platform default model changes.
 
+Implemented (Enterprise plan only — `PlanFeatures.Sso`):
+- **SAML 2.0**: SP-initiated (AuthnRequest, HTTP-Redirect binding; the response's InResponseTo must match) or IdP-initiated. Accepted only with an RSA-SHA256+ signature by the configured IdP certificate whose single reference covers the assertion read (no signature wrapping), the configured issuer, this SP as audience, this ACS URL as recipient, a valid time window (3 min skew), and an assertion id never seen before (replay cache). Encrypted assertions aren't supported yet.
+- **OIDC**: authorization code + PKCE (S256) + nonce; endpoints from discovery (issuer must match); id_token validated against the IdP's JWKS (issuer, audience, expiry, nonce); unverified emails refused.
+- **Session**: SSO sign-in starts the normal session (httpOnly refresh cookie) and returns to a same-site path; refused sign-ins go to `/login?sso_error=<code>`.
+- **Access**: JIT accounts on/off; default role; IdP group → workspace role mappings (highest wins, applied at every sign-in, org owners untouched, a workspace's last Admin never demoted).
+- **Require SSO**: blocks password sign-in for members; org owners keep it (break-glass), checked only after a correct password.
+- SCIM 2.0: separate change.
+
 ### 12.7 Data Residency
 Regions: ap-southeast-1 (default), eu-west-1, us-east-1. Immutable after org creation. All workflow data stays in chosen region. Platform layer (billing aggregates only) is global.
 

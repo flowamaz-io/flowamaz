@@ -1,92 +1,238 @@
+using System.Collections.Concurrent;
+using System.Net.Http.Headers;
 using System.Text.Json;
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Flowamaz.Infrastructure.Services.Sso;
 
 /// <summary>
-/// OIDC authorization-code client. Discovers the IdP endpoints from its issuer's
-/// <c>.well-known/openid-configuration</c>, exchanges the code at the token endpoint, and reads
-/// email/name from the id_token payload. (Production hardening — full id_token signature
-/// validation against the JWKS — is a documented follow-up.)
+/// OIDC authorization-code client with PKCE (S256) and a nonce. Endpoints come from the issuer's discovery
+/// document, whose <c>issuer</c> must equal the configured one. The id_token is validated in full: signature
+/// against the IdP's JWKS (asymmetric algorithms only), issuer, audience (the client id), expiry (2 minutes' skew)
+/// and nonce. An email the IdP marks unverified is refused. Discovery documents and key sets are cached for an hour
+/// and refreshed once when a token is signed with an unknown key (key rotation).
 /// </summary>
 public sealed class OidcClient : IOidcClient
 {
     public const string HttpClientName = "oidc";
+    private static readonly TimeSpan CacheFor = TimeSpan.FromHours(1);
+    private static readonly ConcurrentDictionary<string, (OidcDiscovery Doc, DateTime Until)> Discoveries = new();
+    private static readonly ConcurrentDictionary<string, (JsonWebKeySet Keys, DateTime Until)> KeySets = new();
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OidcClient> _logger;
+    private readonly TimeProvider _clock;
 
-    public OidcClient(IHttpClientFactory httpClientFactory, ILogger<OidcClient> logger)
+    public OidcClient(IHttpClientFactory httpClientFactory, ILogger<OidcClient> logger, TimeProvider? clock = null)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _clock = clock ?? TimeProvider.System;
     }
 
-    public string BuildAuthorizeUrl(string issuerUrl, string clientId, string redirectUri, IReadOnlyList<string> scopes, string state)
-    {
-        var authorizeEndpoint = $"{issuerUrl.TrimEnd('/')}/authorize";
-        var scope = Uri.EscapeDataString(string.Join(' ', scopes));
-        return $"{authorizeEndpoint}?response_type=code&client_id={Uri.EscapeDataString(clientId)}" +
-               $"&redirect_uri={Uri.EscapeDataString(redirectUri)}&scope={scope}&state={Uri.EscapeDataString(state)}";
-    }
+    private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
-    public async Task<SsoClaims> ExchangeCodeAsync(
-        string issuerUrl, string clientId, string clientSecret, string redirectUri, string code, CancellationToken ct = default)
+    public async Task<OidcDiscovery> DiscoverAsync(string issuerUrl, CancellationToken ct = default)
     {
+        var issuer = issuerUrl.Trim();
+        if (Discoveries.TryGetValue(issuer, out var cached) && cached.Until > Now) return cached.Doc;
+
+        _logger.LogDebug("OidcClient.DiscoverAsync enter issuer={Issuer}", issuer);
         var http = _httpClientFactory.CreateClient(HttpClientName);
-        var tokenEndpoint = await DiscoverTokenEndpointAsync(http, issuerUrl, ct);
-
-        using var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        JsonDocument doc;
+        try
         {
-            ["grant_type"] = "authorization_code",
-            ["code"] = code,
-            ["redirect_uri"] = redirectUri,
-            ["client_id"] = clientId,
-            ["client_secret"] = clientSecret,
-        });
+            doc = JsonDocument.Parse(await http.GetStringAsync($"{issuer.TrimEnd('/')}/.well-known/openid-configuration", ct));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException)
+        {
+            _logger.LogWarning("OidcClient.DiscoverAsync failed issuer={Issuer}: {Error}", issuer, ex.Message);
+            throw new SsoLoginException("SSO_IDP_UNREACHABLE",
+                "Flowamaz couldn't read your identity provider's OpenID configuration. Check the issuer URL in SSO settings and that the IdP is reachable.", 502);
+        }
 
-        using var response = await http.PostAsync(tokenEndpoint, form, ct);
-        response.EnsureSuccessStatusCode();
-        using var stream = await response.Content.ReadAsStreamAsync(ct);
-        using var tokens = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        using (doc)
+        {
+            string Required(string name) =>
+                doc.RootElement.TryGetProperty(name, out var v) && v.GetString() is { Length: > 0 } s ? s
+                    : throw new SsoLoginException("SSO_IDP_MISCONFIGURED", $"Your identity provider's OpenID configuration has no '{name}'.", 502);
 
-        var idToken = tokens.RootElement.TryGetProperty("id_token", out var idt) ? idt.GetString() : null;
+            var discovery = new OidcDiscovery(
+                Required("issuer"), Required("authorization_endpoint"), Required("token_endpoint"), Required("jwks_uri"));
+            if (!string.Equals(discovery.Issuer.TrimEnd('/'), issuer.TrimEnd('/'), StringComparison.Ordinal))
+                throw new SsoLoginException("SSO_IDP_MISCONFIGURED",
+                    $"The issuer URL in SSO settings ('{issuer}') doesn't match what the identity provider reports ('{discovery.Issuer}'). Copy the issuer exactly.", 400);
+
+            Discoveries[issuer] = (discovery, Now.Add(CacheFor));
+            return discovery;
+        }
+    }
+
+    public string BuildAuthorizeUrl(OidcDiscovery discovery, string clientId, string redirectUri, IReadOnlyList<string> scopes,
+        string state, string nonce, string codeChallenge)
+    {
+        var scope = scopes.Contains("openid") ? scopes : ["openid", .. scopes];
+        var separator = discovery.AuthorizationEndpoint.Contains('?') ? '&' : '?';
+        return $"{discovery.AuthorizationEndpoint}{separator}response_type=code" +
+               $"&client_id={Uri.EscapeDataString(clientId)}" +
+               $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+               $"&scope={Uri.EscapeDataString(string.Join(' ', scope))}" +
+               $"&state={Uri.EscapeDataString(state)}" +
+               $"&nonce={Uri.EscapeDataString(nonce)}" +
+               $"&code_challenge={Uri.EscapeDataString(codeChallenge)}&code_challenge_method=S256";
+    }
+
+    public async Task<SsoClaims> ExchangeCodeAsync(OidcDiscovery discovery, string clientId, string clientSecret, string redirectUri,
+        string code, string codeVerifier, string nonce, string groupsClaim, CancellationToken ct = default)
+    {
+        _logger.LogDebug("OidcClient.ExchangeCodeAsync enter issuer={Issuer}", discovery.Issuer);
+        var http = _httpClientFactory.CreateClient(HttpClientName);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, discovery.TokenEndpoint)
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "authorization_code",
+                ["code"] = code,
+                ["redirect_uri"] = redirectUri,
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
+                ["code_verifier"] = codeVerifier,
+            }),
+        };
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        string? idToken;
+        try
+        {
+            using var response = await http.SendAsync(request, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                // Log the IdP's error code only; the body may echo secrets.
+                var error = TryReadString(body, "error") ?? ((int)response.StatusCode).ToString();
+                _logger.LogWarning("OidcClient.ExchangeCodeAsync token endpoint refused: {Error}", error);
+                throw SsoLoginException.Rejected($"the identity provider refused the sign-in code ({error}). Check the client id and secret in SSO settings.");
+            }
+            idToken = TryReadString(body, "id_token");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            throw new SsoLoginException("SSO_IDP_UNREACHABLE", "Flowamaz couldn't reach your identity provider to finish signing in. Try again.", 502);
+        }
         if (string.IsNullOrWhiteSpace(idToken))
-            throw new InvalidOperationException("OIDC token response did not contain an id_token.");
+            throw SsoLoginException.Rejected("the identity provider returned no id_token. Make sure the 'openid' scope is allowed.");
 
-        var claims = DecodeIdTokenClaims(idToken);
-        _logger.LogInformation("OidcClient.ExchangeCodeAsync ok email={Email}", claims.Email);
-        return claims;
+        var token = await ValidateIdTokenAsync(idToken, discovery, clientId, nonce, ct);
+
+        var email = Claim(token, "email") ?? Claim(token, "upn");
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+            throw SsoLoginException.Rejected("the id_token has no email. Add the 'email' scope/claim for the Flowamaz app in your IdP.");
+        if (token.TryGetPayloadValue<bool>("email_verified", out var verified) && !verified)
+            throw SsoLoginException.Rejected("your email address isn't verified with the identity provider.");
+
+        var name = Claim(token, "name")
+            ?? string.Join(' ', new[] { Claim(token, "given_name"), Claim(token, "family_name") }.Where(p => !string.IsNullOrWhiteSpace(p)));
+        var groups = Groups(token, groupsClaim);
+
+        _logger.LogInformation("OidcClient.ExchangeCodeAsync ok groups={GroupCount}", groups.Count);
+        return new SsoClaims(email.Trim().ToLowerInvariant(), string.IsNullOrWhiteSpace(name) ? null : name, groups);
     }
 
-    private static async Task<string> DiscoverTokenEndpointAsync(HttpClient http, string issuerUrl, CancellationToken ct)
+    private async Task<JsonWebToken> ValidateIdTokenAsync(string idToken, OidcDiscovery discovery, string clientId, string nonce, CancellationToken ct)
     {
-        var discoveryUrl = $"{issuerUrl.TrimEnd('/')}/.well-known/openid-configuration";
-        using var doc = JsonDocument.Parse(await http.GetStringAsync(discoveryUrl, ct));
-        return doc.RootElement.GetProperty("token_endpoint").GetString()
-            ?? throw new InvalidOperationException("OIDC discovery document has no token_endpoint.");
+        var handler = new JsonWebTokenHandler();
+        TokenValidationResult result = await ValidateWithKeysAsync(await KeysAsync(discovery.JwksUri, refresh: false, ct));
+        if (!result.IsValid && result.Exception is SecurityTokenSignatureKeyNotFoundException)
+            result = await ValidateWithKeysAsync(await KeysAsync(discovery.JwksUri, refresh: true, ct)); // key rotation
+
+        if (!result.IsValid)
+        {
+            _logger.LogWarning("OidcClient id_token invalid: {Error}", result.Exception?.GetType().Name);
+            throw SsoLoginException.Rejected(result.Exception switch
+            {
+                SecurityTokenExpiredException => "the identity token has expired.",
+                SecurityTokenInvalidAudienceException => "the identity token was issued for a different app (client id mismatch).",
+                SecurityTokenInvalidIssuerException => "the identity token comes from a different issuer than the one configured.",
+                _ => "the identity token's signature or contents are invalid.",
+            });
+        }
+
+        var token = (JsonWebToken)result.SecurityToken;
+        if (!token.TryGetPayloadValue<string>("nonce", out var tokenNonce) || !string.Equals(tokenNonce, nonce, StringComparison.Ordinal))
+            throw SsoLoginException.Rejected("the identity token doesn't belong to this sign-in (nonce mismatch).");
+        return token;
+
+        Task<TokenValidationResult> ValidateWithKeysAsync(JsonWebKeySet keys) => handler.ValidateTokenAsync(idToken, new TokenValidationParameters
+        {
+            ValidIssuer = discovery.Issuer,
+            ValidAudience = clientId,
+            IssuerSigningKeys = keys.GetSigningKeys(),
+            ValidAlgorithms =
+            [
+                SecurityAlgorithms.RsaSha256, SecurityAlgorithms.RsaSha384, SecurityAlgorithms.RsaSha512,
+                SecurityAlgorithms.EcdsaSha256, SecurityAlgorithms.EcdsaSha384, SecurityAlgorithms.EcdsaSha512,
+                SecurityAlgorithms.RsaSsaPssSha256, SecurityAlgorithms.RsaSsaPssSha384, SecurityAlgorithms.RsaSsaPssSha512,
+            ],
+            RequireSignedTokens = true,
+            RequireExpirationTime = true,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(2),
+            LifetimeValidator = (notBefore, expires, _, p) =>
+                expires is { } e && Now - p.ClockSkew < e && (notBefore is not { } nb || Now + p.ClockSkew >= nb),
+        });
     }
 
-    private static SsoClaims DecodeIdTokenClaims(string idToken)
+    private async Task<JsonWebKeySet> KeysAsync(string jwksUri, bool refresh, CancellationToken ct)
     {
-        var parts = idToken.Split('.');
-        if (parts.Length < 2)
-            throw new InvalidOperationException("Malformed id_token.");
-
-        var payload = Base64UrlDecode(parts[1]);
-        using var doc = JsonDocument.Parse(payload);
-        var root = doc.RootElement;
-        var email = root.TryGetProperty("email", out var e) ? e.GetString() : null;
-        if (string.IsNullOrWhiteSpace(email))
-            throw new InvalidOperationException("id_token did not contain an email claim.");
-        var name = root.TryGetProperty("name", out var n) ? n.GetString() : null;
-        return new SsoClaims(email, name);
+        if (!refresh && KeySets.TryGetValue(jwksUri, out var cached) && cached.Until > Now) return cached.Keys;
+        try
+        {
+            var json = await _httpClientFactory.CreateClient(HttpClientName).GetStringAsync(jwksUri, ct);
+            var keys = new JsonWebKeySet(json);
+            KeySets[jwksUri] = (keys, Now.Add(CacheFor));
+            return keys;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or ArgumentException)
+        {
+            _logger.LogWarning("OidcClient.KeysAsync failed: {Error}", ex.GetType().Name);
+            throw new SsoLoginException("SSO_IDP_UNREACHABLE", "Flowamaz couldn't read your identity provider's signing keys. Try again shortly.", 502);
+        }
     }
 
-    private static byte[] Base64UrlDecode(string input)
+    private static string? Claim(JsonWebToken token, string name) =>
+        token.TryGetPayloadValue<string>(name, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
+
+    private static List<string> Groups(JsonWebToken token, string groupsClaim)
     {
-        var s = input.Replace('-', '+').Replace('_', '/');
-        return Convert.FromBase64String(s.PadRight(s.Length + (4 - s.Length % 4) % 4, '='));
+        foreach (var name in new[] { groupsClaim, "groups", "roles" }.Distinct(StringComparer.Ordinal))
+        {
+            if (token.TryGetPayloadValue<string[]>(name, out var many) && many is { Length: > 0 })
+                return many.Where(g => !string.IsNullOrWhiteSpace(g)).Distinct(StringComparer.Ordinal).ToList();
+            if (token.TryGetPayloadValue<string>(name, out var one) && !string.IsNullOrWhiteSpace(one))
+                return [one];
+        }
+        return [];
+    }
+
+    private static string? TryReadString(string json, string property)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty(property, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
+    /// <summary>Test hook: forget cached discovery documents and key sets.</summary>
+    internal static void ClearCaches()
+    {
+        Discoveries.Clear();
+        KeySets.Clear();
     }
 }
