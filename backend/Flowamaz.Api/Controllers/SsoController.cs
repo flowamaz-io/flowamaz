@@ -62,14 +62,18 @@ public sealed class SsoController : ControllerBase
     /// <summary>Returns the organisation's SSO (SAML/OIDC) configuration, or null if not configured. Org-owner only; secrets are never returned.</summary>
     [HttpGet("/api/v1/organisations/{id:guid}/sso")]
     [RequireOrgOwner]
-    public async Task<ActionResult<SsoConfigDto?>> GetConfig(Guid id, CancellationToken ct) =>
-        Ok(await _sso.GetConfigAsync(id, ct));
+    public async Task<ActionResult<SsoConfigDto?>> GetConfig(Guid id, CancellationToken ct)
+    {
+        if (OtherOrg(id) is { } notFound) return notFound;
+        return Ok(await _sso.GetConfigAsync(id, ct));
+    }
 
     /// <summary>Creates or updates the organisation's SSO (SAML/OIDC) configuration. Org-owner only.</summary>
     [HttpPut("/api/v1/organisations/{id:guid}/sso")]
     [RequireOrgOwner]
     public async Task<ActionResult<SsoConfigDto>> Configure(Guid id, [FromBody] ConfigureSsoRequest request, CancellationToken ct)
     {
+        if (OtherOrg(id) is { } notFound) return notFound;
         var orgSlug = _currentUser.OrgSlug ?? string.Empty;
         var result = await _sso.ConfigureAsync(id, orgSlug, request, _currentUser.UserId ?? Guid.Empty, ct);
         return Ok(result);
@@ -80,6 +84,7 @@ public sealed class SsoController : ControllerBase
     [RequireOrgOwner]
     public async Task<IActionResult> Test(Guid id, CancellationToken ct)
     {
+        if (OtherOrg(id) is { } notFound) return notFound;
         var config = await _sso.GetConfigAsync(id, ct);
         if (config is null)
             return Ok(new { ok = false, message = "SSO is not configured yet. Save a configuration first." });
@@ -102,7 +107,24 @@ public sealed class SsoController : ControllerBase
     [RequireOrgOwner]
     public async Task<IActionResult> Disable(Guid id, CancellationToken ct)
     {
+        if (OtherOrg(id) is { } notFound) return notFound;
         await _sso.DisableAsync(id, ct);
         return NoContent();
     }
+
+    /// <summary>
+    /// The organisation in the route must be the caller's own. Without this, the owner of any organisation could read
+    /// or replace another organisation's SSO configuration (pointing it at their own IdP) and sign in as its users.
+    /// 404, not 403, so organisation ids can't be probed.
+    /// </summary>
+    private ObjectResult? OtherOrg(Guid id) =>
+        _currentUser.OrgId == id
+            ? null
+            : NotFound(new
+            {
+                success = false,
+                statusCode = 404,
+                code = "ORG_NOT_FOUND",
+                message = "No organisation with that id is available to you. Open SSO settings from your own organisation.",
+            });
 }
