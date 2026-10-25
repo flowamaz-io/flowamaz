@@ -40,6 +40,12 @@ export interface SsoConfig {
   oidcRedirectUri: string | null;
   /** False when the organisation's plan doesn't include SSO (Enterprise only). */
   planIncludesSso: boolean;
+  /** Accept SAML sign-ins started from the IdP's app tile (off by default: they can't be tied to a browser). */
+  allowIdpInitiated: boolean;
+  /** Email domains that may sign in with SSO; empty means any the IdP vouches for. */
+  allowedEmailDomains: string[] | null;
+  /** Workspaces new SSO accounts join with the default role. */
+  defaultWorkspaceIds: string[] | null;
 }
 
 export interface ConfigureSsoRequest {
@@ -57,6 +63,9 @@ export interface ConfigureSsoRequest {
   defaultRole?: WorkspaceRoleName;
   groupsAttribute?: string;
   groupRoleMappings?: SsoGroupRoleMapping[];
+  allowIdpInitiated?: boolean;
+  allowedEmailDomains?: string[];
+  defaultWorkspaceIds?: string[];
 }
 
 export interface SsoTestResult {

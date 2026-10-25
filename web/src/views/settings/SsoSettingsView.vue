@@ -16,7 +16,7 @@ import { ssoService, type SsoConfig, type SsoGroupRoleMapping, type WorkspaceRol
 const auth = useAuth();
 const toast = useToast();
 const workspaceStore = useWorkspaceStore();
-const ids = { cert: useId(), require: useId(), jit: useId(), active: useId(), role: useId() };
+const ids = { cert: useId(), require: useId(), jit: useId(), active: useId(), role: useId(), idpInit: useId() };
 
 const ROLES: WorkspaceRoleName[] = ['Viewer', 'Runner', 'Operator', 'Designer', 'Admin'];
 
@@ -40,6 +40,9 @@ const jitProvisioning = ref(true);
 const defaultRole = ref<WorkspaceRoleName>('Viewer');
 const groupsAttribute = ref('groups');
 const mappings = ref<SsoGroupRoleMapping[]>([]);
+const allowIdpInitiated = ref(false);
+const allowedDomains = ref('');
+const defaultWorkspaceIds = ref<string[]>([]);
 const config = ref<SsoConfig | null>(null);
 
 const planIncludesSso = computed(() => config.value?.planIncludesSso ?? true);
@@ -77,6 +80,9 @@ async function load(): Promise<void> {
       defaultRole.value = existing.defaultRole;
       groupsAttribute.value = existing.groupsAttribute || 'groups';
       mappings.value = (existing.groupRoleMappings ?? []).map((m) => ({ ...m }));
+      allowIdpInitiated.value = existing.allowIdpInitiated ?? false;
+      allowedDomains.value = (existing.allowedEmailDomains ?? []).join(', ');
+      defaultWorkspaceIds.value = [...(existing.defaultWorkspaceIds ?? [])];
     }
   } catch (e) {
     loadError.value = toUserFacingError(e).message;
@@ -94,6 +100,16 @@ function addMapping(): void {
 function removeMapping(index: number): void {
   mappings.value.splice(index, 1);
 }
+
+function toggleDefaultWorkspace(id: string, on: boolean): void {
+  defaultWorkspaceIds.value = on
+    ? [...new Set([...defaultWorkspaceIds.value, id])]
+    : defaultWorkspaceIds.value.filter((w) => w !== id);
+}
+
+const domainList = computed(() =>
+  allowedDomains.value.split(/[\s,]+/).map((d) => d.trim()).filter((d) => d.length > 0),
+);
 
 async function copy(text: string | null | undefined, what: string): Promise<void> {
   if (!text) return;
@@ -128,7 +144,11 @@ async function save(): Promise<void> {
       defaultRole: defaultRole.value,
       groupsAttribute: groupsAttribute.value.trim() || 'groups',
       groupRoleMappings: mappings.value.map((m) => ({ ...m, group: m.group.trim() })),
+      allowIdpInitiated: allowIdpInitiated.value,
+      allowedEmailDomains: domainList.value,
+      defaultWorkspaceIds: defaultWorkspaceIds.value,
     });
+    allowedDomains.value = (config.value.allowedEmailDomains ?? []).join(', ');
     requireSso.value = config.value.requireSso;
     idpCertificate.value = '';
     clientSecret.value = '';
@@ -361,7 +381,8 @@ async function test(): Promise<void> {
           >
             Require SSO
             <span class="block text-xs text-slate-500">
-              Members can't sign in with a password. Organisation owners still can, so a broken IdP setup can't lock everyone out.
+              Members can't sign in or reset a password, and anyone signed in with a password is signed out. Organisation owners
+              still can, so a broken IdP setup can't lock everyone out.
             </span>
           </label>
         </div>
@@ -382,11 +403,38 @@ async function test(): Promise<void> {
             </span>
           </label>
         </div>
+        <div
+          v-if="provider === 'saml'"
+          class="flex items-start gap-2"
+        >
+          <input
+            :id="ids.idpInit"
+            v-model="allowIdpInitiated"
+            type="checkbox"
+            class="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+          >
+          <label
+            :for="ids.idpInit"
+            class="text-sm text-slate-700"
+          >
+            Allow sign-in from the IdP's app tile
+            <span class="block text-xs text-slate-500">
+              Off is safer: such sign-ins can't be tied to the browser that started them. When off, people start from the
+              Flowamaz sign-in page and still land in the app after the IdP.
+            </span>
+          </label>
+        </div>
+        <FmInput
+          v-model="allowedDomains"
+          label="Allowed email domains"
+          placeholder="acme.com, acme.co.uk"
+          help="Only these domains can sign in with SSO. Leave empty to accept any address your IdP verifies."
+        />
         <div>
           <label
             :for="ids.role"
             class="mb-1 block text-sm font-medium text-slate-700"
-          >Role when no group mapping applies</label>
+          >Role in default workspaces</label>
           <select
             :id="ids.role"
             v-model="defaultRole"
@@ -401,6 +449,38 @@ async function test(): Promise<void> {
             </option>
           </select>
         </div>
+        <fieldset>
+          <legend class="mb-1 text-sm font-medium text-slate-700">
+            Default workspaces
+          </legend>
+          <p class="mb-2 text-xs text-slate-500">
+            New SSO accounts join these with the role above when no group mapping applies. With none chosen, they start
+            without workspace access until a mapping or an admin adds them.
+          </p>
+          <p
+            v-if="workspaceStore.allWorkspaces.length === 0"
+            class="rounded-lg bg-slate-50 p-3 text-sm text-slate-600"
+          >
+            No workspaces yet. Create one from the workspace switcher, then come back to choose defaults.
+          </p>
+          <div
+            v-for="w in workspaceStore.allWorkspaces"
+            :key="w.id"
+            class="flex items-center gap-2 py-0.5"
+          >
+            <input
+              :id="`default-ws-${w.id}`"
+              type="checkbox"
+              :checked="defaultWorkspaceIds.includes(w.id)"
+              class="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+              @change="toggleDefaultWorkspace(w.id, ($event.target as HTMLInputElement).checked)"
+            >
+            <label
+              :for="`default-ws-${w.id}`"
+              class="text-sm text-slate-700"
+            >{{ w.name }}</label>
+          </div>
+        </fieldset>
       </section>
 
       <section class="space-y-4 rounded-xl border border-slate-200 bg-white p-6">
@@ -409,9 +489,9 @@ async function test(): Promise<void> {
             Roles from IdP groups
           </h2>
           <p class="mt-1 text-xs text-slate-500">
-            With mappings, the IdP decides each person's role at every SSO sign-in (the highest matching role wins);
-            role changes made in Flowamaz are replaced at their next sign-in. Owners are never changed, and a workspace's
-            last Admin is never demoted.
+            At every SSO sign-in the IdP decides the role in each mapped workspace (the highest matching role wins), and
+            access SSO granted is removed when someone leaves the group. Memberships you add or change by hand in Flowamaz
+            are kept as you set them. Owners are never changed, and a workspace's last Admin is never demoted.
           </p>
         </div>
         <FmInput
@@ -425,7 +505,7 @@ async function test(): Promise<void> {
           v-if="mappings.length === 0"
           class="rounded-lg bg-slate-50 p-4 text-sm text-slate-600"
         >
-          No mappings yet: everyone gets the role above. Add a mapping to give an IdP group a role, in one workspace or all of them.
+          No mappings yet: new accounts only join the default workspaces above. Add a mapping to give an IdP group a role, in one workspace or all of them.
         </p>
         <div
           v-for="(m, i) in mappings"

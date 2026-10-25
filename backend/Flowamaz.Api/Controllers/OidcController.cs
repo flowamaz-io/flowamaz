@@ -36,7 +36,7 @@ public sealed class OidcController : ControllerBase
     {
         try
         {
-            return Redirect(await _sso.InitiateOidcLoginAsync(orgSlug, returnUrl, ct));
+            return SsoSignInFlow.Start(this, _environment, await _sso.InitiateOidcLoginAsync(orgSlug, returnUrl, ct));
         }
         catch (SsoLoginException ex)
         {
@@ -55,7 +55,7 @@ public sealed class OidcController : ControllerBase
             return Task.FromResult(SsoSignInFlow.StartFailed(this, _configuration, orgSlug,
                 SsoLoginException.Rejected("the identity provider didn't complete the sign-in.")));
         }
-        return SsoSignInFlow.CompleteAsync(this, orgSlug, () => _sso.HandleOidcCallbackAsync(orgSlug, code, state, ct),
+        return SsoSignInFlow.CompleteAsync(this, orgSlug, binding => _sso.HandleOidcCallbackAsync(orgSlug, code, state, binding, ct),
             _auth, _environment, _configuration, _logger, ct);
     }
 }

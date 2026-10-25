@@ -57,7 +57,7 @@ public sealed class OidcClientTests : IDisposable
     {
         var claims = new Dictionary<string, object>
         {
-            ["sub"] = "u1", ["email"] = "Jane@Acme.test", ["name"] = "Jane Doe", ["nonce"] = "n-1",
+            ["sub"] = "u1", ["email"] = "Jane@Acme.test", ["email_verified"] = true, ["name"] = "Jane Doe", ["nonce"] = "n-1",
             ["groups"] = new[] { "Credit", "Ops" },
         };
         change?.Invoke(claims);
@@ -93,6 +93,7 @@ public sealed class OidcClientTests : IDisposable
         claims.Email.Should().Be("jane@acme.test");
         claims.Name.Should().Be("Jane Doe");
         claims.GroupList.Should().Equal("Credit", "Ops");
+        claims.Subject.Should().Be($"oidc|{Issuer}|u1");
         var form = HttpUtility.ParseQueryString(_http.LastTokenRequestBody!);
         form["code_verifier"].Should().Be("verifier-1");
         form["grant_type"].Should().Be("authorization_code");
@@ -167,8 +168,60 @@ public sealed class OidcClientTests : IDisposable
     public async Task An_unverified_email_is_refused()
     {
         TokenEndpointReturns(IdToken(c => c["email_verified"] = false));
-        await FluentActions.Awaiting(Exchange).Should().ThrowAsync<SsoLoginException>().WithMessage("*isn't verified*");
+        await FluentActions.Awaiting(Exchange).Should().ThrowAsync<SsoLoginException>().WithMessage("*email_verified*");
     }
+
+    [Fact]
+    public async Task An_email_the_idp_doesnt_mark_verified_is_refused()
+    {
+        TokenEndpointReturns(IdToken(c => c.Remove("email_verified")));
+        await FluentActions.Awaiting(Exchange).Should().ThrowAsync<SsoLoginException>().WithMessage("*email_verified*");
+    }
+
+    [Fact]
+    public async Task Entra_verified_email_claim_is_accepted()
+    {
+        TokenEndpointReturns(IdToken(c => { c.Remove("email_verified"); c["xms_edov"] = true; }));
+        (await Exchange()).Email.Should().Be("jane@acme.test");
+    }
+
+    [Fact]
+    public async Task A_upn_is_never_used_as_the_email()
+    {
+        TokenEndpointReturns(IdToken(c => { c.Remove("email"); c["upn"] = "ceo@acme.test"; }));
+        await FluentActions.Awaiting(Exchange).Should().ThrowAsync<SsoLoginException>().WithMessage("*no email*");
+    }
+
+    [Theory]
+    [InlineData("http://idp.acme.test")]
+    [InlineData("https://user:pw@idp.acme.test")]
+    public async Task An_insecure_issuer_url_is_refused(string issuer) =>
+        await FluentActions.Awaiting(() => Client().DiscoverAsync(issuer)).Should().ThrowAsync<SsoLoginException>().WithMessage("*https*");
+
+    [Fact]
+    public async Task Discovery_pointing_at_http_endpoints_is_refused()
+    {
+        _http.Routes["/.well-known/openid-configuration"] = () => JsonSerializer.Serialize(new
+        {
+            issuer = Issuer, authorization_endpoint = $"{Issuer}/a", token_endpoint = "http://169.254.169.254/latest", jwks_uri = $"{Issuer}/k",
+        });
+        await FluentActions.Awaiting(() => Client().DiscoverAsync(Issuer)).Should().ThrowAsync<SsoLoginException>().WithMessage("*token endpoint*https*");
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:9/")]
+    [InlineData("http://169.254.169.254/latest/meta-data")]
+    [InlineData("http://10.0.0.1:9/")]
+    public async Task The_oidc_http_handler_refuses_private_addresses(string url)
+    {
+        using var client = new HttpClient(OidcClient.CreateHandler(allowPrivateNetworks: false)) { Timeout = TimeSpan.FromSeconds(5) };
+        var ex = await FluentActions.Awaiting(() => client.GetAsync(url)).Should().ThrowAsync<HttpRequestException>();
+        ex.Which.Message.Should().Contain("private or internal");
+    }
+
+    [Fact]
+    public void The_oidc_http_handler_follows_no_redirects() =>
+        OidcClient.CreateHandler(allowPrivateNetworks: false).AllowAutoRedirect.Should().BeFalse();
 
     [Fact]
     public async Task Discovery_with_a_different_issuer_is_refused()

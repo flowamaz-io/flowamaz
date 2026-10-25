@@ -43,6 +43,8 @@ public sealed class SamlTestIdp : IDisposable
         public string SignatureMethod { get; init; } = SignedXml.XmlDsigRSASHA256Url;
         public string DigestMethod { get; init; } = SignedXml.XmlDsigSHA256Url;
         public string AssertionId { get; init; } = "_a" + Guid.NewGuid().ToString("N");
+        public string NameIdFormat { get; init; } = "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress";
+        public string? NameId { get; init; }
     }
 
     public XmlDocument BuildDocument(Options o)
@@ -58,7 +60,7 @@ public sealed class SamlTestIdp : IDisposable
             $"<samlp:Status><samlp:StatusCode Value=\"{o.Status}\"/></samlp:Status>" +
             $"<saml:Assertion ID=\"{o.AssertionId}\" Version=\"2.0\" IssueInstant=\"{T(o.Now)}\">" +
             $"<saml:Issuer>{o.Issuer}</saml:Issuer>" +
-            $"<saml:Subject><saml:NameID Format=\"urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress\">{o.Email}</saml:NameID>" +
+            $"<saml:Subject><saml:NameID Format=\"{o.NameIdFormat}\">{o.NameId ?? o.Email}</saml:NameID>" +
             $"<saml:SubjectConfirmation Method=\"urn:oasis:names:tc:SAML:2.0:cm:bearer\">" +
             $"<saml:SubjectConfirmationData Recipient=\"{o.Recipient}\" NotOnOrAfter=\"{T(o.Now + o.ValidFor)}\"{inResponse}/>" +
             "</saml:SubjectConfirmation></saml:Subject>" +
@@ -66,6 +68,7 @@ public sealed class SamlTestIdp : IDisposable
             $"<saml:AudienceRestriction><saml:Audience>{o.Audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions>" +
             "<saml:AttributeStatement>" +
             "<saml:Attribute Name=\"displayName\"><saml:AttributeValue>Jane Doe</saml:AttributeValue></saml:Attribute>" +
+            $"<saml:Attribute Name=\"email\"><saml:AttributeValue>{o.Email}</saml:AttributeValue></saml:Attribute>" +
             groups + "</saml:AttributeStatement>" +
             "</saml:Assertion></samlp:Response>";
 

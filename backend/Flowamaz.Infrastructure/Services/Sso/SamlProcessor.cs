@@ -156,8 +156,11 @@ public sealed class SamlProcessor : ISamlProcessor
             var (confirmationExpiry, inResponseTo) = CheckSubjectConfirmation(assertion, expected.AcsUrl, now, ns);
             var conditionsExpiry = CheckConditions(assertion, expected.SpEntityId, now, ns);
 
+            // The replay cache keys on this id, so it must be present and well-formed (xs:ID is an NCName).
             var assertionId = assertion.GetAttribute("ID");
-            var claims = ReadClaims(assertion, expected.GroupsAttribute, ns);
+            if (!IsNcName(assertionId))
+                throw SsoLoginException.Rejected("the assertion has no valid ID.");
+            var claims = ReadClaims(assertion, expected.GroupsAttribute, issuer!, ns);
             var expiry = conditionsExpiry is { } c && c < confirmationExpiry ? c : confirmationExpiry;
 
             _logger.LogInformation("SamlProcessor.ValidateResponse ok assertion={AssertionId} groups={GroupCount}", assertionId, claims.GroupList.Count);
@@ -306,7 +309,7 @@ public sealed class SamlProcessor : ISamlProcessor
         return notOnOrAfter;
     }
 
-    private static SsoClaims ReadClaims(XmlElement assertion, string groupsAttribute, XmlNamespaceManager ns)
+    private static SsoClaims ReadClaims(XmlElement assertion, string groupsAttribute, string issuer, XmlNamespaceManager ns)
     {
         var attributes = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         var nodes = assertion.SelectNodes("a:AttributeStatement/a:Attribute", ns);
@@ -325,7 +328,8 @@ public sealed class SamlProcessor : ISamlProcessor
         string? First(IEnumerable<string> names) =>
             names.Select(n => attributes.TryGetValue(n, out var v) ? v.FirstOrDefault() : null).FirstOrDefault(v => v is not null);
 
-        var nameId = assertion.SelectSingleNode("a:Subject/a:NameID", ns)?.InnerText.Trim();
+        var nameIdElement = assertion.SelectSingleNode("a:Subject/a:NameID", ns) as XmlElement;
+        var nameId = nameIdElement?.InnerText.Trim();
         var email = IsEmail(nameId) ? nameId : First(EmailAttributes);
         if (!IsEmail(email))
             throw SsoLoginException.Rejected("the assertion has no email address. Send the email as NameID or an 'email' attribute.");
@@ -342,7 +346,21 @@ public sealed class SamlProcessor : ISamlProcessor
         var groups = groupNames.SelectMany(n => attributes.TryGetValue(n, out var v) ? v : [])
             .Distinct(StringComparer.Ordinal).ToList();
 
-        return new SsoClaims(email!.ToLowerInvariant(), name, groups);
+        // A persistent NameID is the IdP's stable id for the person; the account is linked to it. Transient and
+        // email NameIDs aren't stable identities, so they don't link.
+        var subject = nameIdElement?.GetAttribute("Format") == PersistentNameIdFormat && !string.IsNullOrEmpty(nameId)
+            ? $"saml|{issuer}|{nameId}" : null;
+
+        return new SsoClaims(email!.ToLowerInvariant(), name, groups, subject);
+    }
+
+    private const string PersistentNameIdFormat = "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
+
+    internal static bool IsNcName(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length > 256) return false;
+        try { XmlConvert.VerifyNCName(value); return true; }
+        catch (XmlException) { return false; }
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────────────

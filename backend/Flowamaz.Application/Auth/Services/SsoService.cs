@@ -18,12 +18,18 @@ namespace Flowamaz.Application.Auth.Services;
 /// Single sign-on for Enterprise organisations (FUNCTIONAL.md §12.6).
 /// <list type="bullet">
 /// <item>Only organisations whose plan includes SSO can configure or use it.</item>
-/// <item>SAML 2.0 (SP-initiated with InResponseTo checks, or IdP-initiated) and OIDC (code + PKCE + nonce).
-/// Protocol checks live in <see cref="ISamlProcessor"/> / <see cref="IOidcClient"/>; this class ties each response to
-/// the sign-in that started it, blocks replays, and decides who gets in.</item>
-/// <item>Just-in-time accounts are optional. With group mappings configured, the IdP decides workspace roles at
-/// every sign-in; org owners are never changed by SSO.</item>
-/// <item>"Require SSO" blocks password sign-in for everyone except org owners (break-glass).</item>
+/// <item>SAML 2.0 (SP-initiated with InResponseTo checks; IdP-initiated only when the org turns it on) and OIDC
+/// (code + PKCE + nonce). Protocol checks live in <see cref="ISamlProcessor"/> / <see cref="IOidcClient"/>; this
+/// class ties each response to the sign-in and the browser that started it (<see cref="SsoBrowserBinding"/>),
+/// blocks replays, and decides who gets in.</item>
+/// <item>Accounts are linked to the IdP subject on first SSO sign-in; a different subject for the same email is
+/// refused. Optional allow-list of email domains.</item>
+/// <item>Just-in-time accounts are optional. Workspace access comes from group mappings and the default workspaces.
+/// SSO only changes memberships it created (<see cref="WorkspaceMember.ManagedBySso"/>); memberships added or edited
+/// by hand, and ones an admin deactivated, are left alone. Org owners are never changed by SSO. A workspace's last
+/// Admin is never demoted (checked under a per-workspace lock).</item>
+/// <item>"Require SSO" blocks password sign-in and password resets for everyone except org owners (break-glass),
+/// and signs out existing non-owner sessions when turned on.</item>
 /// </list>
 /// Sessions are issued by the caller (the same refresh-cookie session as password sign-in), never put in a URL.
 /// </summary>
@@ -37,6 +43,7 @@ public sealed class SsoService : ISsoService
     private readonly IOrgUserRepository _orgUsers;
     private readonly IWorkspaceRepository _workspaces;
     private readonly IWorkspaceMemberRepository _members;
+    private readonly IRefreshTokenRepository _refreshTokens;
     private readonly ISecretProtector _protector;
     private readonly ISamlProcessor _saml;
     private readonly IOidcClient _oidc;
@@ -54,6 +61,7 @@ public sealed class SsoService : ISsoService
         IOrgUserRepository orgUsers,
         IWorkspaceRepository workspaces,
         IWorkspaceMemberRepository members,
+        IRefreshTokenRepository refreshTokens,
         ISecretProtector protector,
         ISamlProcessor saml,
         IOidcClient oidc,
@@ -70,6 +78,7 @@ public sealed class SsoService : ISsoService
         _orgUsers = orgUsers;
         _workspaces = workspaces;
         _members = members;
+        _refreshTokens = refreshTokens;
         _protector = protector;
         _saml = saml;
         _oidc = oidc;
@@ -128,6 +137,7 @@ public sealed class SsoService : ISsoService
         var config = await _configs.GetByOrgIdAsync(orgId, ct);
         var isNew = config is null;
         config ??= new OrgSsoConfig { OrgId = orgId, CreatedBy = configuredBy };
+        var wasRequired = config is { IsActive: true, RequireSso: true };
 
         config.Provider = request.Provider;
         config.SpEntityId = SpEntityId(org.Slug);
@@ -139,6 +149,8 @@ public sealed class SsoService : ISsoService
             config.EncryptedIdpCertificate = _protector.Protect(orgId, request.IdpCertificate.Trim());
         }
         config.IssuerUrl = Clean(request.IssuerUrl);
+        if (config.IssuerUrl is not null && !IsAcceptableIssuerUrl(config.IssuerUrl))
+            throw Invalid("The issuer URL must be an https URL, e.g. https://acme.okta.com.");
         config.ClientId = Clean(request.ClientId);
         if (!string.IsNullOrWhiteSpace(request.ClientSecret))
             config.EncryptedClientSecret = _protector.Protect(orgId, request.ClientSecret.Trim());
@@ -152,6 +164,10 @@ public sealed class SsoService : ISsoService
             config.GroupsAttribute = string.IsNullOrWhiteSpace(attribute) ? "groups" : attribute.Trim();
         if (request.GroupRoleMappings is { } mappings)
             config.GroupRoleMappings = await ValidateMappingsAsync(orgId, mappings, ct);
+        if (request.DefaultWorkspaceIds is { } defaults)
+            config.DefaultWorkspaceIds = await ValidateWorkspacesAsync(orgId, defaults, ct);
+        if (request.AllowIdpInitiated is { } idpInitiated) config.AllowIdpInitiated = idpInitiated;
+        if (request.AllowedEmailDomains is { } domains) config.AllowedEmailDomains = ValidateDomains(domains);
 
         config.IsActive = request.IsActive;
         if (config.IsActive && MissingForActivation(config) is { } missing)
@@ -163,10 +179,17 @@ public sealed class SsoService : ISsoService
         else _configs.Update(config);
         await _unitOfWork.SaveChangesAsync(ct);
 
+        // Turning on "require SSO" ends existing password sessions, so members re-authenticate through the IdP.
+        var revoked = 0;
+        if (config is { IsActive: true, RequireSso: true } && !wasRequired)
+            revoked = await _refreshTokens.RevokeAllForOrgNonOwnersAsync(orgId, ct);
+
         Audit(orgId, configuredBy, "sso.configured", "updated", new
         {
             provider = config.Provider, active = config.IsActive, requireSso = config.RequireSso,
             jit = config.JitProvisioning, mappings = config.GroupRoleMappings.Count,
+            defaultWorkspaces = config.DefaultWorkspaceIds.Count, idpInitiated = config.AllowIdpInitiated,
+            domains = config.AllowedEmailDomains.Count, sessionsEnded = revoked,
         }, ct);
         _logger.LogInformation("SsoService.ConfigureAsync exit org={OrgId}", orgId);
         return ToDto(config, org.Slug, planIncludesSso: true);
@@ -198,16 +221,33 @@ public sealed class SsoService : ISsoService
     {
         var config = await _configs.GetByOrgIdAsync(orgId, ct) ?? new OrgSsoConfig { OrgId = orgId };
         var normalised = email.Trim().ToLowerInvariant();
+        if (!claims.EmailVerified)
+            throw SsoLoginException.Rejected("the identity provider doesn't confirm this email address is verified.");
+        if (!EmailDomainAllowed(normalised, config))
+            throw SsoLoginException.Rejected(
+                $"addresses at '{Domain(normalised)}' can't sign in to this organisation. Use your work email, or ask an org owner to add the domain in SSO settings.");
+
+        await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
         var user = await _orgUsers.GetByEmailAndOrgAsync(normalised, orgId, ct);
 
         if (user is not null)
         {
             if (!user.IsActive) throw SsoLoginException.Deactivated();
+            if (claims.Subject is { } subject)
+            {
+                if (user.SsoSubject is null) user.SsoSubject = subject;
+                else if (!string.Equals(user.SsoSubject, subject, StringComparison.Ordinal))
+                {
+                    _logger.LogWarning("SsoService refused sign-in: subject mismatch user={UserId} org={OrgId}", user.Id, orgId);
+                    throw SsoLoginException.Rejected(
+                        "this Flowamaz account is linked to a different person at your identity provider. Ask an org owner to check the account's email address in your IdP.");
+                }
+            }
             if (!string.IsNullOrWhiteSpace(claims.Name) && claims.Name != user.Name) user.Name = claims.Name;
             user.LastLoginAt = DateTime.UtcNow;
-            if (!user.IsOrgOwner && config.GroupRoleMappings.Count > 0)
-                await ApplyGroupRolesAsync(user, config, claims.GroupList, ct);
+            if (!user.IsOrgOwner) await SyncMembershipsAsync(user, config, claims.GroupList, isNew: false, ct);
             await _unitOfWork.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
             return user;
         }
 
@@ -221,46 +261,74 @@ public sealed class SsoService : ISsoService
             PasswordHash = string.Empty, // SSO accounts never password-login
             IsActive = true,
             IsSsoProvisioned = true,
+            SsoSubject = claims.Subject,
             LastLoginAt = DateTime.UtcNow,
         };
         await _orgUsers.AddAsync(user, ct);
-        await ApplyGroupRolesAsync(user, config, claims.GroupList, ct, isNew: true);
+        await SyncMembershipsAsync(user, config, claims.GroupList, isNew: true, ct);
         await _unitOfWork.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         _logger.LogInformation("SsoService.ProvisionUserFromSsoAsync created user={UserId} org={OrgId}", user.Id, orgId);
         return user;
     }
 
     /// <summary>
-    /// Sets the user's role in each workspace from their IdP groups (highest matching role; <c>DefaultRole</c> when
-    /// none match). New users get memberships everywhere; existing users are updated only when mappings exist.
-    /// Never demotes a workspace's last active Admin.
+    /// Brings the user's SSO-managed memberships in line with their IdP groups. For each workspace in scope (named by
+    /// a mapping, covered by an all-workspaces mapping, or a default workspace) the wanted role is the highest
+    /// matching mapping, else <c>DefaultRole</c> for default workspaces, else none.
+    /// <list type="bullet">
+    /// <item>No membership yet and a role is wanted → added, marked <see cref="WorkspaceMember.ManagedBySso"/>.</item>
+    /// <item>SSO-managed membership → role updated, or deactivated when no role is wanted (and re-activated later).</item>
+    /// <item>Memberships added or edited by hand, or deactivated by an admin, are never touched.</item>
+    /// <item>A workspace's last active Admin is kept, checked under a per-workspace lock.</item>
+    /// </list>
     /// </summary>
-    private async Task ApplyGroupRolesAsync(OrgUser user, OrgSsoConfig config, IReadOnlyList<string> groups, CancellationToken ct, bool isNew = false)
+    private async Task SyncMembershipsAsync(OrgUser user, OrgSsoConfig config, IReadOnlyList<string> groups, bool isNew, CancellationToken ct)
     {
+        if (config.GroupRoleMappings.Count == 0 && config.DefaultWorkspaceIds.Count == 0) return;
+
         var groupSet = groups.ToHashSet(StringComparer.Ordinal);
-        foreach (var workspace in await _workspaces.GetForOrgAsync(user.OrgId, ct))
+        var coversAll = config.GroupRoleMappings.Any(m => m.WorkspaceId is null);
+        var named = config.GroupRoleMappings.Where(m => m.WorkspaceId is not null).Select(m => m.WorkspaceId!.Value)
+            .Concat(config.DefaultWorkspaceIds).ToHashSet();
+
+        foreach (var workspace in (await _workspaces.GetForOrgAsync(user.OrgId, ct)).OrderBy(w => w.Id))
         {
+            if (!coversAll && !named.Contains(workspace.Id)) continue;
+
             var matched = config.GroupRoleMappings
                 .Where(m => groupSet.Contains(m.Group) && (m.WorkspaceId is null || m.WorkspaceId == workspace.Id))
                 .Select(m => (WorkspaceRole?)m.Role)
                 .Max();
-            var role = matched ?? config.DefaultRole;
+            var wanted = matched ?? (config.DefaultWorkspaceIds.Contains(workspace.Id) ? config.DefaultRole : null);
 
             var member = isNew ? null : await _members.GetAsync(workspace.Id, user.Id, ct);
             if (member is null)
             {
-                await _members.AddAsync(new WorkspaceMember { WorkspaceId = workspace.Id, OrgUserId = user.Id, Role = role, IsActive = true }, ct);
+                if (wanted is { } role)
+                    await _members.AddAsync(new WorkspaceMember
+                    {
+                        WorkspaceId = workspace.Id, OrgUserId = user.Id, Role = role, IsActive = true, ManagedBySso = true,
+                    }, ct);
                 continue;
             }
-            if (member.Role == role && member.IsActive) continue;
-            if (member.Role == WorkspaceRole.Admin && role != WorkspaceRole.Admin
-                && await _members.CountActiveAdminsAsync(workspace.Id, ct) <= 1)
+            if (!member.ManagedBySso) continue; // added or edited by hand, or deactivated by an admin
+
+            var (newRole, newActive) = wanted is { } w ? (w, true) : (member.Role, false);
+            if (member.Role == newRole && member.IsActive == newActive) continue;
+
+            var losesAdmin = member is { IsActive: true, Role: WorkspaceRole.Admin } && (!newActive || newRole != WorkspaceRole.Admin);
+            if (losesAdmin)
             {
-                _logger.LogWarning("SsoService kept last Admin of workspace={WorkspaceId} user={UserId} (IdP groups would demote)", workspace.Id, user.Id);
-                continue;
+                await _members.LockAdminsAsync(workspace.Id, ct);
+                if (await _members.CountActiveAdminsAsync(workspace.Id, ct) <= 1)
+                {
+                    _logger.LogWarning("SsoService kept last Admin of workspace={WorkspaceId} user={UserId} (IdP groups would demote)", workspace.Id, user.Id);
+                    continue;
+                }
             }
-            member.Role = role;
-            member.IsActive = true;
+            member.Role = newRole;
+            member.IsActive = newActive;
             _members.Update(member);
         }
     }
@@ -273,15 +341,16 @@ public sealed class SsoService : ISsoService
         return _saml.BuildSpMetadata(SpEntityId(orgSlug), AcsUrl(orgSlug));
     }
 
-    public async Task<string> InitiateSamlLoginAsync(string orgSlug, string? returnUrl, CancellationToken ct = default)
+    public async Task<SsoRedirect> InitiateSamlLoginAsync(string orgSlug, string? returnUrl, CancellationToken ct = default)
     {
         var (_, config) = await ResolveAsync(orgSlug, "saml", ct);
         var requestId = "_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(20)).ToLowerInvariant();
         var key = await _states.CreateAsync(new SsoLoginState(orgSlug, "saml", SafeReturnPath(returnUrl), SamlRequestId: requestId), ct);
-        return _saml.BuildAuthnRequest(config.IdpSsoUrl!, SpEntityId(orgSlug), AcsUrl(orgSlug), requestId, key).RedirectUrl;
+        return new SsoRedirect(_saml.BuildAuthnRequest(config.IdpSsoUrl!, SpEntityId(orgSlug), AcsUrl(orgSlug), requestId, key).RedirectUrl, key);
     }
 
-    public async Task<SsoLoginResult> HandleSamlCallbackAsync(string orgSlug, string samlResponse, string? relayState, CancellationToken ct = default)
+    public async Task<SsoLoginResult> HandleSamlCallbackAsync(
+        string orgSlug, string samlResponse, string? relayState, string? browserBinding, CancellationToken ct = default)
     {
         var (org, config) = await ResolveAsync(orgSlug, "saml", ct);
         try
@@ -296,9 +365,14 @@ public sealed class SsoService : ISsoService
                 // SP-initiated: the response must answer the request this browser started.
                 var state = relayState is null ? null : await _states.ConsumeAsync(relayState, ct);
                 if (state is null || state.Protocol != "saml" || !string.Equals(state.OrgSlug, orgSlug, StringComparison.OrdinalIgnoreCase)
-                    || state.SamlRequestId != assertion.InResponseTo)
+                    || state.SamlRequestId != assertion.InResponseTo || !SsoBrowserBinding.Matches(browserBinding, relayState))
                     throw SsoLoginException.Expired();
                 returnPath = state.ReturnPath;
+            }
+            else if (!config.AllowIdpInitiated)
+            {
+                throw SsoLoginException.Rejected(
+                    "sign-in started from the identity provider's app tile isn't allowed for this organisation. Start from the Flowamaz sign-in page, or ask an org owner to allow IdP-initiated sign-in in SSO settings.");
             }
 
             if (!await _replay.TryRecordAsync(orgSlug, assertion.AssertionId, assertion.NotOnOrAfterUtc, ct))
@@ -317,7 +391,7 @@ public sealed class SsoService : ISsoService
 
     // ── OIDC ────────────────────────────────────────────────────────────────────────────
 
-    public async Task<string> InitiateOidcLoginAsync(string orgSlug, string? returnUrl, CancellationToken ct = default)
+    public async Task<SsoRedirect> InitiateOidcLoginAsync(string orgSlug, string? returnUrl, CancellationToken ct = default)
     {
         var (_, config) = await ResolveAsync(orgSlug, "oidc", ct);
         var discovery = await _oidc.DiscoverAsync(config.IssuerUrl!, ct);
@@ -326,17 +400,18 @@ public sealed class SsoService : ISsoService
         var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var key = await _states.CreateAsync(
             new SsoLoginState(orgSlug, "oidc", SafeReturnPath(returnUrl), OidcNonce: nonce, OidcCodeVerifier: verifier), ct);
-        return _oidc.BuildAuthorizeUrl(discovery, config.ClientId!, OidcRedirectUri(orgSlug), config.Scopes, key, nonce, challenge);
+        return new SsoRedirect(_oidc.BuildAuthorizeUrl(discovery, config.ClientId!, OidcRedirectUri(orgSlug), config.Scopes, key, nonce, challenge), key);
     }
 
-    public async Task<SsoLoginResult> HandleOidcCallbackAsync(string orgSlug, string code, string state, CancellationToken ct = default)
+    public async Task<SsoLoginResult> HandleOidcCallbackAsync(
+        string orgSlug, string code, string state, string? browserBinding, CancellationToken ct = default)
     {
         var (org, config) = await ResolveAsync(orgSlug, "oidc", ct);
         try
         {
             var saved = await _states.ConsumeAsync(state, ct);
             if (saved is null || saved.Protocol != "oidc" || !string.Equals(saved.OrgSlug, orgSlug, StringComparison.OrdinalIgnoreCase)
-                || saved.OidcNonce is null || saved.OidcCodeVerifier is null)
+                || saved.OidcNonce is null || saved.OidcCodeVerifier is null || !SsoBrowserBinding.Matches(browserBinding, state))
                 throw SsoLoginException.Expired();
 
             var secret = _protector.Unprotect(org.Id, config.EncryptedClientSecret!);
@@ -398,6 +473,40 @@ public sealed class SsoService : ISsoService
         return result;
     }
 
+    private async Task<List<Guid>> ValidateWorkspacesAsync(Guid orgId, IReadOnlyList<Guid> ids, CancellationToken ct)
+    {
+        if (ids.Count > 200) throw Invalid("Choose at most 200 default workspaces.");
+        var workspaceIds = (await _workspaces.GetForOrgAsync(orgId, ct)).Select(w => w.Id).ToHashSet();
+        if (ids.Any(id => !workspaceIds.Contains(id)))
+            throw Invalid("A default workspace isn't in this organisation. Pick workspaces from the list.");
+        return ids.Distinct().ToList();
+    }
+
+    private static List<string> ValidateDomains(IReadOnlyList<string> domains)
+    {
+        if (domains.Count > 50) throw Invalid("Use at most 50 allowed email domains.");
+        var result = new List<string>();
+        foreach (var raw in domains)
+        {
+            var domain = raw?.Trim().TrimStart('@').ToLowerInvariant() ?? "";
+            if (domain.Length == 0) continue;
+            if (domain.Length > 253 || !domain.Contains('.') || Uri.CheckHostName(domain) != UriHostNameType.Dns)
+                throw Invalid($"'{raw}' isn't an email domain. Enter domains like acme.com.");
+            if (!result.Contains(domain)) result.Add(domain);
+        }
+        return result;
+    }
+
+    private static string Domain(string email) => email[(email.LastIndexOf('@') + 1)..];
+
+    private static bool EmailDomainAllowed(string email, OrgSsoConfig config) =>
+        config.AllowedEmailDomains.Count == 0 || config.AllowedEmailDomains.Contains(Domain(email), StringComparer.OrdinalIgnoreCase);
+
+    private bool IsAcceptableIssuerUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttps || (uri.Scheme == Uri.UriSchemeHttp && string.Equals(_configuration["Sso:AllowInsecureIdp"], "true", StringComparison.OrdinalIgnoreCase)))
+        && string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Fragment);
+
     private static void ValidateCertificate(string pem)
     {
         try
@@ -450,5 +559,6 @@ public sealed class SsoService : ISsoService
         new(c.OrgId, c.Provider, c.IsActive, c.IdpEntityId, c.IdpSsoUrl, SpEntityId(orgSlug), c.IssuerUrl, c.ClientId,
             c.Scopes, c.EncryptedIdpCertificate is not null, c.EncryptedClientSecret is not null,
             c.RequireSso, c.JitProvisioning, c.DefaultRole, c.GroupsAttribute, c.GroupRoleMappings,
-            AcsUrl(orgSlug), MetadataUrl(orgSlug), OidcRedirectUri(orgSlug), planIncludesSso);
+            AcsUrl(orgSlug), MetadataUrl(orgSlug), OidcRedirectUri(orgSlug), planIncludesSso,
+            c.AllowIdpInitiated, c.AllowedEmailDomains, c.DefaultWorkspaceIds);
 }

@@ -29,6 +29,7 @@ public class AuthServiceTests
     private readonly Mock<IEmailService> _email = new();
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
+    private readonly Mock<ISsoService> _sso = new();
 
     private const string GoodPassword = "Sup3rSecret!";
 
@@ -56,7 +57,8 @@ public class AuthServiceTests
             _refreshRepo.Object, _resetRepo.Object, _jwt.Object, _email.Object, _uow.Object,
             Options.Create(new JwtOptions { AccessTokenExpiryMinutes = 15, RefreshTokenExpiryDays = 7 }),
             config,
-            NullLogger<AuthService>.Instance);
+            NullLogger<AuthService>.Instance,
+            _sso.Object);
     }
 
     private static OrgUser UserWithPassword(string password) => new()
@@ -271,6 +273,39 @@ public class AuthServiceTests
             t.OrgUserId == user.Id && t.ExpiresAt > DateTime.UtcNow), It.IsAny<CancellationToken>()), Times.Once);
         _email.Verify(e => e.SendAsync(user.Email, It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RequestPasswordResetAsync_for_an_sso_created_account_sends_nothing()
+    {
+        var user = UserWithPassword(GoodPassword);
+        user.IsSsoProvisioned = true;
+        _orgService.Setup(s => s.GetBySlugAsync("acme", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Organisation { Id = user.OrgId, Slug = "acme" });
+        _orgUserService.Setup(s => s.GetByEmailAndOrgAsync(user.Email, user.OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+
+        await CreateService().RequestPasswordResetAsync(user.Email, "acme");
+
+        _resetRepo.Verify(r => r.AddAsync(It.IsAny<PasswordResetToken>(), It.IsAny<CancellationToken>()), Times.Never);
+        _email.Verify(e => e.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResetPasswordAsync_is_refused_when_the_org_requires_sso_for_this_member()
+    {
+        var user = UserWithPassword(GoodPassword);
+        var plain = "ssotoken";
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(plain))).ToLowerInvariant();
+        _resetRepo.Setup(r => r.GetByHashAsync(hash, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PasswordResetToken { OrgUserId = user.Id, TokenHash = hash, ExpiresAt = DateTime.UtcNow.AddHours(1) });
+        _orgUserRepo.Setup(r => r.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _sso.Setup(s => s.IsPasswordLoginBlockedAsync(user.OrgId, user, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var act = () => CreateService().ResetPasswordAsync(plain, "acme", "NewPass1!");
+
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_REQUIRED");
+        BCrypt.Net.BCrypt.Verify(GoodPassword, user.PasswordHash).Should().BeTrue();
     }
 
     [Fact]

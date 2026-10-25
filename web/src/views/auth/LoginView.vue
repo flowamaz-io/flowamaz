@@ -71,7 +71,7 @@ watch(orgSlug, onOrgInput);
 // words, so a crafted link can't put arbitrary text on the sign-in page.
 const SSO_ERRORS: Record<string, string> = {
   SSO_RESPONSE_REJECTED: "Your identity provider's sign-in couldn't be verified. Try again; if it keeps failing, ask your administrator to check the SSO settings.",
-  SSO_SIGNIN_EXPIRED: 'That sign-in took too long or was already used. Start again with "Continue with SSO".',
+  SSO_SIGNIN_EXPIRED: 'That sign-in took too long, was already used, or was started in another browser. Start again here with "Continue with SSO".',
   SSO_NO_ACCOUNT: "You signed in with your identity provider, but you don't have a Flowamaz account in this organisation yet. Ask your administrator to invite you.",
   SSO_ACCOUNT_DEACTIVATED: 'Your Flowamaz account in this organisation is deactivated. Ask your administrator to reactivate it.',
   SSO_NOT_ON_PLAN: 'Single sign-on is part of the Enterprise plan, and this organisation is on a different plan. Sign in with your password or ask your organisation owner.',

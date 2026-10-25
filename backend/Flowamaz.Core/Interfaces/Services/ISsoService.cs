@@ -3,10 +3,42 @@ using Flowamaz.Core.Enums;
 
 namespace Flowamaz.Core.Interfaces.Services;
 
-/// <summary>Identity claims from a verified SSO assertion or id_token, normalised across SAML and OIDC.</summary>
-public sealed record SsoClaims(string Email, string? Name, IReadOnlyList<string>? Groups = null)
+/// <summary>
+/// Identity claims from a verified SSO assertion or id_token, normalised across SAML and OIDC.
+/// <see cref="Subject"/> is the IdP's stable id for the person ("oidc|{iss}|{sub}" or "saml|{issuer}|{NameID}");
+/// an account is linked to it on first SSO sign-in and must match it afterwards. <see cref="EmailVerified"/>: the IdP
+/// vouches for the address (OIDC email_verified / Entra xms_edov; SAML from the org's own signed IdP).
+/// </summary>
+public sealed record SsoClaims(
+    string Email, string? Name, IReadOnlyList<string>? Groups = null, string? Subject = null, bool EmailVerified = true)
 {
     public IReadOnlyList<string> GroupList => Groups ?? [];
+}
+
+/// <summary>Where to send the browser to start an SSO sign-in, and the state key to bind to that browser.</summary>
+public sealed record SsoRedirect(string Url, string StateKey);
+
+/// <summary>
+/// Ties an SSO sign-in to the browser that started it (login-CSRF protection): starting a sign-in sets a cookie
+/// holding a hash of the state key, and the callback only proceeds when the cookie matches the returned state.
+/// Without this, an attacker could hand a victim's browser the attacker's own IdP response and sign the victim in
+/// as the attacker.
+/// </summary>
+public static class SsoBrowserBinding
+{
+    public const string CookieName = "fmz_sso";
+
+    public static string For(string stateKey) =>
+        Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(stateKey)))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    public static bool Matches(string? cookieValue, string? stateKey)
+    {
+        if (string.IsNullOrEmpty(cookieValue) || string.IsNullOrEmpty(stateKey)) return false;
+        var expected = System.Text.Encoding.ASCII.GetBytes(For(stateKey));
+        var actual = System.Text.Encoding.ASCII.GetBytes(cookieValue);
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(expected, actual);
+    }
 }
 
 /// <summary>A SAML response that passed every check, with what replay protection needs.</summary>
@@ -53,7 +85,10 @@ public sealed record SsoConfigDto(
     string? AcsUrl = null,
     string? MetadataUrl = null,
     string? OidcRedirectUri = null,
-    bool PlanIncludesSso = true);
+    bool PlanIncludesSso = true,
+    bool AllowIdpInitiated = false,
+    IReadOnlyList<string>? AllowedEmailDomains = null,
+    IReadOnlyList<Guid>? DefaultWorkspaceIds = null);
 
 /// <summary>Request to configure an org's SSO (provider, IdP details, secret material, access rules).</summary>
 public sealed record ConfigureSsoRequest(
@@ -70,7 +105,10 @@ public sealed record ConfigureSsoRequest(
     bool? JitProvisioning = null,
     WorkspaceRole? DefaultRole = null,
     string? GroupsAttribute = null,
-    IReadOnlyList<SsoGroupRoleMapping>? GroupRoleMappings = null);
+    IReadOnlyList<SsoGroupRoleMapping>? GroupRoleMappings = null,
+    bool? AllowIdpInitiated = null,
+    IReadOnlyList<string>? AllowedEmailDomains = null,
+    IReadOnlyList<Guid>? DefaultWorkspaceIds = null);
 
 /// <summary>
 /// Single sign-on for Enterprise organisations (FUNCTIONAL.md §12.6): SAML 2.0 and OIDC, just-in-time
@@ -96,12 +134,12 @@ public interface ISsoService
 
     // ── SAML ──────────────────────────────────────────────────────────────────
     Task<string> GetSpMetadataAsync(string orgSlug, CancellationToken ct = default);
-    Task<string> InitiateSamlLoginAsync(string orgSlug, string? returnUrl, CancellationToken ct = default);
-    Task<SsoLoginResult> HandleSamlCallbackAsync(string orgSlug, string samlResponse, string? relayState, CancellationToken ct = default);
+    Task<SsoRedirect> InitiateSamlLoginAsync(string orgSlug, string? returnUrl, CancellationToken ct = default);
+    Task<SsoLoginResult> HandleSamlCallbackAsync(string orgSlug, string samlResponse, string? relayState, string? browserBinding, CancellationToken ct = default);
 
     // ── OIDC ──────────────────────────────────────────────────────────────────
-    Task<string> InitiateOidcLoginAsync(string orgSlug, string? returnUrl, CancellationToken ct = default);
-    Task<SsoLoginResult> HandleOidcCallbackAsync(string orgSlug, string code, string state, CancellationToken ct = default);
+    Task<SsoRedirect> InitiateOidcLoginAsync(string orgSlug, string? returnUrl, CancellationToken ct = default);
+    Task<SsoLoginResult> HandleOidcCallbackAsync(string orgSlug, string code, string state, string? browserBinding, CancellationToken ct = default);
 }
 
 /// <summary>SAML 2.0 service-provider protocol work. Throws <see cref="Exceptions.SsoLoginException"/> on any failed check.</summary>

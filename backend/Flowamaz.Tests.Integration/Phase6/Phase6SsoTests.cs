@@ -45,7 +45,7 @@ public class Phase6SsoTests : ApiTestBase
         using var scope = Fixture.Services.CreateScope();
         var sso = scope.ServiceProvider.GetRequiredService<ISsoService>();
 
-        var act = () => sso.HandleOidcCallbackAsync("p6-sso2", "some-code", "never-issued-state");
+        var act = () => sso.HandleOidcCallbackAsync("p6-sso2", "some-code", "never-issued-state", null);
 
         await act.Should().ThrowAsync<Flowamaz.Core.Exceptions.SsoLoginException>();
     }

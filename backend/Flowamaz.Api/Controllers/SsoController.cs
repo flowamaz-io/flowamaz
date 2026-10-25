@@ -54,7 +54,7 @@ public sealed class SsoController : ControllerBase
     {
         try
         {
-            return Redirect(await _sso.InitiateSamlLoginAsync(orgSlug, returnUrl, ct));
+            return SsoSignInFlow.Start(this, _environment, await _sso.InitiateSamlLoginAsync(orgSlug, returnUrl, ct));
         }
         catch (Core.Exceptions.SsoLoginException ex)
         {
@@ -72,7 +72,8 @@ public sealed class SsoController : ControllerBase
     public Task<IActionResult> Acs(
         string orgSlug, [FromForm(Name = "SAMLResponse")] string samlResponse, [FromForm(Name = "RelayState")] string? relayState,
         CancellationToken ct) =>
-        SsoSignInFlow.CompleteAsync(this, orgSlug, () => _sso.HandleSamlCallbackAsync(orgSlug, samlResponse, relayState, ct),
+        SsoSignInFlow.CompleteAsync(this, orgSlug,
+            binding => _sso.HandleSamlCallbackAsync(orgSlug, samlResponse, relayState, binding, ct),
             _auth, _environment, _configuration, _logger, ct);
 
     // ── Org-owner configuration ──────────────────────────────────────────────

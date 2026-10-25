@@ -278,6 +278,12 @@ public sealed class AuthService
                 _logger.LogDebug("AuthService.RequestPasswordResetAsync exit userNotFound silenced");
                 return;
             }
+            if (await PasswordManagedBySsoAsync(org.Id, user, cancellationToken))
+            {
+                // Same response as for unknown users; a password would bypass the org's SSO.
+                _logger.LogInformation("AuthService.RequestPasswordResetAsync exit userId={UserId} skipped=sso", user.Id);
+                return;
+            }
 
             var plain = GenerateResetToken();
             var hash = HashToken(plain);
@@ -329,6 +335,10 @@ public sealed class AuthService
             {
                 throw new InvalidResetTokenException();
             }
+            if (await PasswordManagedBySsoAsync(user.OrgId, user, cancellationToken))
+            {
+                throw SsoLoginException.Required();
+            }
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, 12);
             token.UsedAt = DateTime.UtcNow;
@@ -338,7 +348,7 @@ public sealed class AuthService
 
             _logger.LogInformation("AuthService.ResetPasswordAsync exit userId={UserId} passwordReset=true", user.Id);
         }
-        catch (Exception ex) when (ex is not InvalidResetTokenException)
+        catch (Exception ex) when (ex is not InvalidResetTokenException and not SsoLoginException)
         {
             _logger.LogError(ex, "AuthService.ResetPasswordAsync error");
             throw;
@@ -403,4 +413,12 @@ public sealed class AuthService
         "us-east-1" => DataRegion.UsEast1,
         _ => DataRegion.ApSoutheast1,
     };
+
+    /// <summary>
+    /// Accounts created by SSO never get a password, and members of an org that requires SSO can't use one;
+    /// password resets for either would open a way around the org's IdP.
+    /// </summary>
+    private async Task<bool> PasswordManagedBySsoAsync(Guid orgId, OrgUser user, CancellationToken cancellationToken) =>
+        (user.IsSsoProvisioned && !user.IsOrgOwner)
+        || (_sso is not null && await _sso.IsPasswordLoginBlockedAsync(orgId, user, cancellationToken));
 }

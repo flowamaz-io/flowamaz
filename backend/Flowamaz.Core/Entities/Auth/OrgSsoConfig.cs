@@ -50,8 +50,20 @@ public class OrgSsoConfig : AuditableEntity
     /// <summary>Create an account on first SSO sign-in. Off: only people who already have an account can sign in.</summary>
     public bool JitProvisioning { get; set; } = true;
 
-    /// <summary>Role a just-in-time account gets in every workspace when no group mapping applies.</summary>
+    /// <summary>Role a just-in-time account gets in <see cref="DefaultWorkspaceIds"/> when no group mapping applies.</summary>
     public WorkspaceRole DefaultRole { get; set; } = WorkspaceRole.Viewer;
+
+    /// <summary>Workspaces a just-in-time account joins (with <see cref="DefaultRole"/>). Empty: none until granted.</summary>
+    public List<Guid> DefaultWorkspaceIds { get; set; } = [];
+
+    /// <summary>
+    /// Accept SAML responses the IdP sends unprompted (an app tile in Okta/Entra). Off by default: such responses
+    /// can't be tied to the browser, which allows login CSRF.
+    /// </summary>
+    public bool AllowIdpInitiated { get; set; }
+
+    /// <summary>Email domains an SSO sign-in may use (e.g. "acme.com"). Empty: any domain the IdP vouches for.</summary>
+    public List<string> AllowedEmailDomains { get; set; } = [];
 
     /// <summary>SAML attribute / OIDC claim carrying the user's IdP groups.</summary>
     public string GroupsAttribute { get; set; } = "groups";

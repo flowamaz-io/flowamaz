@@ -55,7 +55,29 @@ public sealed class SamlProcessorTests : IDisposable
         Validate(_idp.Build(new()), Expected(bare)).Should().NotThrow();
     }
 
+    [Fact]
+    public void An_email_name_id_doesnt_link_a_subject_but_a_persistent_one_does()
+    {
+        Validate(_idp.Build(new())).Should().NotThrow();
+        _sp.ValidateResponse(_idp.Build(new()), Expected()).Claims.Subject.Should().BeNull();
+
+        // A persistent NameID that isn't an email: the email comes from the attribute, the subject from the NameID.
+        var persistent = _sp.ValidateResponse(_idp.Build(new()
+        {
+            NameIdFormat = "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent", NameId = "00u1abc",
+        }), Expected());
+        persistent.Claims.Subject.Should().Be($"saml|{SamlTestIdp.IdpEntityId}|00u1abc");
+    }
+
     // ── Forgeries ─────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("1-starts-with-a-digit")]
+    public void An_assertion_without_a_valid_id_is_refused(string id) =>
+        // Signed at the response level so the assertion's own ID is only checked by the replay-id rule.
+        Validate(_idp.Build(new() { SignAssertion = false, SignResponse = true, AssertionId = id }))
+            .Should().Throw<SsoLoginException>().WithMessage("*no valid ID*");
 
     [Fact]
     public void A_changed_email_breaks_the_signature()

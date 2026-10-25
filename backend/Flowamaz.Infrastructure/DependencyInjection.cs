@@ -216,7 +216,14 @@ public static class DependencyInjection
         services.AddSingleton<ISamlProcessor, Services.Sso.SamlProcessor>();
         services.AddSingleton<ISsoStateStore, Services.Sso.RedisSsoStateStore>();
         services.AddSingleton<ISsoReplayCache, Services.Sso.RedisSsoReplayCache>();
-        services.AddHttpClient(Services.Sso.OidcClient.HttpClientName);
+        // The issuer URL comes from an org owner: SSRF-guarded, no redirects, short timeout, capped responses.
+        services.AddHttpClient(Services.Sso.OidcClient.HttpClientName, client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(10);
+                client.MaxResponseContentBufferSize = Services.Sso.OidcClient.MaxResponseBytes;
+            })
+            .ConfigurePrimaryHttpMessageHandler(sp => Services.Sso.OidcClient.CreateHandler(
+                sp.GetRequiredService<IConfiguration>().GetValue<bool>(Services.Sso.OidcClient.AllowInsecureConfigKey)));
         services.AddScoped<IOidcClient, Services.Sso.OidcClient>();
         services.AddScoped<IConnectorCatalogueService, ConnectorCatalogueService>();
         services.AddHttpClient(ConnectorSandbox.HttpClientName).ConfigurePrimaryHttpMessageHandler(Flowamaz.Application.DependencyInjection.GuardedHandler);
