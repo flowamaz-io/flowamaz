@@ -522,4 +522,69 @@ public class WorkflowOrchestratorTests
         Flowamaz.Application.Workflow.Services.InstanceService.InExecutionOrder(new[] { gate, trigger })
             .Select(n => n.NodeId).Should().Equal("start", "gate");
     }
+
+    // ── Cancel is audited (run-6 finding 2) ───────────────────────────────────────────
+
+    private (WorkflowOrchestrator Orchestrator, List<Core.Models.AuditEventRequest> Recorded, Guid InstanceId) CancellableRun()
+    {
+        var instanceId = Guid.NewGuid();
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(new WorkflowInstance
+        {
+            Id = instanceId, WorkspaceId = _workspaceId, WorkflowDefinitionId = _definitionId, Status = InstanceStatus.Waiting,
+        });
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowDefinition { Id = _definitionId, WorkspaceId = _workspaceId, Name = "Loan Approval", Slug = "loan-approval" });
+        _nodeStates.Setup(r => r.GetForInstanceAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+
+        var recorded = new List<Core.Models.AuditEventRequest>();
+        var audit = new Mock<Core.Interfaces.Services.IAuditService>();
+        audit.Setup(a => a.RecordAsync(It.IsAny<Core.Models.AuditEventRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<Core.Models.AuditEventRequest, CancellationToken>((r, _) => recorded.Add(r));
+        var orchestrator = new WorkflowOrchestrator(
+            _definitions.Object, _versions.Object, _instances.Object, _nodeStates.Object,
+            _variables.Object, _events.Object, _queue.Object, _variableEvaluation.Object,
+            _unitOfWork.Object, new SfgParser(), NullLogger<WorkflowOrchestrator>.Instance, audit: audit.Object);
+        return (orchestrator, recorded, instanceId);
+    }
+
+    [Fact]
+    public async Task CancelAsync_by_a_user_records_who_cancelled_which_run()
+    {
+        var (orchestrator, recorded, instanceId) = CancellableRun();
+        var userId = Guid.NewGuid();
+
+        await orchestrator.CancelAsync(instanceId, userId);
+
+        var row = recorded.Should().ContainSingle().Subject;
+        row.EventType.Should().Be("instance.cancelled");
+        row.Action.Should().Be("cancelled");
+        row.ResourceId.Should().Be(instanceId);
+        row.ResourceLabel.Should().Be("Loan Approval");
+        row.ActorUserId.Should().Be(userId);
+        row.ActorType.Should().Be("user");
+        row.WorkspaceId.Should().Be(_workspaceId);
+    }
+
+    [Fact]
+    public async Task CancelAsync_through_the_public_api_has_no_user_so_the_api_key_is_named()
+    {
+        var (orchestrator, recorded, instanceId) = CancellableRun();
+
+        await orchestrator.CancelAsync(instanceId, Guid.Empty);
+
+        var row = recorded.Should().ContainSingle().Subject;
+        row.ActorUserId.Should().BeNull("AuditService attributes it to the request's API key");
+        row.ActorType.Should().Be("system");
+    }
+
+    [Fact]
+    public async Task CancelAsync_of_a_finished_run_records_nothing()
+    {
+        var (orchestrator, recorded, instanceId) = CancellableRun();
+        (await _instances.Object.GetByIdAsync(instanceId))!.Status = InstanceStatus.Completed;
+
+        await orchestrator.CancelAsync(instanceId, Guid.NewGuid());
+
+        recorded.Should().BeEmpty();
+    }
 }

@@ -575,6 +575,23 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             await _instances.ReleaseLeaseAsync(instanceId, instance.WorkerLeaseId, cancellationToken);
         }
 
+        // Who stopped the run: the signed-in user, or (Guid.Empty) the API key of a public-API call, which
+        // AuditService attributes from the request. A withdrawn loan application must be traceable.
+        var definition = await _definitions.GetByIdForWorkspaceAsync(instance.WorkflowDefinitionId, instance.WorkspaceId, cancellationToken);
+        Guid? actor = requestedBy == Guid.Empty ? null : requestedBy;
+        _audit?.RecordAsync(new Core.Models.AuditEventRequest
+        {
+            WorkspaceId = instance.WorkspaceId,
+            ActorUserId = actor,
+            ActorType = actor.HasValue ? "user" : "system",
+            EventType = "instance.cancelled",
+            ResourceType = "instance",
+            ResourceId = instance.Id,
+            ResourceLabel = definition?.Name,
+            Action = "cancelled",
+            Metadata = new { workflowId = instance.WorkflowDefinitionId, closedNodes = closed, isTest = instance.IsTest },
+        }, cancellationToken);
+
         _logger.LogInformation("WorkflowOrchestrator.CancelAsync exit instance={InstanceId}", instanceId);
     }
 

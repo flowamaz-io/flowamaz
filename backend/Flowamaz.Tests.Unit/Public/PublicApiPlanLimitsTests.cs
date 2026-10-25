@@ -38,7 +38,7 @@ public class PublicApiPlanLimitsTests
     {
         OnPlan(plan, perMinute);
         var limit = await Service().ResolveAsync(_ws);
-        limit.Should().Be(new Core.Interfaces.Services.PlanApiLimit(_org.Id, plan, perMinute));
+        limit.Should().Be(new Core.Interfaces.Services.PlanApiLimit(_org.Id, plan, perMinute, IsCustom: false));
     }
 
     [Fact]
@@ -55,7 +55,9 @@ public class PublicApiPlanLimitsTests
     {
         OnPlan("Enterprise", 0);
         _org.ApiRateLimitPerMinute = custom;
-        (await Service().ResolveAsync(_ws))!.PerMinute.Should().Be(custom);
+        var limit = (await Service().ResolveAsync(_ws))!;
+        limit.PerMinute.Should().Be(custom);
+        limit.IsCustom.Should().BeTrue();
     }
 
     [Fact]
@@ -76,5 +78,24 @@ public class PublicApiPlanLimitsTests
         await service.ResolveAsync(_ws);
 
         _plans.Verify(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void A_custom_limit_is_quoted_as_the_organisations_own_without_upgrade_advice()
+    {
+        var message = Flowamaz.Api.Controllers.Public.PublicApiController.MinuteLimitMessage(
+            new Core.Interfaces.Services.PlanApiLimit(_org.Id, "Community", 3, IsCustom: true));
+
+        message.Should().StartWith("Your organisation's limit is 3 API calls a minute.");
+        message.Should().NotContain("Community").And.NotContain("upgrade", "upgrading wouldn't change an agreed figure");
+    }
+
+    [Fact]
+    public void A_plan_limit_names_the_plan_and_how_to_get_more()
+    {
+        var message = Flowamaz.Api.Controllers.Public.PublicApiController.MinuteLimitMessage(
+            new Core.Interfaces.Services.PlanApiLimit(_org.Id, "Community", 10));
+
+        message.Should().Contain("Your Community plan allows 10 API calls a minute").And.Contain("upgrade your plan");
     }
 }

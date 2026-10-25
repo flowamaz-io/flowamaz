@@ -109,10 +109,7 @@ public abstract class PublicApiController : ControllerBase
             Response.Headers.RetryAfter = Math.Max(1, blocked.ResetUnixSeconds - DateTimeOffset.UtcNow.ToUnixTimeSeconds()).ToString();
 
         if (minute is { Allowed: false })
-            return ApiError(StatusCodes.Status429TooManyRequests, "rate_limited",
-                $"Your {plan!.PlanName} plan allows {plan.PerMinute} API calls a minute across your organisation. " +
-                "Wait until the time in X-RateLimit-Reset, or upgrade your plan in Settings → Billing for a higher limit.",
-                "errors#rate_limited");
+            return ApiError(StatusCodes.Status429TooManyRequests, "rate_limited", MinuteLimitMessage(plan!), "errors#rate_limited");
         if (hour is { Allowed: false })
             return ApiError(StatusCodes.Status429TooManyRequests, "rate_limited",
                 $"This workspace has used its hourly budget for {BucketDescription(bucketSuffix)} ({hour.Limit} an hour). " +
@@ -150,6 +147,16 @@ public abstract class PublicApiController : ControllerBase
         Response.Headers["X-RateLimit-Remaining"] = binding.Remaining.ToString();
         Response.Headers["X-RateLimit-Reset"] = binding.ResetUnixSeconds.ToString();
     }
+
+    /// <summary>
+    /// A figure agreed for the organisation isn't the plan's, and upgrading wouldn't change it, so it is quoted as
+    /// the organisation's own limit with the way to raise it.
+    /// </summary>
+    internal static string MinuteLimitMessage(PlanApiLimit plan) => plan.IsCustom
+        ? $"Your organisation's limit is {plan.PerMinute} API calls a minute. Wait until the time in X-RateLimit-Reset " +
+          "before retrying. To raise the limit, contact Flowamaz support."
+        : $"Your {plan.PlanName} plan allows {plan.PerMinute} API calls a minute across your organisation. " +
+          "Wait until the time in X-RateLimit-Reset, or upgrade your plan in Settings → Billing for a higher limit.";
 
     private static string BucketDescription(string bucket) => bucket switch
     {

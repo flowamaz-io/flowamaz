@@ -139,4 +139,33 @@ public class PublicGateDecisionTests : ApiTestBase
         (await db.GateDecisions.AsNoTracking().IgnoreQueryFilters().SingleAsync(g => g.Id == gateId))
             .Decision.Should().Be(GateDecisionStatus.Pending);
     }
+
+    [Fact]
+    public async Task Cancel_through_the_public_api_is_audited_with_the_api_key()
+    {
+        var (ws, gateId, key) = await SetupAsync("pgd-cancel");
+        Guid instanceId;
+        using (var scope = Fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+            instanceId = (await db.GateDecisions.AsNoTracking().IgnoreQueryFilters().SingleAsync(g => g.Id == gateId)).InstanceId;
+        }
+
+        var resp = await KeyClient(key).PostAsync($"/api/public/v1/instances/{instanceId}/cancel", null);
+        resp.StatusCode.Should().Be(HttpStatusCode.OK, await resp.Content.ReadAsStringAsync());
+
+        using var verify = Fixture.Services.CreateScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+        Flowamaz.Core.Entities.Audit.AuditEvent? row = null;
+        for (var i = 0; i < 25 && row is null; i++)
+        {
+            await Task.Delay(200);
+            row = await verifyDb.AuditEvents.AsNoTracking()
+                .FirstOrDefaultAsync(e => e.WorkspaceId == ws && e.EventType == "instance.cancelled");
+        }
+        row.Should().NotBeNull("every cancel is audited");
+        row!.ResourceId.Should().Be(instanceId);
+        row.ActorType.Should().Be("api_key");
+        row.ActorLabel.Should().Contain("Loan app");
+    }
 }
