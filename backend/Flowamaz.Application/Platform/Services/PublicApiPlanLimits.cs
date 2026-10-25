@@ -44,7 +44,8 @@ public sealed class PublicApiPlanLimits : IPublicApiPlanLimits
             var plan = await _plans.GetByIdAsync(org.PlanId, cancellationToken);
 
             var perMinute = org.ApiRateLimitPerMinute ?? plan?.Limits.ApiRateLimitPerMinute ?? 0;
-            var limit = new PlanApiLimit(org.Id, plan?.Name ?? "current", Math.Max(0, perMinute));
+            var limit = new PlanApiLimit(org.Id, plan?.Name ?? "current", Math.Max(0, perMinute),
+                IsCustom: org.ApiRateLimitPerMinute is not null);
             _cache.Set(workspaceId, limit);
             _logger.LogDebug("PublicApiPlanLimits.ResolveAsync exit workspace={WorkspaceId} plan={Plan} perMinute={PerMinute}",
                 workspaceId, limit.PlanName, limit.PerMinute);

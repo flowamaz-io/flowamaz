@@ -72,6 +72,10 @@ public class PublicApiPlanRateLimitTests : ApiTestBase
 
         for (var i = 0; i < 3; i++)
             (await client.GetAsync("/api/public/v1/workflows")).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await client.GetAsync("/api/public/v1/workflows")).StatusCode.Should().Be((HttpStatusCode)429);
+        var blocked = await client.GetAsync("/api/public/v1/workflows");
+        blocked.StatusCode.Should().Be((HttpStatusCode)429);
+        using var doc = JsonDocument.Parse(await blocked.Content.ReadAsStringAsync());
+        doc.RootElement.GetProperty("error").GetProperty("message").GetString()
+            .Should().StartWith("Your organisation's limit is 3 API calls a minute").And.NotContain("Community plan");
     }
 }
