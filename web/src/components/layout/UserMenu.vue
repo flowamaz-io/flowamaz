@@ -6,6 +6,7 @@ import { ChevronUp, CreditCard, LayoutGrid, LogOut, Store, User } from 'lucide-v
 import { useAuth } from '@/composables/useAuth';
 import { useWorkspaceStore } from '@/stores/workspace.store';
 import { initial } from '@/utils/string.util';
+import { billingService } from '@/services/billing.service';
 
 // Collapsed (icon-only) renders just the avatar; the dropdown still opens.
 defineProps<{ collapsed?: boolean }>();
@@ -14,18 +15,16 @@ const router = useRouter();
 const auth = useAuth();
 const { user } = auth;
 
-// Plan badge reflects the live workspace edition (EDITION env var via the API), not a static label.
+// Badge: on a self-hosted Community Edition install there is no billing plan, so it says so. On the cloud it
+// shows the organisation's billing plan, which also sets its limits (runs, API calls a minute); the server's
+// edition setting says nothing about what this org pays for.
 const workspaceStore = useWorkspaceStore();
-const PLAN_LABELS: Record<string, string> = {
-  community: 'Community',
-  starter: 'Starter Plan',
-  pro: 'Pro Plan',
-  enterprise: 'Enterprise',
-};
-// While the edition is unknown show nothing rather than a misleading "Community".
+const orgPlan = ref<string | null>(null);
 const planLabel = computed(() => {
   const edition = workspaceStore.currentWorkspace?.edition;
-  return edition ? (PLAN_LABELS[edition] ?? 'Community') : '';
+  if (!edition) return ''; // unknown yet: show nothing rather than a guess
+  if (edition === 'community') return 'Community Edition';
+  return orgPlan.value ? `${orgPlan.value} plan` : '';
 });
 
 // The workspace list has no edition; load the current workspace's details (once per switch).
@@ -34,6 +33,21 @@ watch(
   (id) => {
     if (id && workspaceStore.currentWorkspace?.id !== id) {
       workspaceStore.loadCurrentWorkspace().catch(() => { /* label stays hidden; nothing else depends on it */ });
+    }
+  },
+  { immediate: true },
+);
+
+// The organisation's plan (cloud only). Reloaded when the signed-in user changes.
+watch(
+  () => [workspaceStore.currentWorkspace?.edition, user.value?.orgId] as const,
+  async ([edition, orgId]) => {
+    orgPlan.value = null;
+    if (!edition || edition === 'community' || !orgId) return;
+    try {
+      orgPlan.value = (await billingService.current()).planName;
+    } catch {
+      // Billing unavailable: the badge stays hidden; nothing else depends on it.
     }
   },
   { immediate: true },

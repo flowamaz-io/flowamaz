@@ -12,7 +12,8 @@ import { APP_NAME, PLANS } from '@/utils/constants';
 const router = useRouter();
 const auth = useAuth();
 
-const plan = ref('starter');
+// New organisations start on Community (free); they upgrade from Settings → Billing.
+const plan = ref('community');
 const orgName = ref('');
 const orgSlug = ref('');
 const slugTouched = ref(false);

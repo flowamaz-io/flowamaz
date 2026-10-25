@@ -69,7 +69,8 @@ export const API_KEY_SCOPES: { value: string; label: string }[] = [
 
 /** Registration plans (FUNCTIONAL.md §8) shown as cards. */
 export const PLANS: { slug: string; name: string; price: string; blurb: string }[] = [
-  { slug: 'community', name: 'Community', price: 'Free', blurb: 'Self-host, unlimited local workflows.' },
+  // Cloud Community plan (FUNCTIONAL.md §13.2); self-hosting is the separate Community Edition.
+  { slug: 'community', name: 'Community', price: 'Free', blurb: '5 workflows, 500 runs a month, 1 member.' },
   { slug: 'starter', name: 'Starter', price: '$49/mo', blurb: 'Hosted, 3 workspaces, email support.' },
   { slug: 'pro', name: 'Pro', price: '$199/mo', blurb: 'Unlimited workspaces, SSO, priority support.' },
 ];
