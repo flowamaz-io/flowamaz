@@ -87,4 +87,22 @@ public class PublicInstancesControllerTests
         result.Should().BeOfType<JsonResult>().Which.StatusCode.Should().Be(404);
         _orchestrator.Verify(o => o.CancelAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Theory]
+    [InlineData(InstanceStatus.Waiting, "cancelled")]
+    [InlineData(InstanceStatus.Failed, "failed")]
+    [InlineData(InstanceStatus.Completed, "completed")]
+    public async Task Cancel_reports_the_status_the_run_ends_with(InstanceStatus current, string expected)
+    {
+        var instanceId = Guid.NewGuid();
+        _instances.Setup(r => r.GetByIdForWorkspaceAsync(instanceId, Workspace, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = Workspace, Status = current });
+
+        var result = await CreateController().Cancel(instanceId, CancellationToken.None);
+
+        var json = result.Should().BeOfType<JsonResult>().Which;
+        json.StatusCode.Should().Be(200);
+        JsonSerializer.Serialize(json.Value, (JsonSerializerOptions)json.SerializerSettings!)
+            .Should().Contain($"\"status\":\"{expected}\"");
+    }
 }
