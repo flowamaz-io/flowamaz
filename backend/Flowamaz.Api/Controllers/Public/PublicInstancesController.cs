@@ -71,8 +71,12 @@ public sealed class PublicInstancesController : PublicApiController
         var instance = await _instances.GetByIdForWorkspaceAsync(id, ws, ct);
         if (instance is null) return NotFoundInstance(id);
 
+        // A run that has already ended is left as it is (no-op), so report the status it really has.
+        var status = instance.CanTransitionTo(InstanceStatus.Cancelled)
+            ? "cancelled"
+            : instance.Status.ToString().ToLowerInvariant();
         await _orchestrator.CancelAsync(id, Guid.Empty, ct);
-        return Data(new { InstanceId = id, Status = "cancelled" });
+        return Data(new { InstanceId = id, Status = status });
     }
 
     private IActionResult NotFoundInstance(Guid id) =>
