@@ -46,6 +46,8 @@ export interface SsoConfig {
   allowedEmailDomains: string[] | null;
   /** Workspaces new SSO accounts join with the default role. */
   defaultWorkspaceIds: string[] | null;
+  /** Roles come from SCIM groups instead of the groups in each sign-in. */
+  rolesFromScim: boolean;
 }
 
 export interface ConfigureSsoRequest {
@@ -66,11 +68,33 @@ export interface ConfigureSsoRequest {
   allowIdpInitiated?: boolean;
   allowedEmailDomains?: string[];
   defaultWorkspaceIds?: string[];
+  rolesFromScim?: boolean;
 }
 
 export interface SsoTestResult {
   ok: boolean;
   message: string;
+}
+
+export interface ScimToken {
+  id: string;
+  name: string;
+  /** The token's first characters, to recognise it. The token itself is shown only when created. */
+  tokenPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface ScimSetup {
+  scimBaseUrl: string;
+  tokens: ScimToken[];
+}
+
+export interface ScimTokenCreated {
+  token: ScimToken;
+  /** Shown once. Never stored in the browser. */
+  plainToken: string;
+  scimBaseUrl: string;
 }
 
 export const ssoService = {
@@ -92,6 +116,20 @@ export const ssoService = {
   async test(orgId: string): Promise<SsoTestResult> {
     const res = await http.post<ApiEnvelope<SsoTestResult>>(`/api/v1/organisations/${orgId}/sso/test`, {});
     return unwrap(res);
+  },
+
+  async getScim(orgId: string): Promise<ScimSetup> {
+    const res = await http.get<ApiEnvelope<ScimSetup>>(`/api/v1/organisations/${orgId}/scim`);
+    return unwrap(res);
+  },
+
+  async createScimToken(orgId: string, name: string): Promise<ScimTokenCreated> {
+    const res = await http.post<ApiEnvelope<ScimTokenCreated>>(`/api/v1/organisations/${orgId}/scim/tokens`, { name });
+    return unwrap(res);
+  },
+
+  async revokeScimToken(orgId: string, tokenId: string): Promise<void> {
+    await http.delete(`/api/v1/organisations/${orgId}/scim/tokens/${tokenId}`);
   },
 
   async disable(orgId: string): Promise<void> {

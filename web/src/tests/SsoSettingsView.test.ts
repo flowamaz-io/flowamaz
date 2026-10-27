@@ -16,6 +16,7 @@ vi.mock('@/services/sso.service', () => ({
     getConfig: () => getConfig(),
     configure: (org: string, payload: Record<string, unknown>) => configure(org, payload),
     test: () => testSettings(),
+    getScim: async () => ({ scimBaseUrl: 'https://app/api/scim/v2', tokens: [] }),
   },
 }));
 const authUser = ref<{ orgId: string; isOrgOwner?: boolean }>({ orgId: 'org-1', isOrgOwner: true });
@@ -30,7 +31,7 @@ function base(overrides: Partial<SsoConfig> = {}): SsoConfig {
     requireSso: false, jitProvisioning: true, defaultRole: 'Viewer', groupsAttribute: 'groups', groupRoleMappings: [],
     acsUrl: 'https://app/api/v1/saml/acme/acs', metadataUrl: 'https://app/api/v1/saml/acme/metadata',
     oidcRedirectUri: 'https://app/api/v1/oidc/acme/callback', planIncludesSso: true,
-    allowIdpInitiated: false, allowedEmailDomains: [], defaultWorkspaceIds: [], ...overrides,
+    allowIdpInitiated: false, allowedEmailDomains: [], defaultWorkspaceIds: [], rolesFromScim: false, ...overrides,
   };
 }
 
@@ -121,6 +122,7 @@ describe('SsoSettingsView', () => {
     await wrapper.find(`#${forLabel("Allow sign-in from the IdP's app tile")}`).setValue(true);
     await wrapper.findAll('input').find((i) => i.attributes('placeholder') === 'acme.com, acme.co.uk')!.setValue('acme.com,  acme.co.uk');
     await wrapper.find('#default-ws-ws-1').setValue(true);
+    await wrapper.find(`#${forLabel('Take roles from SCIM groups')}`).setValue(true);
     await wrapper.findAll('button').find((b) => b.text().includes('Save SSO settings'))!.trigger('click');
     await flushPromises();
 
@@ -128,6 +130,7 @@ describe('SsoSettingsView', () => {
       allowIdpInitiated: true,
       allowedEmailDomains: ['acme.com', 'acme.co.uk'],
       defaultWorkspaceIds: ['ws-1'],
+      rolesFromScim: true,
     }));
   });
 

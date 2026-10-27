@@ -53,6 +53,8 @@ public sealed class SsoService : ISsoService
     private readonly IConfiguration _configuration;
     private readonly ILogger<SsoService> _logger;
     private readonly IAuditService? _audit;
+    private readonly IScimRepository? _scim;
+    private readonly SsoMembershipSync _sync;
 
     public SsoService(
         IOrgSsoConfigRepository configs,
@@ -70,7 +72,8 @@ public sealed class SsoService : ISsoService
         IUnitOfWork unitOfWork,
         IConfiguration configuration,
         ILogger<SsoService> logger,
-        IAuditService? audit = null)
+        IAuditService? audit = null,
+        IScimRepository? scim = null)
     {
         _configs = configs;
         _orgs = orgs;
@@ -88,6 +91,8 @@ public sealed class SsoService : ISsoService
         _configuration = configuration;
         _logger = logger;
         _audit = audit;
+        _scim = scim;
+        _sync = new SsoMembershipSync(workspaces, members, logger);
     }
 
     private string BaseUrl
@@ -167,6 +172,7 @@ public sealed class SsoService : ISsoService
         if (request.DefaultWorkspaceIds is { } defaults)
             config.DefaultWorkspaceIds = await ValidateWorkspacesAsync(orgId, defaults, ct);
         if (request.AllowIdpInitiated is { } idpInitiated) config.AllowIdpInitiated = idpInitiated;
+        if (request.RolesFromScim is { } fromScim) config.RolesFromScim = fromScim;
         if (request.AllowedEmailDomains is { } domains) config.AllowedEmailDomains = ValidateDomains(domains);
 
         config.IsActive = request.IsActive;
@@ -296,7 +302,8 @@ public sealed class SsoService : ISsoService
             }
             if (!string.IsNullOrWhiteSpace(claims.Name) && claims.Name != user.Name) user.Name = claims.Name;
             user.LastLoginAt = DateTime.UtcNow;
-            if (!user.IsOrgOwner) await SyncMembershipsAsync(user, config, claims.GroupList, isNew: false, ct);
+            if (!user.IsOrgOwner)
+                await _sync.SyncAsync(user, config, await RoleGroupsAsync(config, user.Id, claims, isNew: false, ct), isNew: false, ct);
             await _unitOfWork.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             return user;
@@ -316,7 +323,7 @@ public sealed class SsoService : ISsoService
             LastLoginAt = DateTime.UtcNow,
         };
         await _orgUsers.AddAsync(user, ct);
-        await SyncMembershipsAsync(user, config, claims.GroupList, isNew: true, ct);
+        await _sync.SyncAsync(user, config, await RoleGroupsAsync(config, user.Id, claims, isNew: true, ct), isNew: true, ct);
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         _logger.LogInformation("SsoService.ProvisionUserFromSsoAsync created user={UserId} org={OrgId}", user.Id, orgId);
@@ -324,64 +331,13 @@ public sealed class SsoService : ISsoService
     }
 
     /// <summary>
-    /// Brings the user's SSO-managed memberships in line with their IdP groups. For each workspace in scope (named by
-    /// a mapping, covered by an all-workspaces mapping, or a default workspace) the wanted role is the highest
-    /// matching mapping, else <c>DefaultRole</c> for default workspaces, else none.
-    /// <list type="bullet">
-    /// <item>No membership yet and a role is wanted → added, marked <see cref="WorkspaceMember.ManagedBySso"/>.</item>
-    /// <item>SSO-managed membership → role updated, or deactivated when no role is wanted (and re-activated later).</item>
-    /// <item>Memberships added or edited by hand, or deactivated by an admin, are never touched.</item>
-    /// <item>A workspace's last active Admin is kept, checked under a per-workspace lock.</item>
-    /// </list>
+    /// Group names that decide roles: the person's SCIM groups when the owner chose "roles from SCIM groups" (the IdP
+    /// keeps those current, and sign-ins often carry no groups then), otherwise the groups in the sign-in.
     /// </summary>
-    private async Task SyncMembershipsAsync(OrgUser user, OrgSsoConfig config, IReadOnlyList<string> groups, bool isNew, CancellationToken ct)
+    private async Task<IReadOnlyList<string>> RoleGroupsAsync(OrgSsoConfig config, Guid userId, SsoClaims claims, bool isNew, CancellationToken ct)
     {
-        if (config.GroupRoleMappings.Count == 0 && config.DefaultWorkspaceIds.Count == 0) return;
-
-        var groupSet = groups.ToHashSet(StringComparer.Ordinal);
-        var coversAll = config.GroupRoleMappings.Any(m => m.WorkspaceId is null);
-        var named = config.GroupRoleMappings.Where(m => m.WorkspaceId is not null).Select(m => m.WorkspaceId!.Value)
-            .Concat(config.DefaultWorkspaceIds).ToHashSet();
-
-        foreach (var workspace in (await _workspaces.GetForOrgAsync(user.OrgId, ct)).OrderBy(w => w.Id))
-        {
-            if (!coversAll && !named.Contains(workspace.Id)) continue;
-
-            var matched = config.GroupRoleMappings
-                .Where(m => groupSet.Contains(m.Group) && (m.WorkspaceId is null || m.WorkspaceId == workspace.Id))
-                .Select(m => (WorkspaceRole?)m.Role)
-                .Max();
-            var wanted = matched ?? (config.DefaultWorkspaceIds.Contains(workspace.Id) ? config.DefaultRole : null);
-
-            var member = isNew ? null : await _members.GetAsync(workspace.Id, user.Id, ct);
-            if (member is null)
-            {
-                if (wanted is { } role)
-                    await _members.AddAsync(new WorkspaceMember
-                    {
-                        WorkspaceId = workspace.Id, OrgUserId = user.Id, Role = role, IsActive = true, ManagedBySso = true,
-                    }, ct);
-                continue;
-            }
-            if (!member.ManagedBySso) continue; // added or edited by hand, or deactivated by an admin
-
-            var (newRole, newActive) = wanted is { } w ? (w, true) : (member.Role, false);
-            if (member.Role == newRole && member.IsActive == newActive) continue;
-
-            var losesAdmin = member is { IsActive: true, Role: WorkspaceRole.Admin } && (!newActive || newRole != WorkspaceRole.Admin);
-            if (losesAdmin)
-            {
-                await _members.LockAdminsAsync(workspace.Id, ct);
-                if (await _members.CountActiveAdminsAsync(workspace.Id, ct) <= 1)
-                {
-                    _logger.LogWarning("SsoService kept last Admin of workspace={WorkspaceId} user={UserId} (IdP groups would demote)", workspace.Id, user.Id);
-                    continue;
-                }
-            }
-            member.Role = newRole;
-            member.IsActive = newActive;
-            _members.Update(member);
-        }
+        if (!config.RolesFromScim || _scim is null) return claims.GroupList;
+        return isNew ? [] : await _scim.GetGroupNamesForUserAsync(config.OrgId, userId, ct);
     }
 
     // ── SAML ────────────────────────────────────────────────────────────────────────────
@@ -610,5 +566,5 @@ public sealed class SsoService : ISsoService
             c.Scopes, c.EncryptedIdpCertificate is not null, c.EncryptedClientSecret is not null,
             c.RequireSso, c.JitProvisioning, c.DefaultRole, c.GroupsAttribute, c.GroupRoleMappings,
             AcsUrl(orgSlug), MetadataUrl(orgSlug), OidcRedirectUri(orgSlug), planIncludesSso,
-            c.AllowIdpInitiated, c.AllowedEmailDomains, c.DefaultWorkspaceIds);
+            c.AllowIdpInitiated, c.AllowedEmailDomains, c.DefaultWorkspaceIds, c.RolesFromScim);
 }

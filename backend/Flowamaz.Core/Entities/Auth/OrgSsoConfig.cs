@@ -62,6 +62,12 @@ public class OrgSsoConfig : AuditableEntity
     /// </summary>
     public bool AllowIdpInitiated { get; set; }
 
+    /// <summary>
+    /// Take workspace roles from the person's SCIM groups instead of the groups in the sign-in. Turn on once the IdP
+    /// pushes groups over SCIM; until then the sign-in's groups decide (creating a SCIM token doesn't change this).
+    /// </summary>
+    public bool RolesFromScim { get; set; }
+
     /// <summary>Email domains an SSO sign-in may use (e.g. "acme.com"). Empty: any domain the IdP vouches for.</summary>
     public List<string> AllowedEmailDomains { get; set; } = [];
 
