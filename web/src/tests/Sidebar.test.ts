@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import Sidebar from '@/components/layout/Sidebar.vue';
 import { useWorkspaceStore } from '@/stores/workspace.store';
+import { useAuthStore } from '@/stores/auth.store';
 
 // Gate service is called on mount for the pending badge — stub it so the test is hermetic.
 vi.mock('@/services/gate.service', () => ({
@@ -27,6 +28,14 @@ describe('Sidebar', () => {
     const store = useWorkspaceStore();
     store.allWorkspaces = [{ id: 'w1', name: 'Finance Team', slug: 'finance', role: 'Admin' }];
     store.currentWorkspaceId = 'w1';
+  });
+
+  it('shows the SSO link to organisation owners only', () => {
+    const auth = useAuthStore();
+    auth.user = { id: 'u1', email: 'o@acme.test', name: 'Owner', orgId: 'o1', orgSlug: 'acme', isOrgOwner: true };
+    expect(mountSidebar().text()).toContain('SSO');
+    auth.user = { ...auth.user, isOrgOwner: false };
+    expect(mountSidebar().text()).not.toContain('SSO');
   });
 
   it('renders the dark sidebar background and brand name', () => {

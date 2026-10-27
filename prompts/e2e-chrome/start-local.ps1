@@ -51,6 +51,8 @@ $env:GATE_SIGNING_KEY = "e2e-local-only-gate-signing-key-0123456789abcdef0123"  
 $env:Ai__AllowStubWithoutKey = "true"
 # Test orgs are on the Community plan (10 public API calls/minute); set $env:ENFORCE_PLAN_RATE_LIMITS="true" to test the limits.
 $env:PublicApi__EnforcePlanRateLimits = if ($env:ENFORCE_PLAN_RATE_LIMITS) { $env:ENFORCE_PLAN_RATE_LIMITS } else { "false" }
+# The web app's address: SSO builds its SAML ACS / OIDC redirect URLs from it.
+$env:Platform__BaseUrl = "http://localhost:5173"
 if ($env:ANTHROPIC_KEY) {
   try {
     Invoke-WebRequest https://api.anthropic.com/v1/models -UseBasicParsing -TimeoutSec 10 `

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
@@ -21,23 +21,29 @@ const password = ref('');
 const submitting = ref(false);
 const error = ref('');
 
-// SSO: once the org is known, check whether it enforces SSO and, if so, hide the
-// password field and offer a "Continue with {provider}" button instead.
+// SSO: once the org is known, offer "Continue with SSO". If the org requires SSO, the password form is hidden
+// behind an owner link (owners keep password sign-in so a broken IdP can't lock the organisation out).
 const ssoProvider = ref<string | null>(null);
+const ssoRequired = ref(false);
+const showPassword = ref(false);
 const checkingSso = ref(false);
 let ssoTimer: ReturnType<typeof setTimeout> | undefined;
 
 const providerLabel = (provider: string): string =>
-  provider === 'saml' ? 'SSO' : provider === 'oidc' ? 'SSO' : provider;
+  provider === 'saml' || provider === 'oidc' ? 'SSO' : provider;
+
+const passwordVisible = computed(() => !ssoProvider.value || !ssoRequired.value || showPassword.value);
 
 async function checkSso(): Promise<void> {
   ssoProvider.value = null;
+  ssoRequired.value = false;
   const slug = orgSlug.value.trim();
   if (!slug) return;
   checkingSso.value = true;
   try {
     const status = await ssoService.getStatus(slug);
     ssoProvider.value = status.enabled ? status.provider : null;
+    ssoRequired.value = status.enabled && Boolean(status.required);
   } catch {
     ssoProvider.value = null;
   } finally {
@@ -47,16 +53,44 @@ async function checkSso(): Promise<void> {
 
 function onOrgInput(): void {
   ssoProvider.value = null;
+  ssoRequired.value = false;
+  showPassword.value = false;
   if (ssoTimer) clearTimeout(ssoTimer);
   ssoTimer = setTimeout(checkSso, 400);
 }
 
 function continueWithSso(): void {
   if (!ssoProvider.value) return;
-  window.location.href = ssoService.initiateUrl(orgSlug.value.trim(), ssoProvider.value);
+  const returnTo = typeof route.query.redirect === 'string' ? route.query.redirect : undefined;
+  window.location.href = ssoService.initiateUrl(orgSlug.value.trim(), ssoProvider.value, returnTo);
 }
 
 watch(orgSlug, onOrgInput);
+
+// Coming back from a refused SSO sign-in: /login?org=acme&sso_error=CODE. Only known codes are shown, as our own
+// words, so a crafted link can't put arbitrary text on the sign-in page.
+const SSO_ERRORS: Record<string, string> = {
+  SSO_RESPONSE_REJECTED: "Your identity provider's sign-in couldn't be verified. Try again; if it keeps failing, ask your administrator to check the SSO settings.",
+  SSO_SIGNIN_EXPIRED: 'That sign-in took too long, was already used, or was started in another browser. Start again here with "Continue with SSO".',
+  SSO_SUBJECT_MISMATCH: "This Flowamaz account is linked to a different person at your identity provider, so the sign-in was refused. Ask your organisation owner to check the account's email address in your IdP.",
+  SSO_EMAIL_UNVERIFIED: "Your identity provider doesn't confirm that your email address is verified. Verify it with your IdP (or ask your IT team), then sign in again.",
+  SSO_DOMAIN_NOT_ALLOWED: "This organisation only accepts SSO sign-ins from certain email domains, and yours isn't one of them. Sign in with your work email, or ask your organisation owner to add your domain.",
+  SSO_IDP_INITIATED_OFF: 'This organisation doesn\'t accept sign-ins started from your identity provider\'s app tile. Use "Continue with SSO" on this page instead.',
+  SSO_NO_ACCOUNT: "You signed in with your identity provider, but you don't have a Flowamaz account in this organisation yet. Ask your administrator to invite you.",
+  SSO_ACCOUNT_DEACTIVATED: 'Your Flowamaz account in this organisation is deactivated. Ask your administrator to reactivate it.',
+  SSO_NOT_ON_PLAN: 'Single sign-on is part of the Enterprise plan, and this organisation is on a different plan. Sign in with your password or ask your organisation owner.',
+  SSO_NOT_ENABLED: "Single sign-on isn't turned on for this organisation. Sign in with your email and password.",
+  SSO_IDP_UNREACHABLE: "Flowamaz couldn't reach your identity provider. Try again in a minute.",
+  SSO_IDP_MISCONFIGURED: "Your organisation's SSO settings don't match the identity provider. Ask your administrator to check them.",
+};
+
+onMounted(() => {
+  if (typeof route.query.org === 'string' && route.query.org) orgSlug.value = route.query.org;
+  const code = route.query.sso_error;
+  if (typeof code === 'string' && code) {
+    error.value = SSO_ERRORS[code] ?? 'Single sign-on didn\'t complete. Try again, or ask your administrator to check the SSO settings.';
+  }
+});
 
 defineExpose({ checkSso, orgSlug });
 
@@ -124,7 +158,7 @@ async function submit(): Promise<void> {
             help="Your organisation's unique slug, chosen at signup."
           />
           <FmInput
-            v-if="!ssoProvider"
+            v-if="passwordVisible"
             v-model="password"
             type="password"
             label="Password"
@@ -134,7 +168,7 @@ async function submit(): Promise<void> {
         </div>
 
         <div
-          v-if="!ssoProvider"
+          v-if="passwordVisible"
           class="mt-2 text-right"
         >
           <RouterLink
@@ -145,22 +179,12 @@ async function submit(): Promise<void> {
           </RouterLink>
         </div>
 
-        <FmButton
-          v-if="!ssoProvider"
-          type="submit"
-          :loading="submitting"
-          block
-          class="mt-4"
-        >
-          Sign in
-        </FmButton>
-
         <div
-          v-else
+          v-if="ssoProvider"
           class="mt-4"
         >
           <p class="mb-2 text-center text-sm text-slate-500">
-            Your organisation uses single sign-on.
+            {{ ssoRequired ? 'Your organisation signs in with single sign-on.' : 'Your organisation offers single sign-on.' }}
           </p>
           <FmButton
             type="button"
@@ -170,7 +194,27 @@ async function submit(): Promise<void> {
           >
             Continue with {{ providerLabel(ssoProvider) }}
           </FmButton>
+          <button
+            v-if="ssoRequired && !showPassword"
+            type="button"
+            class="mt-3 block w-full text-center text-sm text-primary-600 hover:text-primary-700"
+            data-test="owner-password"
+            @click="showPassword = true"
+          >
+            Organisation owner? Sign in with your password
+          </button>
         </div>
+
+        <FmButton
+          v-if="passwordVisible"
+          type="submit"
+          :loading="submitting"
+          block
+          :variant="ssoProvider ? 'secondary' : undefined"
+          class="mt-4"
+        >
+          Sign in with password
+        </FmButton>
       </form>
 
       <p class="mt-6 text-center text-sm text-slate-500">

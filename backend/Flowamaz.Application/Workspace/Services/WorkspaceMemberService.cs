@@ -117,6 +117,7 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
             }
 
             member.Role = newRole;
+            member.ManagedBySso = false; // a hand-set role is kept; SSO group sync no longer changes it
             _memberRepository.Update(member);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 

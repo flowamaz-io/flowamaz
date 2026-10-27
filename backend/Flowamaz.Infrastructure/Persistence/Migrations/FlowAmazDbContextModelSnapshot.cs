@@ -992,6 +992,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<bool>("AllowIdpInitiated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("allow_idp_initiated");
+
+                    b.Property<string>("AllowedEmailDomains")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("allowed_email_domains");
+
                     b.Property<string>("ClientId")
                         .HasColumnType("text")
                         .HasColumnName("client_id");
@@ -1004,6 +1013,19 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<string>("DefaultRole")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Viewer")
+                        .HasColumnName("default_role");
+
+                    b.Property<string>("DefaultWorkspaceIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("default_workspace_ids");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -1015,6 +1037,19 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.Property<string>("EncryptedIdpCertificate")
                         .HasColumnType("text")
                         .HasColumnName("encrypted_idp_certificate");
+
+                    b.Property<string>("GroupRoleMappings")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("group_role_mappings");
+
+                    b.Property<string>("GroupsAttribute")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasDefaultValue("groups")
+                        .HasColumnName("groups_attribute");
 
                     b.Property<string>("IdpEntityId")
                         .HasColumnType("text")
@@ -1036,6 +1071,12 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("issuer_url");
 
+                    b.Property<bool>("JitProvisioning")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("jit_provisioning");
+
                     b.Property<Guid>("OrgId")
                         .HasColumnType("uuid")
                         .HasColumnName("org_id");
@@ -1045,6 +1086,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("provider");
+
+                    b.Property<bool>("RequireSso")
+                        .HasColumnType("boolean")
+                        .HasColumnName("require_sso");
 
                     b.Property<string>("Scopes")
                         .IsRequired()
@@ -2698,6 +2743,11 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("password_hash");
 
+                    b.Property<string>("SsoSubject")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("sso_subject");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -4072,6 +4122,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("JoinedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("joined_at");
+
+                    b.Property<bool>("ManagedBySso")
+                        .HasColumnType("boolean")
+                        .HasColumnName("managed_by_sso");
 
                     b.Property<Guid>("OrgUserId")
                         .HasColumnType("uuid")

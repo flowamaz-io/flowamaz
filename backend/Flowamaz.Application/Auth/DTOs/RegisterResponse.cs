@@ -13,4 +13,5 @@ public sealed record MeResponse(
     string Name,
     Guid OrgId,
     string OrgSlug,
-    IReadOnlyList<WorkspaceSummary> Workspaces);
+    IReadOnlyList<WorkspaceSummary> Workspaces,
+    bool IsOrgOwner = false);

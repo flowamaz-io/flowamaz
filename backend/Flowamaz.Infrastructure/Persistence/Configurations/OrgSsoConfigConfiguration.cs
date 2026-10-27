@@ -15,5 +15,19 @@ public sealed class OrgSsoConfigConfiguration : IEntityTypeConfiguration<OrgSsoC
         builder.Property(c => c.Scopes)
             .HasConversion(JsonColumn.Converter<List<string>>(), JsonColumn.Comparer<List<string>>())
             .HasColumnType("jsonb");
+
+        builder.Property(c => c.DefaultRole).HasConversion<string>().HasMaxLength(16).HasDefaultValue(Core.Enums.WorkspaceRole.Viewer).HasSentinel((Core.Enums.WorkspaceRole)0);
+        builder.Property(c => c.JitProvisioning).HasDefaultValue(true);
+        builder.Property(c => c.GroupsAttribute).HasMaxLength(256).HasDefaultValue("groups");
+        builder.Property(c => c.GroupRoleMappings)
+            .HasConversion(JsonColumn.Converter<List<Core.Interfaces.Services.SsoGroupRoleMapping>>(),
+                JsonColumn.Comparer<List<Core.Interfaces.Services.SsoGroupRoleMapping>>())
+            .HasColumnType("jsonb");
+        builder.Property(c => c.DefaultWorkspaceIds)
+            .HasConversion(JsonColumn.Converter<List<Guid>>(), JsonColumn.Comparer<List<Guid>>())
+            .HasColumnType("jsonb");
+        builder.Property(c => c.AllowedEmailDomains)
+            .HasConversion(JsonColumn.Converter<List<string>>(), JsonColumn.Comparer<List<string>>())
+            .HasColumnType("jsonb");
     }
 }

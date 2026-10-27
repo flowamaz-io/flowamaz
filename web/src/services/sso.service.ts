@@ -4,6 +4,17 @@ import type { ApiEnvelope } from '@/types';
 export interface SsoStatus {
   enabled: boolean;
   provider: string | null;
+  /** The organisation requires SSO: members can't use a password (owners still can). */
+  required?: boolean;
+}
+
+export type WorkspaceRoleName = 'Viewer' | 'Runner' | 'Operator' | 'Designer' | 'Admin';
+
+export interface SsoGroupRoleMapping {
+  group: string;
+  /** null: every workspace. */
+  workspaceId: string | null;
+  role: WorkspaceRoleName;
 }
 
 export interface SsoConfig {
@@ -18,6 +29,23 @@ export interface SsoConfig {
   scopes: string[];
   hasCertificate: boolean;
   hasClientSecret: boolean;
+  requireSso: boolean;
+  jitProvisioning: boolean;
+  defaultRole: WorkspaceRoleName;
+  groupsAttribute: string;
+  groupRoleMappings: SsoGroupRoleMapping[] | null;
+  /** What the IdP admin needs. */
+  acsUrl: string | null;
+  metadataUrl: string | null;
+  oidcRedirectUri: string | null;
+  /** False when the organisation's plan doesn't include SSO (Enterprise only). */
+  planIncludesSso: boolean;
+  /** Accept SAML sign-ins started from the IdP's app tile (off by default: they can't be tied to a browser). */
+  allowIdpInitiated: boolean;
+  /** Email domains that may sign in with SSO; empty means any the IdP vouches for. */
+  allowedEmailDomains: string[] | null;
+  /** Workspaces new SSO accounts join with the default role. */
+  defaultWorkspaceIds: string[] | null;
 }
 
 export interface ConfigureSsoRequest {
@@ -30,6 +58,14 @@ export interface ConfigureSsoRequest {
   clientId?: string | null;
   clientSecret?: string | null;
   scopes?: string[] | null;
+  requireSso?: boolean;
+  jitProvisioning?: boolean;
+  defaultRole?: WorkspaceRoleName;
+  groupsAttribute?: string;
+  groupRoleMappings?: SsoGroupRoleMapping[];
+  allowIdpInitiated?: boolean;
+  allowedEmailDomains?: string[];
+  defaultWorkspaceIds?: string[];
 }
 
 export interface SsoTestResult {
@@ -62,10 +98,11 @@ export const ssoService = {
     await http.delete(`/api/v1/organisations/${orgId}/sso`);
   },
 
-  /** Absolute URL the browser navigates to so the backend redirects to the IdP. */
-  initiateUrl(orgSlug: string, provider: string): string {
+  /** Absolute URL the browser navigates to so the backend redirects to the IdP. Only same-site paths return. */
+  initiateUrl(orgSlug: string, provider: string, returnTo?: string): string {
     const slug = encodeURIComponent(orgSlug);
     const path = provider === 'saml' ? `/api/v1/saml/${slug}/login` : `/api/v1/oidc/${slug}/initiate`;
-    return `${BASE_URL}${path}`;
+    const back = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? `?returnUrl=${encodeURIComponent(returnTo)}` : '';
+    return `${BASE_URL}${path}${back}`;
   },
 };

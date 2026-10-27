@@ -1,14 +1,14 @@
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 
 namespace Flowamaz.Api.Controllers;
 
 /// <summary>
-/// OIDC authorization-code flow. <c>initiate</c> redirects to the IdP with a CSRF state; the IdP
-/// returns to <c>callback</c>, where the state is validated, the code exchanged, the user
-/// JIT-provisioned, and the browser redirected to the app with a short-lived token fragment.
+/// OIDC authorization-code flow with PKCE. <c>initiate</c> redirects to the IdP; the IdP returns to <c>callback</c>,
+/// where the sign-in is matched to its state, the code exchanged and the id_token validated, the user signed in
+/// (refresh cookie) and sent into the app.
 /// </summary>
 [ApiController]
 [AllowAnonymous]
@@ -16,24 +16,46 @@ public sealed class OidcController : ControllerBase
 {
     private readonly ISsoService _sso;
     private readonly IConfiguration _configuration;
+    private readonly Application.Auth.Services.AuthService _auth;
+    private readonly IHostEnvironment _environment;
+    private readonly ILogger<OidcController> _logger;
 
-    public OidcController(ISsoService sso, IConfiguration configuration)
+    public OidcController(
+        ISsoService sso, IConfiguration configuration, Application.Auth.Services.AuthService auth,
+        IHostEnvironment environment, ILogger<OidcController> logger)
     {
         _sso = sso;
         _configuration = configuration;
+        _auth = auth;
+        _environment = environment;
+        _logger = logger;
     }
 
-    private string AppBaseUrl => _configuration["Platform:BaseUrl"]?.TrimEnd('/') ?? "https://app.flowamaz.io";
-
     [HttpGet("/api/v1/oidc/{orgSlug}/initiate")]
-    public async Task<IActionResult> Initiate(string orgSlug, [FromQuery] string? returnUrl, CancellationToken ct) =>
-        Redirect(await _sso.InitiateOidcLoginAsync(orgSlug, returnUrl, ct));
+    public async Task<IActionResult> Initiate(string orgSlug, [FromQuery] string? returnUrl, CancellationToken ct)
+    {
+        try
+        {
+            return SsoSignInFlow.Start(this, _environment, await _sso.InitiateOidcLoginAsync(orgSlug, returnUrl, ct));
+        }
+        catch (SsoLoginException ex)
+        {
+            return SsoSignInFlow.StartFailed(this, _configuration, orgSlug, ex);
+        }
+    }
 
     [HttpGet("/api/v1/oidc/{orgSlug}/callback")]
-    public async Task<IActionResult> Callback(
-        string orgSlug, [FromQuery] string code, [FromQuery] string state, CancellationToken ct)
+    public Task<IActionResult> Callback(
+        string orgSlug, [FromQuery] string? code, [FromQuery] string? state, [FromQuery] string? error, CancellationToken ct)
     {
-        var result = await _sso.HandleOidcCallbackAsync(orgSlug, code, state, ct);
-        return Redirect($"{AppBaseUrl}/#sso_token={Uri.EscapeDataString(result.AccessToken)}");
+        if (!string.IsNullOrEmpty(error) || string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))
+        {
+            // The IdP refused or the user cancelled; the IdP's own error text isn't shown (it isn't ours to vouch for).
+            _logger.LogInformation("OIDC callback without a code org={OrgSlug} error={Error}", orgSlug, error);
+            return Task.FromResult(SsoSignInFlow.StartFailed(this, _configuration, orgSlug,
+                SsoLoginException.Rejected("the identity provider didn't complete the sign-in.")));
+        }
+        return SsoSignInFlow.CompleteAsync(this, orgSlug, binding => _sso.HandleOidcCallbackAsync(orgSlug, code, state, binding, ct),
+            _auth, _environment, _configuration, _logger, ct);
     }
 }

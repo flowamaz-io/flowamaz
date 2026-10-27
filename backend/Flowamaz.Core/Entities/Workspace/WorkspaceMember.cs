@@ -14,4 +14,7 @@ public class WorkspaceMember : BaseEntity
     public WorkspaceRole Role { get; set; } = WorkspaceRole.Viewer;
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Created by an SSO group mapping; SSO removes it again when the person leaves the group.</summary>
+    public bool ManagedBySso { get; set; }
 }

@@ -19,4 +19,10 @@ public class OrgUser : BaseEntity
 
     /// <summary>True when the account was just-in-time provisioned via SSO (no password login).</summary>
     public bool IsSsoProvisioned { get; set; }
+
+    /// <summary>
+    /// The IdP identity this account is linked to (set on first SSO sign-in). Later SSO sign-ins must present the same
+    /// subject, so changing an email at the IdP can't take over another account.
+    /// </summary>
+    public string? SsoSubject { get; set; }
 }

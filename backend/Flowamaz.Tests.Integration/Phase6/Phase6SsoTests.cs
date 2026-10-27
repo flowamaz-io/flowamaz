@@ -38,15 +38,15 @@ public class Phase6SsoTests : ApiTestBase
     }
 
     [Fact]
-    public async Task OidcCallback_with_mismatched_state_is_rejected()
+    public async Task OidcCallback_for_an_org_without_sso_is_rejected()
     {
         await RegisterOwnerAsync("p6-sso2");
 
         using var scope = Fixture.Services.CreateScope();
         var sso = scope.ServiceProvider.GetRequiredService<ISsoService>();
 
-        var act = () => sso.HandleOidcCallbackAsync("p6-sso2", "some-code", "never-issued-state");
+        var act = () => sso.HandleOidcCallbackAsync("p6-sso2", "some-code", "never-issued-state", null);
 
-        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        await act.Should().ThrowAsync<Flowamaz.Core.Exceptions.SsoLoginException>();
     }
 }

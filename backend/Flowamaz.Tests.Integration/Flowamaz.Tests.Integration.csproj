@@ -32,4 +32,8 @@
     <ProjectReference Include="..\Flowamaz.Infrastructure\Flowamaz.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The in-test SAML IdP is shared with the unit tests. -->
+    <Compile Include="..\Flowamaz.Tests.Unit\Auth\Sso\SamlTestIdp.cs" Link="Sso\SamlTestIdp.cs" />
+  </ItemGroup>
 </Project>

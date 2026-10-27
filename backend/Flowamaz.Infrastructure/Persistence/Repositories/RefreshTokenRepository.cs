@@ -23,4 +23,13 @@ public sealed class RefreshTokenRepository(FlowAmazDbContext db) : IRefreshToken
             .Where(t => t.OrgUserId == orgUserId && t.RevokedAt == null && t.ExpiresAt > now)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), cancellationToken);
     }
+
+    public Task<int> RevokeAllForOrgNonOwnersAsync(Guid orgId, CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        return db.RefreshTokens
+            .Where(t => t.RevokedAt == null && t.ExpiresAt > now
+                && db.OrgUsers.Any(u => u.Id == t.OrgUserId && u.OrgId == orgId && !u.IsOrgOwner))
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), cancellationToken);
+    }
 }

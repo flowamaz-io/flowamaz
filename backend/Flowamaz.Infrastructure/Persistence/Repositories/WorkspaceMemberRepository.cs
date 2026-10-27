@@ -47,6 +47,13 @@ public sealed class WorkspaceMemberRepository(FlowAmazDbContext db) : IWorkspace
         db.WorkspaceMembers.CountAsync(
             m => m.WorkspaceId == workspaceId && m.IsActive && m.Role == WorkspaceRole.Admin, cancellationToken);
 
+    public async Task LockAdminsAsync(Guid workspaceId, CancellationToken cancellationToken = default)
+    {
+        if (!db.Database.IsNpgsql()) return;
+        var key = $"workspace_admins:{workspaceId}";
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", cancellationToken);
+    }
+
     public async Task AddAsync(WorkspaceMember member, CancellationToken cancellationToken = default) =>
         await db.WorkspaceMembers.AddAsync(member, cancellationToken);
 
