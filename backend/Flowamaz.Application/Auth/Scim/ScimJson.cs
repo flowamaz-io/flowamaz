@@ -176,7 +176,10 @@ public static partial class ScimJson
         var match = EqFilter().Match(filter);
         if (!match.Success)
             throw ScimException.Filter("Only filters of the form attribute eq \"value\" are supported, e.g. userName eq \"jane@acme.com\".");
-        var value = Regex.Unescape(match.Groups[2].Value);
+        // The value is a JSON string (RFC 7644 §3.4.2.2), so unescape it as one.
+        string value;
+        try { value = JsonSerializer.Deserialize<string>("\"" + match.Groups[2].Value + "\"") ?? ""; }
+        catch (JsonException) { throw ScimException.Filter("The filter value has an invalid escape sequence."); }
         return (match.Groups[1].Value, value);
     }
 

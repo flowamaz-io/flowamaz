@@ -294,6 +294,7 @@ public sealed class EnterpriseScimTests : ApiTestBase, IDisposable
             provider = "saml", isActive = true, idpEntityId = SamlTestIdp.IdpEntityId, idpSsoUrl = "https://idp.acme.test/sso",
             idpCertificate = _idp.CertificatePem,
             groupRoleMappings = new[] { new { group = "Credit", workspaceId = ws, role = "Operator" }, new { group = "Credit-Leads", workspaceId = ws, role = "Admin" } },
+            rolesFromScim = true,
         });
         put.StatusCode.Should().Be(HttpStatusCode.OK, await put.Content.ReadAsStringAsync());
 
@@ -336,7 +337,7 @@ public sealed class EnterpriseScimTests : ApiTestBase, IDisposable
     }
 
     [Fact]
-    public async Task With_scim_in_use_sso_sign_in_takes_roles_from_scim_groups()
+    public async Task With_roles_from_scim_on_sso_sign_in_takes_roles_from_scim_groups()
     {
         const string slug = "scim-sso-roles";
         var (owner, scim, _) = await EnterpriseWithScimAsync(slug);
@@ -346,6 +347,7 @@ public sealed class EnterpriseScimTests : ApiTestBase, IDisposable
             provider = "saml", isActive = true, idpEntityId = SamlTestIdp.IdpEntityId, idpSsoUrl = "https://idp.acme.test/sso",
             idpCertificate = _idp.CertificatePem,
             groupRoleMappings = new[] { new { group = "Credit", workspaceId = ws, role = "Operator" } },
+            rolesFromScim = true,
         })).StatusCode.Should().Be(HttpStatusCode.OK);
         var ana = await CreateUserAsync(scim, $"ana@{slug}.test");
         (await scim.PostAsync("/api/scim/v2/Groups", Json(new { displayName = "Credit", members = new[] { new { value = ana } } })))
@@ -372,6 +374,138 @@ public sealed class EnterpriseScimTests : ApiTestBase, IDisposable
         var member = await DbAsync(db => db.WorkspaceMembers.AsNoTracking().SingleAsync(m => m.WorkspaceId == ws && m.OrgUserId == Guid.Parse(ana)));
         member.IsActive.Should().BeTrue();
         member.Role.Should().Be(WorkspaceRole.Operator);
+    }
+
+    [Fact]
+    public async Task Without_roles_from_scim_a_scim_group_does_not_change_roles()
+    {
+        var (owner, scim, _) = await EnterpriseWithScimAsync("scim-roles-off");
+        var ws = await CreateWorkspaceAsync(owner.Client, "Lending", "scim-roles-off-ws");
+        (await owner.Client.PutAsJsonAsync($"/api/v1/organisations/{owner.OrgId}/sso", new
+        {
+            provider = "saml", isActive = true, idpEntityId = SamlTestIdp.IdpEntityId, idpSsoUrl = "https://idp.acme.test/sso",
+            idpCertificate = _idp.CertificatePem, groupRoleMappings = new[] { new { group = "Credit", workspaceId = ws, role = "Operator" } },
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
+        var ana = await CreateUserAsync(scim, "ana@scim-roles-off.test");
+
+        (await scim.PostAsync("/api/scim/v2/Groups", Json(new { displayName = "Credit", members = new[] { new { value = ana } } })))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+
+        (await DbAsync(db => db.WorkspaceMembers.AnyAsync(m => m.WorkspaceId == ws && m.OrgUserId == Guid.Parse(ana))))
+            .Should().BeFalse("creating a SCIM token doesn't move roles to SCIM; the owner turns that on");
+    }
+
+    [Fact]
+    public async Task A_deleted_user_created_again_gets_a_fresh_account_without_the_old_access()
+    {
+        var (owner, scim, _) = await EnterpriseWithScimAsync("scim-revive");
+        var ws = await CreateWorkspaceAsync(owner.Client, "Lending", "scim-revive-ws");
+        var id = await CreateUserAsync(scim, "jdoe@scim-revive.test");
+        using (var scope = Fixture.Services.CreateScope())
+        {
+            // The old account had a password, an IdP link and a hand-made Admin membership.
+            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+            await db.OrgUsers.Where(u => u.Id == Guid.Parse(id)).ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.PasswordHash, BCrypt.Net.BCrypt.HashPassword("Sup3rSecret!", 4))
+                .SetProperty(u => u.SsoSubject, "saml|idp|old-person"));
+            db.WorkspaceMembers.Add(new WorkspaceMember { WorkspaceId = ws, OrgUserId = Guid.Parse(id), Role = WorkspaceRole.Admin, IsActive = true });
+            await db.SaveChangesAsync();
+        }
+
+        (await scim.DeleteAsync($"/api/scim/v2/Users/{id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await DbAsync(db => db.WorkspaceMembers.AnyAsync(m => m.OrgUserId == Guid.Parse(id)))).Should().BeFalse();
+
+        (await CreateUserAsync(scim, "jdoe@scim-revive.test")).Should().Be(id);
+        var revived = await DbAsync(db => db.OrgUsers.SingleAsync(u => u.Id == Guid.Parse(id)));
+        revived.PasswordHash.Should().BeEmpty();
+        revived.SsoSubject.Should().BeNull();
+        revived.IsSsoProvisioned.Should().BeTrue();
+        (await DbAsync(db => db.WorkspaceMembers.AnyAsync(m => m.OrgUserId == Guid.Parse(id)))).Should().BeFalse();
+
+        var login = await Fixture.NewClient().PostAsJsonAsync("/api/v1/auth/login",
+            new { email = "jdoe@scim-revive.test", password = "Sup3rSecret!", orgSlug = "scim-revive" });
+        login.IsSuccessStatusCode.Should().BeFalse("the old password doesn't come back");
+    }
+
+    [Fact]
+    public async Task Scim_cannot_change_the_email_of_someone_with_a_password()
+    {
+        var (owner, scim, _) = await EnterpriseWithScimAsync("scim-pw-email");
+        using (var scope = Fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+            db.OrgUsers.Add(new OrgUser
+            {
+                OrgId = owner.OrgId, Email = "member@scim-pw-email.test", Name = "Member",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Sup3rSecret!", 4), IsActive = true,
+            });
+            await db.SaveChangesAsync();
+        }
+        var id = (await ReadAsync(await scim.GetAsync("/api/scim/v2/Users?filter=" + HttpUtility.UrlEncode("userName eq \"member@scim-pw-email.test\""))))
+            .GetProperty("Resources")[0].GetProperty("id").GetString();
+
+        var change = await PatchAsync(scim, $"Users/{id}", new { op = "replace", path = "emails[type eq \"work\"].value", value = "attacker@scim-pw-email.test" });
+
+        change.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadAsync(change)).GetProperty("detail").GetString().Should().Contain("password");
+        (await DbAsync(db => db.OrgUsers.SingleAsync(u => u.Id == Guid.Parse(id!)))).Email.Should().Be("member@scim-pw-email.test");
+    }
+
+    [Fact]
+    public async Task Removing_attributes_flowamaz_does_not_keep_is_accepted()
+    {
+        var (_, scim, _) = await EnterpriseWithScimAsync("scim-remove");
+        var id = await CreateUserAsync(scim, "cara@scim-remove.test");
+        var response = await PatchAsync(scim, $"Users/{id}",
+            new { op = "Remove", path = "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager" },
+            new { op = "Remove", path = "phoneNumbers[type eq \"work\"].value" });
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task A_deactivated_admin_does_not_count_as_the_workspaces_admin()
+    {
+        var (owner, scim, _) = await EnterpriseWithScimAsync("scim-last-admin");
+        var ws = await CreateWorkspaceAsync(owner.Client, "Lending", "scim-last-admin-ws");
+        (await owner.Client.PutAsJsonAsync($"/api/v1/organisations/{owner.OrgId}/sso", new
+        {
+            provider = "saml", isActive = true, idpEntityId = SamlTestIdp.IdpEntityId, idpSsoUrl = "https://idp.acme.test/sso",
+            idpCertificate = _idp.CertificatePem, groupRoleMappings = new[] { new { group = "Leads", workspaceId = ws, role = "Admin" } },
+            rolesFromScim = true,
+        })).StatusCode.Should().Be(HttpStatusCode.OK);
+        // The owner created the workspace and is its Admin; take that away so only SCIM admins remain.
+        using (var scope = Fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+            await db.WorkspaceMembers.Where(m => m.WorkspaceId == ws).ExecuteUpdateAsync(s => s.SetProperty(m => m.Role, WorkspaceRole.Viewer));
+        }
+        var a = await CreateUserAsync(scim, "a@scim-last-admin.test");
+        var b = await CreateUserAsync(scim, "b@scim-last-admin.test");
+        var group = (await ReadAsync(await scim.PostAsync("/api/scim/v2/Groups",
+            Json(new { displayName = "Leads", members = new[] { new { value = a }, new { value = b } } })))).GetProperty("id").GetString();
+
+        (await PatchAsync(scim, $"Users/{a}", new { op = "replace", path = "active", value = false })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PatchAsync(scim, $"Groups/{group}", new { op = "remove", path = $"members[value eq \"{b}\"]" }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var bMember = await DbAsync(db => db.WorkspaceMembers.AsNoTracking().SingleAsync(m => m.WorkspaceId == ws && m.OrgUserId == Guid.Parse(b)));
+        bMember.Should().Match<WorkspaceMember>(m => m.IsActive && m.Role == WorkspaceRole.Admin,
+            "a deactivated person's Admin role doesn't count, so B stays the workspace's last usable Admin");
+    }
+
+    [Fact]
+    public async Task One_patch_can_add_and_remove_the_same_member_in_order()
+    {
+        var (_, scim, _) = await EnterpriseWithScimAsync("scim-patch-order");
+        var a = await CreateUserAsync(scim, "a@scim-patch-order.test");
+        var group = (await ReadAsync(await scim.PostAsync("/api/scim/v2/Groups", Json(new { displayName = "Ops" })))).GetProperty("id").GetString();
+
+        (await PatchAsync(scim, $"Groups/{group}",
+            new { op = "add", path = "members", value = new[] { new { value = a } } },
+            new { op = "remove", path = $"members[value eq \"{a}\"]" },
+            new { op = "add", path = "members", value = new[] { new { value = a } } })).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await DbAsync(db => db.ScimGroupMembers.CountAsync(m => m.GroupId == Guid.Parse(group!)))).Should().Be(1);
     }
 
     private async Task GiveSessionAsync(Guid userId)

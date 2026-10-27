@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flowamaz.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FlowAmazDbContext))]
-    [Migration("20261027030656_AddScimProvisioning")]
+    [Migration("20261027032004_AddScimProvisioning")]
     partial class AddScimProvisioning
     {
         /// <inheritdoc />
@@ -1093,6 +1093,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.Property<bool>("RequireSso")
                         .HasColumnType("boolean")
                         .HasColumnName("require_sso");
+
+                    b.Property<bool>("RolesFromScim")
+                        .HasColumnType("boolean")
+                        .HasColumnName("roles_from_scim");
 
                     b.Property<string>("Scopes")
                         .IsRequired()
@@ -4342,6 +4346,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_scim_group_members_scim_groups_group_id");
+
+                    b.HasOne("Flowamaz.Core.Entities.Platform.OrgUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrgUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scim_group_members_org_users_org_user_id");
                 });
 
             modelBuilder.Entity("Flowamaz.Core.Entities.Connector.WorkspaceConnector", b =>

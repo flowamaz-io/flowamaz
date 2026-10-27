@@ -54,8 +54,9 @@ public sealed class ScimRepository(FlowAmazDbContext db) : IScimRepository
     public Task<OrgUser?> GetUserAsync(Guid orgId, Guid userId, bool includeDeleted = false, CancellationToken ct = default) =>
         db.OrgUsers.FirstOrDefaultAsync(u => u.OrgId == orgId && u.Id == userId && (includeDeleted || u.ScimDeletedAt == null), ct);
 
+    /// <summary>Includes accounts removed in Flowamaz (soft-deleted): their email is still taken by the unique index.</summary>
     public Task<OrgUser?> GetUserByEmailAsync(Guid orgId, string email, CancellationToken ct = default) =>
-        db.OrgUsers.FirstOrDefaultAsync(u => u.OrgId == orgId && u.Email == email, ct);
+        db.OrgUsers.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.OrgId == orgId && u.Email == email, ct);
 
     public Task<List<OrgUser>> GetUsersAsync(Guid orgId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
         db.OrgUsers.Where(u => u.OrgId == orgId && userIds.Contains(u.Id) && u.ScimDeletedAt == null).ToListAsync(ct);

@@ -172,6 +172,7 @@ public sealed class SsoService : ISsoService
         if (request.DefaultWorkspaceIds is { } defaults)
             config.DefaultWorkspaceIds = await ValidateWorkspacesAsync(orgId, defaults, ct);
         if (request.AllowIdpInitiated is { } idpInitiated) config.AllowIdpInitiated = idpInitiated;
+        if (request.RolesFromScim is { } fromScim) config.RolesFromScim = fromScim;
         if (request.AllowedEmailDomains is { } domains) config.AllowedEmailDomains = ValidateDomains(domains);
 
         config.IsActive = request.IsActive;
@@ -302,7 +303,7 @@ public sealed class SsoService : ISsoService
             if (!string.IsNullOrWhiteSpace(claims.Name) && claims.Name != user.Name) user.Name = claims.Name;
             user.LastLoginAt = DateTime.UtcNow;
             if (!user.IsOrgOwner)
-                await _sync.SyncAsync(user, config, await RoleGroupsAsync(orgId, user.Id, claims, isNew: false, ct), isNew: false, ct);
+                await _sync.SyncAsync(user, config, await RoleGroupsAsync(config, user.Id, claims, isNew: false, ct), isNew: false, ct);
             await _unitOfWork.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             return user;
@@ -322,7 +323,7 @@ public sealed class SsoService : ISsoService
             LastLoginAt = DateTime.UtcNow,
         };
         await _orgUsers.AddAsync(user, ct);
-        await _sync.SyncAsync(user, config, await RoleGroupsAsync(orgId, user.Id, claims, isNew: true, ct), isNew: true, ct);
+        await _sync.SyncAsync(user, config, await RoleGroupsAsync(config, user.Id, claims, isNew: true, ct), isNew: true, ct);
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         _logger.LogInformation("SsoService.ProvisionUserFromSsoAsync created user={UserId} org={OrgId}", user.Id, orgId);
@@ -330,13 +331,13 @@ public sealed class SsoService : ISsoService
     }
 
     /// <summary>
-    /// Group names that decide roles: the person's SCIM groups when the organisation provisions over SCIM (the IdP
-    /// keeps those current, and assertions often carry no groups then), otherwise the groups in the sign-in.
+    /// Group names that decide roles: the person's SCIM groups when the owner chose "roles from SCIM groups" (the IdP
+    /// keeps those current, and sign-ins often carry no groups then), otherwise the groups in the sign-in.
     /// </summary>
-    private async Task<IReadOnlyList<string>> RoleGroupsAsync(Guid orgId, Guid userId, SsoClaims claims, bool isNew, CancellationToken ct)
+    private async Task<IReadOnlyList<string>> RoleGroupsAsync(OrgSsoConfig config, Guid userId, SsoClaims claims, bool isNew, CancellationToken ct)
     {
-        if (_scim is null || !await _scim.HasActiveTokenAsync(orgId, ct)) return claims.GroupList;
-        return isNew ? [] : await _scim.GetGroupNamesForUserAsync(orgId, userId, ct);
+        if (!config.RolesFromScim || _scim is null) return claims.GroupList;
+        return isNew ? [] : await _scim.GetGroupNamesForUserAsync(config.OrgId, userId, ct);
     }
 
     // ── SAML ────────────────────────────────────────────────────────────────────────────
@@ -565,5 +566,5 @@ public sealed class SsoService : ISsoService
             c.Scopes, c.EncryptedIdpCertificate is not null, c.EncryptedClientSecret is not null,
             c.RequireSso, c.JitProvisioning, c.DefaultRole, c.GroupsAttribute, c.GroupRoleMappings,
             AcsUrl(orgSlug), MetadataUrl(orgSlug), OidcRedirectUri(orgSlug), planIncludesSso,
-            c.AllowIdpInitiated, c.AllowedEmailDomains, c.DefaultWorkspaceIds);
+            c.AllowIdpInitiated, c.AllowedEmailDomains, c.DefaultWorkspaceIds, c.RolesFromScim);
 }

@@ -31,6 +31,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                 maxLength: 256,
                 nullable: true);
 
+            migrationBuilder.AddColumn<bool>(
+                name: "roles_from_scim",
+                table: "org_sso_configs",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
             migrationBuilder.CreateTable(
                 name: "scim_groups",
                 columns: table => new
@@ -86,6 +93,12 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_scim_group_members", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_scim_group_members_org_users_org_user_id",
+                        column: x => x.org_user_id,
+                        principalTable: "org_users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "fk_scim_group_members_scim_groups_group_id",
                         column: x => x.group_id,
@@ -146,6 +159,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
             migrationBuilder.DropColumn(
                 name: "scim_user_name",
                 table: "org_users");
+
+            migrationBuilder.DropColumn(
+                name: "roles_from_scim",
+                table: "org_sso_configs");
         }
     }
 }

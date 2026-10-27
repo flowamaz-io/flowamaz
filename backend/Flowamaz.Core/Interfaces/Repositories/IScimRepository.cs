@@ -29,6 +29,7 @@ public interface IScimRepository
     Task<(List<OrgUser> Users, int Total)> QueryUsersAsync(
         Guid orgId, ScimUserFilterAttribute? attribute, string? value, int skip, int take, CancellationToken ct = default);
     Task<OrgUser?> GetUserAsync(Guid orgId, Guid userId, bool includeDeleted = false, CancellationToken ct = default);
+    /// <summary>Any account with this email in the org, including ones removed in Flowamaz (check <c>IsDeleted</c>).</summary>
     Task<OrgUser?> GetUserByEmailAsync(Guid orgId, string email, CancellationToken ct = default);
     Task<List<OrgUser>> GetUsersAsync(Guid orgId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 

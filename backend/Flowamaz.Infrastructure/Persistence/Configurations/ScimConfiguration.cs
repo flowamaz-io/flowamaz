@@ -36,5 +36,6 @@ public sealed class ScimGroupMemberConfiguration : IEntityTypeConfiguration<Scim
         builder.HasIndex(m => new { m.GroupId, m.OrgUserId }).IsUnique();
         builder.HasIndex(m => m.OrgUserId);
         builder.HasOne<ScimGroup>().WithMany().HasForeignKey(m => m.GroupId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<Flowamaz.Core.Entities.Platform.OrgUser>().WithMany().HasForeignKey(m => m.OrgUserId).OnDelete(DeleteBehavior.Cascade);
     }
 }

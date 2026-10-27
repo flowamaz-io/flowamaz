@@ -28,12 +28,14 @@ public sealed record ScimTokenCreated(ScimTokenDto Token, string PlainToken, str
 /// people and their groups in Flowamaz.
 /// <list type="bullet">
 /// <item>A token belongs to one organisation; everything it reads or changes is in that organisation.</item>
-/// <item>Users: created without a password (they sign in with SSO). Deactivating or deleting one ends their sessions;
-/// deleting keeps the account deactivated and reuses it if the IdP creates the person again.</item>
-/// <item>Organisation owners can't be deactivated, deleted or have their email changed over SCIM: an IdP admin must not
-/// be able to take over the break-glass owner account (an email change would let them reset its password).</item>
-/// <item>Groups: their display names feed the SSO group → role mappings. When SCIM changes someone's groups, their
-/// SSO-managed workspace memberships are updated straight away (same rules as at sign-in).</item>
+/// <item>Users: created without a password (they sign in with SSO). Deactivating or deleting one ends their sessions.
+/// Deleting also removes them from every workspace and keeps the account deactivated; if the IdP creates the same
+/// email again, the account comes back as a fresh SSO account (no password, no IdP link, no workspaces).</item>
+/// <item>Organisation owners can't be deactivated, deleted or have their email changed over SCIM, and nor can the
+/// email of anyone who has a Flowamaz password: the new address would receive password resets, so an IdP admin could
+/// take the account over.</item>
+/// <item>Groups: their display names feed the SSO group → role mappings once the owner turns on "roles from SCIM
+/// groups"; then a SCIM group change updates SSO-managed memberships straight away (same rules as at sign-in).</item>
 /// </list>
 /// </summary>
 public sealed class ScimService
@@ -47,6 +49,8 @@ public sealed class ScimService
     private readonly IOrgUserRepository _orgUsers;
     private readonly IOrgSsoConfigRepository _configs;
     private readonly IRefreshTokenRepository _refreshTokens;
+    private readonly IPasswordResetTokenRepository _resetTokens;
+    private readonly IWorkspaceMemberRepository _members;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ScimService> _logger;
@@ -60,6 +64,7 @@ public sealed class ScimService
         IOrgUserRepository orgUsers,
         IOrgSsoConfigRepository configs,
         IRefreshTokenRepository refreshTokens,
+        IPasswordResetTokenRepository resetTokens,
         IWorkspaceRepository workspaces,
         IWorkspaceMemberRepository members,
         IUnitOfWork unitOfWork,
@@ -73,6 +78,8 @@ public sealed class ScimService
         _orgUsers = orgUsers;
         _configs = configs;
         _refreshTokens = refreshTokens;
+        _resetTokens = resetTokens;
+        _members = members;
         _unitOfWork = unitOfWork;
         _configuration = configuration;
         _logger = logger;
@@ -175,9 +182,20 @@ public sealed class ScimService
         var revived = false;
         if (user is not null)
         {
+            if (user.IsDeleted)
+                throw ScimException.Uniqueness("An account with this email was removed in Flowamaz, so SCIM can't create it again. Ask Flowamaz support to restore or purge that account.");
             if (user.ScimDeletedAt is null)
-                throw ScimException.Uniqueness($"A user with email {email} already exists in this organisation. Match it with a filter on userName instead of creating it.");
-            user.ScimDeletedAt = null; // the IdP deleted this person before and is creating them again
+                throw ScimException.Uniqueness("A user with this email already exists in this organisation. Match it with a filter on userName instead of creating it.");
+            // The IdP deleted this account before and is creating the email again: it may be a different person now,
+            // so nothing of the old account's access carries over.
+            user.ScimDeletedAt = null;
+            user.PasswordHash = string.Empty;
+            user.SsoSubject = null;
+            user.IsSsoProvisioned = true;
+            user.LockoutUntil = null;
+            user.FailedLoginCount = 0;
+            await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
+            await _resetTokens.InvalidateAllForUserAsync(user.Id, ct);
             revived = true;
         }
         else
@@ -191,7 +209,8 @@ public sealed class ScimService
         user.Name = input.FullName(user.Name) ?? user.Name;
         user.IsActive = input.Active ?? true;
         await _unitOfWork.SaveChangesAsync(ct);
-        if (user.IsActive) await ResyncAsync(orgId, config, [user.Id], isNew: !revived, ct);
+        // A new account starts in the default workspaces (and, with roles from SCIM, gets them as groups arrive).
+        if (user.IsActive) await ResyncAsync(orgId, config, [user.Id], isNew: !revived, ct, evenWithoutScimRoles: true);
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
@@ -215,9 +234,10 @@ public sealed class ScimService
         {
             if (op == "remove")
             {
-                // Removing what Flowamaz requires (email, name, active) isn't possible; externalId may go.
-                if (path?.Equals("externalId", StringComparison.OrdinalIgnoreCase) == true) { input.ExternalIdSet = true; input.ExternalId = null; continue; }
-                throw ScimException.Mutability($"'{path}' can't be removed from a Flowamaz user.");
+                // Only externalId can be cleared. Other removes (manager, phone numbers, or attributes Flowamaz
+                // requires) are ignored, so the IdP's sync doesn't fail on data Flowamaz doesn't keep.
+                if (path?.Equals("externalId", StringComparison.OrdinalIgnoreCase) == true) { input.ExternalIdSet = true; input.ExternalId = null; }
+                continue;
             }
             if (path is null)
             {
@@ -241,10 +261,14 @@ public sealed class ScimService
         user.ScimExternalId = null;
         user.IsActive = false;
         foreach (var row in await _scim.GetMembershipRowsForUserAsync(orgId, user.Id, ct)) _scim.RemoveMember(row);
+        // Out of every workspace: if the email is ever created again, that account starts with no access.
+        var memberships = await _members.GetAllForUserAsync(user.Id, ct);
+        foreach (var membership in memberships) _members.Remove(membership);
         await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
+        await _resetTokens.InvalidateAllForUserAsync(user.Id, ct);
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
-        Audit(orgId, null, "scim.user_deleted", "deactivated", user.Id, null, ct, user.Email);
+        Audit(orgId, null, "scim.user_deleted", "deactivated", user.Id, new { workspacesLeft = memberships.Count }, ct, user.Email);
     }
 
     private async Task<JsonObject> ChangeUserAsync(Guid orgId, Guid id, UserInput input, CancellationToken ct)
@@ -257,10 +281,14 @@ public sealed class ScimService
         {
             if (user.IsOrgOwner)
                 throw ScimException.Mutability("An organisation owner's email can't be changed through SCIM. Change it in Flowamaz instead.");
+            if (!string.IsNullOrEmpty(user.PasswordHash))
+                throw ScimException.Mutability("This person signs in to Flowamaz with a password, so their email can't be changed through SCIM (password resets would go to the new address). Change it in Flowamaz instead.");
             CheckDomain(email, config);
             if (await _scim.GetUserByEmailAsync(orgId, email, ct) is not null)
-                throw ScimException.Uniqueness($"Another user in this organisation already has the email {email}.");
+                throw ScimException.Uniqueness("Another account in this organisation already uses that email.");
             user.Email = email;
+            await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
+            await _resetTokens.InvalidateAllForUserAsync(user.Id, ct);
         }
         if (input.UserNameSet) user.ScimUserName = input.UserName;
         if (input.ExternalIdSet) user.ScimExternalId = input.ExternalId;
@@ -275,7 +303,7 @@ public sealed class ScimService
             if (!active) await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
         }
         await _unitOfWork.SaveChangesAsync(ct);
-        if (user.IsActive && !wasActive) await ResyncAsync(orgId, config, [user.Id], isNew: false, ct);
+        if (user.IsActive && !wasActive) await ResyncAsync(orgId, config, [user.Id], isNew: false, ct, evenWithoutScimRoles: false);
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
@@ -320,9 +348,10 @@ public sealed class ScimService
             throw ScimException.Uniqueness($"A group named '{name}' already exists. Match it with a filter on displayName instead of creating it.");
         var group = new ScimGroup { OrgId = orgId, DisplayName = name, ExternalId = ExternalId(ScimJson.String(json, "externalId")) };
         await _scim.AddGroupAsync(group, ct);
-        var affected = new HashSet<Guid>();
+        var state = new MemberState(group, [], _scim);
         if (ScimJson.TryGet(json, "members", out var members))
-            await SetMembersAsync(orgId, group, await MemberIdsAsync(orgId, members, ct), affected, ct);
+            await state.SetAsync(await MemberIdsAsync(orgId, members, ct), ct);
+        var affected = state.Affected;
         await FinishGroupChangeAsync(orgId, affected, ct);
         await transaction.CommitAsync(ct);
         Audit(orgId, null, "scim.group_created", "created", group.Id, new { name, members = affected.Count }, ct);
@@ -335,11 +364,12 @@ public sealed class ScimService
         var json = ScimJson.Parse(body);
         await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
         var group = await _scim.GetGroupAsync(orgId, id, ct) ?? throw ScimException.NotFound("This group");
-        var affected = new HashSet<Guid>();
-        await RenameAsync(orgId, group, DisplayName(ScimJson.String(json, "displayName")), affected, ct);
-        group.ExternalId = ExternalId(ScimJson.String(json, "externalId")) ?? group.ExternalId;
+        var state = await MemberState.LoadAsync(group, _scim, ct);
+        var affected = state.Affected;
+        await RenameAsync(orgId, group, DisplayName(ScimJson.String(json, "displayName")), state, ct);
+        group.ExternalId = ExternalId(ScimJson.String(json, "externalId")); // PUT replaces: absent means none
         var members = ScimJson.TryGet(json, "members", out var m) ? await MemberIdsAsync(orgId, m, ct) : [];
-        await SetMembersAsync(orgId, group, members, affected, ct);
+        await state.SetAsync(members, ct);
         await FinishGroupChangeAsync(orgId, affected, ct);
         await transaction.CommitAsync(ct);
         Audit(orgId, null, "scim.group_updated", "updated", group.Id, new { name = group.DisplayName, changed = affected.Count }, ct);
@@ -352,7 +382,8 @@ public sealed class ScimService
         var operations = PatchOperations(ScimJson.Parse(body));
         await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
         var group = await _scim.GetGroupAsync(orgId, id, ct) ?? throw ScimException.NotFound("This group");
-        var affected = new HashSet<Guid>();
+        var state = await MemberState.LoadAsync(group, _scim, ct);
+        var affected = state.Affected;
 
         foreach (var (op, path, value) in operations)
         {
@@ -360,13 +391,20 @@ public sealed class ScimService
             if (target is null)
             {
                 if (value.ValueKind != JsonValueKind.Object) throw ScimException.Syntax("A patch operation without a path needs an object value.");
-                if (ScimJson.String(value, "displayName") is { } newName) await RenameAsync(orgId, group, DisplayName(newName), affected, ct);
-                if (ScimJson.String(value, "externalId") is { } ext) group.ExternalId = ExternalId(ext);
+                if (ScimJson.String(value, "displayName") is { } newName)
+                {
+                    if (op == "remove") throw ScimException.Mutability("A group must keep its displayName.");
+                    await RenameAsync(orgId, group, DisplayName(newName), state, ct);
+                }
+                if (ScimJson.String(value, "externalId") is { } ext) group.ExternalId = op == "remove" ? null : ExternalId(ext);
                 if (ScimJson.TryGet(value, "members", out var m))
                 {
-                    var ids = await MemberIdsAsync(orgId, m, ct);
-                    if (op == "replace") await SetMembersAsync(orgId, group, ids, affected, ct);
-                    else await AddMembersAsync(group, ids, affected, ct);
+                    switch (op)
+                    {
+                        case "replace": await state.SetAsync(await MemberIdsAsync(orgId, m, ct), ct); break;
+                        case "add": await state.AddAsync(await MemberIdsAsync(orgId, m, ct), ct); break;
+                        default: state.Remove(MemberIdsFromValue(m)); break;
+                    }
                 }
                 continue;
             }
@@ -374,7 +412,7 @@ public sealed class ScimService
             if (target.Equals("displayName", StringComparison.OrdinalIgnoreCase))
             {
                 if (op == "remove") throw ScimException.Mutability("A group must keep its displayName.");
-                await RenameAsync(orgId, group, DisplayName(value.ValueKind == JsonValueKind.String ? value.GetString() : null), affected, ct);
+                await RenameAsync(orgId, group, DisplayName(value.ValueKind == JsonValueKind.String ? value.GetString() : null), state, ct);
             }
             else if (target.Equals("externalId", StringComparison.OrdinalIgnoreCase))
             {
@@ -384,13 +422,11 @@ public sealed class ScimService
             {
                 switch (op)
                 {
-                    case "add": await AddMembersAsync(group, await MemberIdsAsync(orgId, value, ct), affected, ct); break;
-                    case "replace": await SetMembersAsync(orgId, group, await MemberIdsAsync(orgId, value, ct), affected, ct); break;
+                    case "add": await state.AddAsync(await MemberIdsAsync(orgId, value, ct), ct); break;
+                    case "replace": await state.SetAsync(await MemberIdsAsync(orgId, value, ct), ct); break;
                     default:
                         // Entra removes with a value list; no value means "remove everyone".
-                        var remove = value.ValueKind == JsonValueKind.Undefined || value.ValueKind == JsonValueKind.Null
-                            ? null : MemberIdsFromValue(value);
-                        await RemoveMembersAsync(group, remove, affected, ct);
+                        state.Remove(value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? null : MemberIdsFromValue(value));
                         break;
                 }
             }
@@ -398,7 +434,7 @@ public sealed class ScimService
             {
                 if (op != "remove") throw ScimException.Path("Only 'remove' is supported on members[value eq \"…\"].");
                 if (!Guid.TryParse(match.Groups[1].Value, out var memberId)) throw ScimException.Invalid($"'{match.Groups[1].Value}' isn't a Flowamaz user id.");
-                await RemoveMembersAsync(group, [memberId], affected, ct);
+                state.Remove([memberId]);
             }
             else throw ScimException.Path($"Groups can't be patched at '{target}'. Use displayName, externalId or members.");
         }
@@ -423,47 +459,71 @@ public sealed class ScimService
 
     // ── Group helpers ───────────────────────────────────────────────────────────────────
 
-    private async Task RenameAsync(Guid orgId, ScimGroup group, string name, HashSet<Guid> affected, CancellationToken ct)
+    private async Task RenameAsync(Guid orgId, ScimGroup group, string name, MemberState state, CancellationToken ct)
     {
         if (name == group.DisplayName) return;
         if (await _scim.GroupNameTakenAsync(orgId, name, group.Id, ct))
             throw ScimException.Uniqueness($"A group named '{name}' already exists.");
         group.DisplayName = name;
-        // Mappings match on the name, so everyone in the group may get different roles now.
-        foreach (var m in await _scim.GetMembershipRowsAsync(group.Id, ct)) affected.Add(m.OrgUserId);
+        state.TouchAll(); // mappings match on the name, so every member may get different roles now
     }
 
-    private async Task SetMembersAsync(Guid orgId, ScimGroup group, IReadOnlyCollection<Guid> userIds, HashSet<Guid> affected, CancellationToken ct)
+    /// <summary>
+    /// A group's members within one request: loaded once, then changed in memory (and staged on the repository), so
+    /// several operations in one PATCH see each other's effects.
+    /// </summary>
+    private sealed class MemberState
     {
-        var wanted = userIds.ToHashSet();
-        var current = await _scim.GetMembershipRowsAsync(group.Id, ct);
-        foreach (var row in current.Where(r => !wanted.Contains(r.OrgUserId)))
+        private readonly ScimGroup _group;
+        private readonly IScimRepository _scim;
+        private readonly Dictionary<Guid, ScimGroupMember> _rows;
+
+        public HashSet<Guid> Affected { get; } = [];
+
+        public MemberState(ScimGroup group, IEnumerable<ScimGroupMember> rows, IScimRepository scim)
         {
-            _scim.RemoveMember(row);
-            affected.Add(row.OrgUserId);
+            _group = group;
+            _scim = scim;
+            _rows = rows.ToDictionary(r => r.OrgUserId);
         }
-        await AddMembersAsync(group, wanted.Except(current.Select(r => r.OrgUserId)).ToList(), affected, ct);
-    }
 
-    private async Task AddMembersAsync(ScimGroup group, IReadOnlyCollection<Guid> userIds, HashSet<Guid> affected, CancellationToken ct)
-    {
-        var existing = (await _scim.GetMembershipRowsAsync(group.Id, ct)).Select(r => r.OrgUserId).ToHashSet();
-        foreach (var userId in userIds.Where(u => !existing.Contains(u)).Distinct())
+        public static async Task<MemberState> LoadAsync(ScimGroup group, IScimRepository scim, CancellationToken ct) =>
+            new(group, await scim.GetMembershipRowsAsync(group.Id, ct), scim);
+
+        public async Task AddAsync(IEnumerable<Guid> userIds, CancellationToken ct)
         {
-            await _scim.AddMemberAsync(new ScimGroupMember { GroupId = group.Id, OrgUserId = userId }, ct);
-            affected.Add(userId);
-        }
-    }
-
-    private async Task RemoveMembersAsync(ScimGroup group, IReadOnlyCollection<Guid>? userIds, HashSet<Guid> affected, CancellationToken ct)
-    {
-        var remove = userIds?.ToHashSet();
-        foreach (var row in await _scim.GetMembershipRowsAsync(group.Id, ct))
-            if (remove is null || remove.Contains(row.OrgUserId))
+            foreach (var userId in userIds)
             {
-                _scim.RemoveMember(row);
-                affected.Add(row.OrgUserId);
+                if (_rows.ContainsKey(userId)) continue;
+                var row = new ScimGroupMember { GroupId = _group.Id, OrgUserId = userId };
+                await _scim.AddMemberAsync(row, ct);
+                _rows[userId] = row;
+                Affected.Add(userId);
             }
+        }
+
+        /// <summary>Removes these members, or everyone when <paramref name="userIds"/> is null.</summary>
+        public void Remove(IEnumerable<Guid>? userIds)
+        {
+            foreach (var userId in (userIds ?? _rows.Keys).ToList())
+            {
+                if (!_rows.Remove(userId, out var row)) continue;
+                _scim.RemoveMember(row);
+                Affected.Add(userId);
+            }
+        }
+
+        public async Task SetAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+        {
+            var wanted = userIds.ToHashSet();
+            Remove(_rows.Keys.Where(id => !wanted.Contains(id)).ToList());
+            await AddAsync(wanted, ct);
+        }
+
+        public void TouchAll()
+        {
+            foreach (var id in _rows.Keys) Affected.Add(id);
+        }
     }
 
     /// <summary>The user ids in a <c>members</c> value, all of which must be users of this organisation.</summary>
@@ -498,22 +558,32 @@ public sealed class ScimService
         return ids.Distinct().ToList();
     }
 
-    /// <summary>Saves the group change, then updates the SSO-managed workspace roles of everyone it touched.</summary>
+    /// <summary>
+    /// Saves the group change, then (with "roles from SCIM groups" on) updates the SSO-managed workspace roles of
+    /// everyone it touched.
+    /// </summary>
     private async Task FinishGroupChangeAsync(Guid orgId, IReadOnlyCollection<Guid> affected, CancellationToken ct)
     {
         await _unitOfWork.SaveChangesAsync(ct);
         if (affected.Count == 0) return;
         var config = await _configs.GetByOrgIdAsync(orgId, ct) ?? new OrgSsoConfig { OrgId = orgId };
-        await ResyncAsync(orgId, config, affected, isNew: false, ct);
+        await ResyncAsync(orgId, config, affected, isNew: false, ct, evenWithoutScimRoles: false);
         await _unitOfWork.SaveChangesAsync(ct);
     }
 
-    private async Task ResyncAsync(Guid orgId, OrgSsoConfig config, IReadOnlyCollection<Guid> userIds, bool isNew, CancellationToken ct)
+    /// <summary>
+    /// Applies the mappings to these users with their SCIM groups. Only when roles come from SCIM: otherwise sign-ins
+    /// decide roles, and SCIM groups must not undo them (<paramref name="evenWithoutScimRoles"/> lets a brand-new
+    /// account still join the default workspaces).
+    /// </summary>
+    private async Task ResyncAsync(Guid orgId, OrgSsoConfig config, IReadOnlyCollection<Guid> userIds, bool isNew, CancellationToken ct,
+        bool evenWithoutScimRoles)
     {
+        if (!config.RolesFromScim && !evenWithoutScimRoles) return;
         foreach (var user in await _scim.GetUsersAsync(orgId, userIds.ToList(), ct))
         {
             if (!user.IsActive || user.IsOrgOwner) continue;
-            var groups = await _scim.GetGroupNamesForUserAsync(orgId, user.Id, ct);
+            IReadOnlyList<string> groups = config.RolesFromScim ? await _scim.GetGroupNamesForUserAsync(orgId, user.Id, ct) : [];
             await _sync.SyncAsync(user, config, groups, isNew, ct);
         }
     }
@@ -677,7 +747,7 @@ public sealed class ScimService
         private void SetEmail(string email)
         {
             var e = email.Trim();
-            if (!ScimJson.IsEmail(e)) throw ScimException.Invalid($"'{e}' isn't a valid email address.");
+            if (!ScimJson.IsEmail(e)) throw ScimException.Invalid("An email address in the request isn't valid. Check the person's email in your identity provider.");
             Email = e.ToLowerInvariant();
         }
 

@@ -95,9 +95,9 @@ const when = (iso: string | null) => (iso ? dayjs(iso).format('D MMM YYYY, HH:mm
         SCIM provisioning
       </h2>
       <p class="mt-1 text-xs text-slate-500">
-        Let your identity provider create, update and deactivate people, and keep their groups in step. With SCIM in use,
-        workspace roles come from the person's SCIM groups (matched against the group mappings above). Organisation owners
-        can't be deactivated or have their email changed over SCIM.
+        Let your identity provider create, update and deactivate people, and keep their groups in step. To have roles
+        follow SCIM groups, turn on "Take roles from SCIM groups" above. Organisation owners, and anyone who signs in with
+        a password, can't have their email changed over SCIM, and owners can't be deactivated.
       </p>
     </div>
 

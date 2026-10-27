@@ -328,16 +328,15 @@ public class SsoServiceTests
     }
 
     [Fact]
-    public async Task With_scim_in_use_roles_come_from_scim_groups_not_the_sign_in()
+    public async Task With_roles_from_scim_on_roles_come_from_scim_groups_not_the_sign_in()
     {
         var ws = Guid.NewGuid();
-        Saml(c => c.GroupRoleMappings = [new SsoGroupRoleMapping("Credit", ws, WorkspaceRole.Operator)]);
+        Saml(c => { c.GroupRoleMappings = [new SsoGroupRoleMapping("Credit", ws, WorkspaceRole.Operator)]; c.RolesFromScim = true; });
         var member = new WorkspaceMember { WorkspaceId = ws, OrgUserId = Guid.NewGuid(), Role = WorkspaceRole.Operator, IsActive = true, ManagedBySso = true };
         var user = new OrgUser { Id = member.OrgUserId, OrgId = OrgId, Email = "jane@acme.test", IsActive = true };
         _orgUsers.Setup(r => r.GetByEmailAndOrgAsync("jane@acme.test", OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
         _workspaces.Setup(w => w.GetForOrgAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync([new Workspace { Id = ws, OrgId = OrgId }]);
         _members.Setup(m => m.GetAsync(ws, user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(member);
-        _scim.Setup(s => s.HasActiveTokenAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _scim.Setup(s => s.GetGroupNamesForUserAsync(OrgId, user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(["Credit"]);
 
         // The assertion has no groups; without SCIM that would remove the Operator membership.

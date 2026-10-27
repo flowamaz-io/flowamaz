@@ -27,6 +27,12 @@ public class ScimJsonTests
     public void Unsupported_filters_are_refused(string filter) =>
         FluentActions.Invoking(() => ScimJson.UserFilter(filter)).Should().Throw<ScimException>().Which.ScimType.Should().Be("invalidFilter");
 
+    [Theory]
+    [InlineData("userName eq \"\\x4\"")]
+    [InlineData("userName eq \"\\c\"")]
+    public void Bad_escapes_are_a_filter_error_not_a_crash(string filter) =>
+        FluentActions.Invoking(() => ScimJson.UserFilter(filter)).Should().Throw<ScimException>().Which.ScimType.Should().Be("invalidFilter");
+
     [Fact]
     public void No_filter_means_everything() => ScimJson.UserFilter(null).Should().BeNull();
 

@@ -46,6 +46,8 @@ export interface SsoConfig {
   allowedEmailDomains: string[] | null;
   /** Workspaces new SSO accounts join with the default role. */
   defaultWorkspaceIds: string[] | null;
+  /** Roles come from SCIM groups instead of the groups in each sign-in. */
+  rolesFromScim: boolean;
 }
 
 export interface ConfigureSsoRequest {
@@ -66,6 +68,7 @@ export interface ConfigureSsoRequest {
   allowIdpInitiated?: boolean;
   allowedEmailDomains?: string[];
   defaultWorkspaceIds?: string[];
+  rolesFromScim?: boolean;
 }
 
 export interface SsoTestResult {

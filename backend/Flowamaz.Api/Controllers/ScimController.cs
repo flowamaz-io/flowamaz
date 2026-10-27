@@ -175,6 +175,7 @@ public sealed class ScimController : ControllerBase
         }
         catch (ScimException ex)
         {
+            // The detail names group names or domains, never emails or tokens.
             _logger.LogInformation("SCIM request refused org={OrgId} {Method} {Path} status={Status} type={ScimType} detail={Detail}",
                 caller.OrgId, Request.Method, Request.Path.Value, ex.HttpStatusCode, ex.ScimType, ex.Message);
             return Error(ex.HttpStatusCode, ex.ScimType, ex.Message);
@@ -184,6 +185,11 @@ public sealed class ScimController : ControllerBase
             // A unique index caught two requests creating the same user or group at once.
             _logger.LogWarning(ex, "SCIM write conflict org={OrgId} {Method} {Path}", caller.OrgId, Request.Method, Request.Path.Value);
             return Error(409, "uniqueness", "This change conflicts with another change made at the same time. Retry the request.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "SCIM request failed org={OrgId} {Method} {Path}", caller.OrgId, Request.Method, Request.Path.Value);
+            return Error(500, null, "Flowamaz couldn't complete this request. Your identity provider will retry; if it keeps failing, contact Flowamaz support.");
         }
     }
 
