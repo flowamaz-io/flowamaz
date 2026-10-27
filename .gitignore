@@ -43,3 +43,6 @@ data/repos/
 # Test results
 *.trx
 *.xml
+
+# Redis snapshots from local runs
+*.rdb

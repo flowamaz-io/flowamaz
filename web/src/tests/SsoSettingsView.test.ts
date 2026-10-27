@@ -8,13 +8,14 @@ import type { SsoConfig } from '@/services/sso.service';
 // SSO settings: Enterprise gate, the URLs the IdP admin needs, access rules and group mappings sent on save.
 
 let config: SsoConfig;
+const testSettings = vi.fn(async () => ({ ok: true, message: 'ok' }));
 let getConfig = async (): Promise<SsoConfig | null> => config;
 const configure = vi.fn(async (_org: string, payload: Record<string, unknown>) => ({ ...config, ...payload }) as SsoConfig);
 vi.mock('@/services/sso.service', () => ({
   ssoService: {
     getConfig: () => getConfig(),
     configure: (org: string, payload: Record<string, unknown>) => configure(org, payload),
-    test: async () => ({ ok: true, message: 'ok' }),
+    test: () => testSettings(),
   },
 }));
 const authUser = ref<{ orgId: string; isOrgOwner?: boolean }>({ orgId: 'org-1', isOrgOwner: true });
@@ -43,6 +44,7 @@ describe('SsoSettingsView', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     configure.mockClear();
+    testSettings.mockClear();
     authUser.value = { orgId: 'org-1', isOrgOwner: true };
     getConfig = async () => config;
   });
@@ -134,6 +136,27 @@ describe('SsoSettingsView', () => {
     const wrapper = await mountView();
     const id = wrapper.findAll('label').find((l) => l.text().startsWith("Allow sign-in from the IdP's app tile"))!.attributes('for');
     expect((wrapper.find(`#${id}`).element as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('asks to save before checking unsaved edits, and checks once saved', async () => {
+    config = base({ provider: 'oidc', issuerUrl: 'https://idp', clientId: 'c', hasClientSecret: true });
+    const wrapper = await mountView();
+    const button = (label: string) => wrapper.findAll('button').find((b) => b.text().includes(label))!;
+    expect(wrapper.text()).not.toContain('Unsaved changes');
+
+    await wrapper.findAll('input').find((i) => i.attributes('placeholder')?.startsWith('https://login.microsoftonline.com'))!
+      .setValue('https://idp/typo');
+    expect(wrapper.text()).toContain('Unsaved changes');
+    await button('Check settings').trigger('click');
+    await flushPromises();
+    expect(testSettings).not.toHaveBeenCalled();
+
+    await button('Save SSO settings').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('Unsaved changes');
+    await button('Check settings').trigger('click');
+    await flushPromises();
+    expect(testSettings).toHaveBeenCalledTimes(1);
   });
 
   it('does not save a mapping without a group name', async () => {

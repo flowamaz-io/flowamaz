@@ -61,6 +61,18 @@ const statusVariant = computed(() =>
   !planIncludesSso.value || !configured.value ? 'slate' : config.value?.isActive ? 'primary' : 'amber',
 );
 
+// What the form holds, to tell unsaved edits apart: "Check settings" tests the saved settings only.
+function formSnapshot(): string {
+  return JSON.stringify([
+    provider.value, isActive.value, idpEntityId.value.trim(), idpSsoUrl.value.trim(), idpCertificate.value.trim(),
+    issuerUrl.value.trim(), clientId.value.trim(), clientSecret.value, requireSso.value, jitProvisioning.value,
+    defaultRole.value, groupsAttribute.value.trim(), mappings.value, allowIdpInitiated.value, domainList.value,
+    [...defaultWorkspaceIds.value].sort(),
+  ]);
+}
+const savedSnapshot = ref('');
+const dirty = computed(() => !loading.value && formSnapshot() !== savedSnapshot.value);
+
 async function load(): Promise<void> {
   if (!orgId.value || notOwner.value) {
     loading.value = false;
@@ -90,6 +102,7 @@ async function load(): Promise<void> {
       allowedDomains.value = (existing.allowedEmailDomains ?? []).join(', ');
       defaultWorkspaceIds.value = [...(existing.defaultWorkspaceIds ?? [])];
     }
+    savedSnapshot.value = formSnapshot();
   } catch (e) {
     if (axios.isAxiosError(e) && e.response?.status === 403) notOwner.value = true;
     else loadError.value = toUserFacingError(e).message;
@@ -159,6 +172,7 @@ async function save(): Promise<void> {
     requireSso.value = config.value.requireSso;
     idpCertificate.value = '';
     clientSecret.value = '';
+    savedSnapshot.value = formSnapshot();
     toast.success('SSO settings saved.');
   } catch (e) {
     toast.error(toUserFacingError(e).message);
@@ -168,6 +182,10 @@ async function save(): Promise<void> {
 }
 
 async function test(): Promise<void> {
+  if (dirty.value) {
+    toast.warning('You have unsaved changes. Save them first: Check settings tests the saved settings.');
+    return;
+  }
   testing.value = true;
   try {
     const result = await ssoService.test(orgId.value);
@@ -595,7 +613,14 @@ async function test(): Promise<void> {
         </FmButton>
       </section>
 
-      <div class="flex justify-end gap-2">
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <p
+          v-if="dirty"
+          class="mr-auto text-sm text-amber-700"
+          role="status"
+        >
+          Unsaved changes. Save before you check the settings.
+        </p>
         <FmButton
           variant="secondary"
           :loading="testing"
