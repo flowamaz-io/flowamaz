@@ -38,6 +38,7 @@ public class SsoServiceTests
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
     private readonly Mock<IRefreshTokenRepository> _refreshTokens = new();
+    private readonly Mock<IScimRepository> _scim = new();
     private static readonly string Binding = SsoBrowserBinding.For("relay");
 
     private static readonly Guid OrgId = Guid.NewGuid();
@@ -67,7 +68,7 @@ public class SsoServiceTests
         _configs.Object, _orgs.Object, _plans.Object, _orgUsers.Object, _workspaces.Object, _members.Object, _refreshTokens.Object,
         _protector.Object, _saml.Object, _oidc.Object, _states.Object, _replay.Object, _uow.Object,
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Platform:BaseUrl"] = "https://app.flowamaz.io" }).Build(),
-        NullLogger<SsoService>.Instance);
+        NullLogger<SsoService>.Instance, scim: _scim.Object);
 
     private void Saml(Action<OrgSsoConfig>? change = null)
     {
@@ -324,6 +325,26 @@ public class SsoServiceTests
         member.Role.Should().Be(WorkspaceRole.Admin);
         calls.Should().Equal("lock", "count"); // the count is taken under the workspace's lock, inside the transaction
         _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task With_scim_in_use_roles_come_from_scim_groups_not_the_sign_in()
+    {
+        var ws = Guid.NewGuid();
+        Saml(c => c.GroupRoleMappings = [new SsoGroupRoleMapping("Credit", ws, WorkspaceRole.Operator)]);
+        var member = new WorkspaceMember { WorkspaceId = ws, OrgUserId = Guid.NewGuid(), Role = WorkspaceRole.Operator, IsActive = true, ManagedBySso = true };
+        var user = new OrgUser { Id = member.OrgUserId, OrgId = OrgId, Email = "jane@acme.test", IsActive = true };
+        _orgUsers.Setup(r => r.GetByEmailAndOrgAsync("jane@acme.test", OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _workspaces.Setup(w => w.GetForOrgAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync([new Workspace { Id = ws, OrgId = OrgId }]);
+        _members.Setup(m => m.GetAsync(ws, user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(member);
+        _scim.Setup(s => s.HasActiveTokenAsync(OrgId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _scim.Setup(s => s.GetGroupNamesForUserAsync(OrgId, user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(["Credit"]);
+
+        // The assertion has no groups; without SCIM that would remove the Operator membership.
+        await Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane", []));
+
+        member.IsActive.Should().BeTrue();
+        member.Role.Should().Be(WorkspaceRole.Operator);
     }
 
     // ── Identity checks ───────────────────────────────────────────────────────────────

@@ -207,6 +207,7 @@ public static class DependencyInjection
         services.AddSingleton<IPublicApiRateLimiter, RedisPublicApiRateLimiter>();
         services.AddScoped<IWebhookEndpointRepository, WebhookEndpointRepository>();
         services.AddScoped<IOrgSsoConfigRepository, OrgSsoConfigRepository>();
+        services.AddScoped<IScimRepository, ScimRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IUserPreferenceRepository, UserPreferenceRepository>();
         services.AddScoped<IAuditEventRepository, AuditEventRepository>();

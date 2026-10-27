@@ -1208,6 +1208,168 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.ToTable("refresh_tokens");
                 });
 
+            modelBuilder.Entity("Flowamaz.Core.Entities.Auth.ScimGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("external_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_scim_groups");
+
+                    b.HasIndex("OrgId", "DisplayName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_scim_groups_org_id_display_name");
+
+                    b.ToTable("scim_groups");
+                });
+
+            modelBuilder.Entity("Flowamaz.Core.Entities.Auth.ScimGroupMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrgUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_user_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_scim_group_members");
+
+                    b.HasIndex("OrgUserId")
+                        .HasDatabaseName("ix_scim_group_members_org_user_id");
+
+                    b.HasIndex("GroupId", "OrgUserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_scim_group_members_group_id_org_user_id");
+
+                    b.ToTable("scim_group_members");
+                });
+
+            modelBuilder.Entity("Flowamaz.Core.Entities.Auth.ScimToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<string>("TokenPrefix")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("token_prefix");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_scim_tokens");
+
+                    b.HasIndex("OrgId")
+                        .HasDatabaseName("ix_scim_tokens_org_id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_scim_tokens_token_hash");
+
+                    b.ToTable("scim_tokens");
+                });
+
             modelBuilder.Entity("Flowamaz.Core.Entities.Connector.ConnectorDefinition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2743,6 +2905,20 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("password_hash");
 
+                    b.Property<DateTime?>("ScimDeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scim_deleted_at");
+
+                    b.Property<string>("ScimExternalId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("scim_external_id");
+
+                    b.Property<string>("ScimUserName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("scim_user_name");
+
                     b.Property<string>("SsoSubject")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)")
@@ -4153,6 +4329,16 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_workspace_members_workspace_id_org_user_id");
 
                     b.ToTable("workspace_members");
+                });
+
+            modelBuilder.Entity("Flowamaz.Core.Entities.Auth.ScimGroupMember", b =>
+                {
+                    b.HasOne("Flowamaz.Core.Entities.Auth.ScimGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scim_group_members_scim_groups_group_id");
                 });
 
             modelBuilder.Entity("Flowamaz.Core.Entities.Connector.WorkspaceConnector", b =>

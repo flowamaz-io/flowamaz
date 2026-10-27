@@ -16,6 +16,7 @@ vi.mock('@/services/sso.service', () => ({
     getConfig: () => getConfig(),
     configure: (org: string, payload: Record<string, unknown>) => configure(org, payload),
     test: () => testSettings(),
+    getScim: async () => ({ scimBaseUrl: 'https://app/api/scim/v2', tokens: [] }),
   },
 }));
 const authUser = ref<{ orgId: string; isOrgOwner?: boolean }>({ orgId: 'org-1', isOrgOwner: true });

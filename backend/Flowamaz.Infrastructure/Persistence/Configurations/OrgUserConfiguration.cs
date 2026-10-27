@@ -11,6 +11,8 @@ public sealed class OrgUserConfiguration : IEntityTypeConfiguration<OrgUser>
         builder.HasKey(u => u.Id);
         builder.Property(u => u.Email).HasMaxLength(256).IsRequired();
         builder.Property(u => u.SsoSubject).HasMaxLength(1024);
+        builder.Property(u => u.ScimExternalId).HasMaxLength(256);
+        builder.Property(u => u.ScimUserName).HasMaxLength(256);
         builder.Property(u => u.Name).HasMaxLength(256).IsRequired();
         builder.Property(u => u.PasswordHash).HasMaxLength(256).IsRequired();
 

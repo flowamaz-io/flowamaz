@@ -8,6 +8,7 @@ import FmBadge from '@/components/common/FmBadge.vue';
 import FmAlert from '@/components/common/FmAlert.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
+import ScimProvisioningPanel from '@/components/settings/ScimProvisioningPanel.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useToast } from '@/composables/useToast';
 import { useWorkspaceStore } from '@/stores/workspace.store';
@@ -638,6 +639,8 @@ async function test(): Promise<void> {
           Save SSO settings
         </FmButton>
       </div>
+
+      <ScimProvisioningPanel :org-id="orgId" />
     </template>
   </div>
 </template>
