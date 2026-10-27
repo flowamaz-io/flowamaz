@@ -508,6 +508,35 @@ public sealed class EnterpriseScimTests : ApiTestBase, IDisposable
         (await DbAsync(db => db.ScimGroupMembers.CountAsync(m => m.GroupId == Guid.Parse(group!)))).Should().Be(1);
     }
 
+    [Fact]
+    public async Task Scim_events_show_in_the_organisation_audit_log_and_group_changes_move_last_modified()
+    {
+        var (owner, scim, _) = await EnterpriseWithScimAsync("scim-audit");
+        var ana = await CreateUserAsync(scim, "ana@scim-audit.test");
+        var created = await ReadAsync(await scim.PostAsync("/api/scim/v2/Groups", Json(new { displayName = "Ops" })));
+        var groupId = created.GetProperty("id").GetString();
+        var before = created.GetProperty("meta").GetProperty("lastModified").GetDateTime();
+        await Task.Delay(20);
+        (await PatchAsync(scim, $"Groups/{groupId}", new { op = "add", path = "members", value = new[] { new { value = ana } } }))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var after = (await ReadAsync(await scim.GetAsync($"/api/scim/v2/Groups/{groupId}"))).GetProperty("meta").GetProperty("lastModified").GetDateTime();
+        after.Should().BeAfter(before);
+
+        JsonElement feed = default;
+        for (var i = 0; i < 50; i++)
+        {
+            feed = await DataAsync(await owner.Client.GetAsync($"/api/v1/organisations/{owner.OrgId}/audit?event_type=scim.user_created"));
+            if (feed.GetProperty("data").GetArrayLength() > 0) break;
+            await Task.Delay(100);
+        }
+        var row = feed.GetProperty("data")[0];
+        row.GetProperty("summary").GetString().Should().Be("SCIM provisioning created user 'ana@scim-audit.test'");
+
+        var csv = await owner.Client.GetAsync($"/api/v1/organisations/{owner.OrgId}/audit/export");
+        csv.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await csv.Content.ReadAsStringAsync()).Should().Contain("scim.user_created");
+    }
+
     private async Task GiveSessionAsync(Guid userId)
     {
         using var scope = Fixture.Services.CreateScope();

@@ -141,7 +141,7 @@ public sealed class ScimService
         };
         await _scim.AddTokenAsync(token, ct);
         await _unitOfWork.SaveChangesAsync(ct);
-        Audit(orgId, createdBy, "scim.token_created", "created", token.Id, new { name = label }, ct);
+        Audit(orgId, createdBy, "scim.token_created", "created", token.Id, new { name = label }, ct, label);
         _logger.LogInformation("ScimService.CreateTokenAsync exit org={OrgId} token={TokenId}", orgId, token.Id);
         return new ScimTokenCreated(ToDto(token), plain, ScimBaseUrl);
     }
@@ -153,7 +153,7 @@ public sealed class ScimService
         if (token.RevokedAt is not null) return;
         token.RevokedAt = DateTime.UtcNow;
         await _unitOfWork.SaveChangesAsync(ct);
-        Audit(orgId, revokedBy, "scim.token_revoked", "revoked", token.Id, new { name = token.Name }, ct);
+        Audit(orgId, revokedBy, "scim.token_revoked", "revoked", token.Id, new { name = token.Name }, ct, token.Name);
     }
 
     // ── Users ───────────────────────────────────────────────────────────────────────────
@@ -255,7 +255,7 @@ public sealed class ScimService
         await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
         var user = await _scim.GetUserAsync(orgId, id, ct: ct) ?? throw ScimException.NotFound("This user");
         if (user.IsOrgOwner)
-            throw ScimException.Mutability("Organisation owners can't be deleted through SCIM. Unassign the Flowamaz app for other people only, or make someone else the owner in Flowamaz first.");
+            throw ScimException.Mutability("Organisation owners can't be deleted through SCIM. To remove this person, first make someone else the organisation owner in Flowamaz, or keep them assigned to the Flowamaz app in your identity provider.");
 
         user.ScimDeletedAt = DateTime.UtcNow;
         user.ScimExternalId = null;
@@ -268,7 +268,7 @@ public sealed class ScimService
         await _resetTokens.InvalidateAllForUserAsync(user.Id, ct);
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
-        Audit(orgId, null, "scim.user_deleted", "deactivated", user.Id, new { workspacesLeft = memberships.Count }, ct, user.Email);
+        Audit(orgId, null, "scim.user_deleted", "deleted", user.Id, new { workspacesLeft = memberships.Count }, ct, user.Email);
     }
 
     private async Task<JsonObject> ChangeUserAsync(Guid orgId, Guid id, UserInput input, CancellationToken ct)
@@ -298,7 +298,7 @@ public sealed class ScimService
         if (input.Active is { } active && active != user.IsActive)
         {
             if (!active && user.IsOrgOwner)
-                throw ScimException.Mutability("Organisation owners can't be deactivated through SCIM. Unassign the Flowamaz app for other people only, or make someone else the owner in Flowamaz first.");
+                throw ScimException.Mutability("Organisation owners can't be deactivated through SCIM. To remove this person, first make someone else the organisation owner in Flowamaz, or keep them assigned to the Flowamaz app in your identity provider.");
             user.IsActive = active;
             if (!active) await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
         }
@@ -308,7 +308,7 @@ public sealed class ScimService
         await transaction.CommitAsync(ct);
 
         if (wasActive != user.IsActive)
-            Audit(orgId, null, user.IsActive ? "scim.user_activated" : "scim.user_deactivated", "updated", user.Id, null, ct, user.Email);
+            Audit(orgId, null, user.IsActive ? "scim.user_activated" : "scim.user_deactivated", user.IsActive ? "activated" : "deactivated", user.Id, null, ct, user.Email);
         return ScimJson.User(user, ScimBaseUrl);
     }
 
@@ -354,7 +354,7 @@ public sealed class ScimService
         var affected = state.Affected;
         await FinishGroupChangeAsync(orgId, affected, ct);
         await transaction.CommitAsync(ct);
-        Audit(orgId, null, "scim.group_created", "created", group.Id, new { name, members = affected.Count }, ct);
+        Audit(orgId, null, "scim.group_created", "created", group.Id, new { name, members = affected.Count }, ct, name);
         return ScimJson.Group(group, await _scim.GetMembersAsync([group.Id], ct), ScimBaseUrl);
     }
 
@@ -370,9 +370,9 @@ public sealed class ScimService
         group.ExternalId = ExternalId(ScimJson.String(json, "externalId")); // PUT replaces: absent means none
         var members = ScimJson.TryGet(json, "members", out var m) ? await MemberIdsAsync(orgId, m, ct) : [];
         await state.SetAsync(members, ct);
-        await FinishGroupChangeAsync(orgId, affected, ct);
+        await FinishGroupChangeAsync(orgId, affected, ct, group);
         await transaction.CommitAsync(ct);
-        Audit(orgId, null, "scim.group_updated", "updated", group.Id, new { name = group.DisplayName, changed = affected.Count }, ct);
+        Audit(orgId, null, "scim.group_updated", "updated", group.Id, new { name = group.DisplayName, changed = affected.Count }, ct, group.DisplayName);
         return ScimJson.Group(group, await _scim.GetMembersAsync([group.Id], ct), ScimBaseUrl);
     }
 
@@ -439,9 +439,9 @@ public sealed class ScimService
             else throw ScimException.Path($"Groups can't be patched at '{target}'. Use displayName, externalId or members.");
         }
 
-        await FinishGroupChangeAsync(orgId, affected, ct);
+        await FinishGroupChangeAsync(orgId, affected, ct, group);
         await transaction.CommitAsync(ct);
-        Audit(orgId, null, "scim.group_updated", "updated", group.Id, new { name = group.DisplayName, changed = affected.Count }, ct);
+        Audit(orgId, null, "scim.group_updated", "updated", group.Id, new { name = group.DisplayName, changed = affected.Count }, ct, group.DisplayName);
         return null; // 204: Okta and Entra don't need the group back
     }
 
@@ -454,7 +454,7 @@ public sealed class ScimService
         _scim.RemoveGroup(group); // memberships cascade
         await FinishGroupChangeAsync(orgId, affected, ct);
         await transaction.CommitAsync(ct);
-        Audit(orgId, null, "scim.group_deleted", "deleted", group.Id, new { name = group.DisplayName, members = affected.Count }, ct);
+        Audit(orgId, null, "scim.group_deleted", "deleted", group.Id, new { name = group.DisplayName, members = affected.Count }, ct, group.DisplayName);
     }
 
     // ── Group helpers ───────────────────────────────────────────────────────────────────
@@ -562,8 +562,9 @@ public sealed class ScimService
     /// Saves the group change, then (with "roles from SCIM groups" on) updates the SSO-managed workspace roles of
     /// everyone it touched.
     /// </summary>
-    private async Task FinishGroupChangeAsync(Guid orgId, IReadOnlyCollection<Guid> affected, CancellationToken ct)
+    private async Task FinishGroupChangeAsync(Guid orgId, IReadOnlyCollection<Guid> affected, CancellationToken ct, ScimGroup? group = null)
     {
+        if (group is not null && affected.Count > 0) group.UpdatedAt = DateTime.UtcNow; // membership changes count as a change to the group
         await _unitOfWork.SaveChangesAsync(ct);
         if (affected.Count == 0) return;
         var config = await _configs.GetByOrgIdAsync(orgId, ct) ?? new OrgSsoConfig { OrgId = orgId };
@@ -645,7 +646,8 @@ public sealed class ScimService
             OrgId = orgId,
             ActorUserId = actor,
             ActorType = actor.HasValue ? "user" : "system",
-            ActorLabel = actor.HasValue ? null : "SCIM" + (label is null ? "" : $" ({label})"),
+            ActorLabel = actor.HasValue ? null : "SCIM provisioning",
+            ResourceLabel = label,
             EventType = eventType,
             ResourceType = eventType.StartsWith("scim.group", StringComparison.Ordinal) ? "scim_group"
                 : eventType.StartsWith("scim.token", StringComparison.Ordinal) ? "scim_token" : "user",

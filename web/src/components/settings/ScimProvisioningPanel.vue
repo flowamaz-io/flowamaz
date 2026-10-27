@@ -23,6 +23,8 @@ const tokens = ref<ScimToken[]>([]);
 const newName = ref('');
 const creating = ref(false);
 const revoking = ref<string | null>(null);
+/** The token waiting for "Revoke" to be confirmed. */
+const confirming = ref<string | null>(null);
 /** The token just created. Kept only in memory, until the owner dismisses it. */
 const justCreated = ref<string | null>(null);
 
@@ -62,6 +64,7 @@ async function revoke(token: ScimToken): Promise<void> {
   try {
     await ssoService.revokeScimToken(props.orgId, token.id);
     tokens.value = tokens.value.filter((t) => t.id !== token.id);
+    confirming.value = null;
     toast.success(`Revoked "${token.name}". Your identity provider can no longer use it.`);
   } catch (e) {
     toast.error(toUserFacingError(e).message);
@@ -184,14 +187,35 @@ const when = (iso: string | null) => (iso ? dayjs(iso).format('D MMM YYYY, HH:mm
           <span class="font-mono text-xs text-slate-500">{{ t.tokenPrefix }}…</span>
           <span class="text-xs text-slate-500">Created {{ when(t.createdAt) }} · Last used {{ when(t.lastUsedAt) }}</span>
           <button
+            v-if="confirming !== t.id"
             type="button"
-            class="ml-auto rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-red-600 disabled:opacity-50"
+            class="ml-auto rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-red-600"
             :aria-label="`Revoke ${t.name}`"
-            :disabled="revoking === t.id"
-            @click="revoke(t)"
+            @click="confirming = t.id"
           >
             <Trash2 class="h-4 w-4" />
           </button>
+          <div
+            v-else
+            class="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto"
+            role="group"
+            :aria-label="`Confirm revoking ${t.name}`"
+          >
+            <span class="text-xs text-red-700">Provisioning with this token stops at once.</span>
+            <FmButton
+              variant="danger"
+              :loading="revoking === t.id"
+              @click="revoke(t)"
+            >
+              Revoke
+            </FmButton>
+            <FmButton
+              variant="ghost"
+              @click="confirming = null"
+            >
+              Keep
+            </FmButton>
+          </div>
         </li>
       </ul>
 

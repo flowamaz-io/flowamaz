@@ -123,9 +123,39 @@ public sealed class AuditController : ControllerBase
             ResourceType = query.ResourceType,
         };
 
+        await WriteCsvAsync(filter, $"audit-{workspaceId}-{from:yyyyMMdd}-{to:yyyyMMdd}.csv", ct);
+        _logger.LogInformation("AuditController.ExportForWorkspace exit workspace={WorkspaceId}", workspaceId);
+    }
+
+    /// <summary>
+    /// CSV export of the whole organisation's audit events, including organisation-level ones (SSO, SCIM, billing)
+    /// that belong to no workspace. Org owner only. Max range 365 days. Streamed.
+    /// </summary>
+    [HttpGet("organisations/{id:guid}/audit/export")]
+    [RequireOrgOwner]
+    public async Task ExportForOrg(Guid id, [FromQuery] AuditQueryParams query, CancellationToken ct)
+    {
+        _logger.LogInformation("AuditController.ExportForOrg enter org={OrgId}", id);
+        EnsureOwnOrg(id);
+        var (from, to) = ResolveRange(query, MaxExportRangeDays);
+        var filter = new AuditQueryFilter
+        {
+            OrgId = id,
+            WorkspaceId = null,
+            From = from,
+            To = to,
+            EventType = query.EventType,
+            ActorUserId = query.ActorId,
+            ResourceType = query.ResourceType,
+        };
+        await WriteCsvAsync(filter, $"audit-organisation-{from:yyyyMMdd}-{to:yyyyMMdd}.csv", ct);
+        _logger.LogInformation("AuditController.ExportForOrg exit org={OrgId}", id);
+    }
+
+    private async Task WriteCsvAsync(AuditQueryFilter filter, string fileName, CancellationToken ct)
+    {
         Response.ContentType = "text/csv";
-        Response.Headers.ContentDisposition =
-            $"attachment; filename=\"audit-{workspaceId}-{from:yyyyMMdd}-{to:yyyyMMdd}.csv\"";
+        Response.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
 
         // leaveOpen: true — disposing the writer must NOT close the underlying response stream, which
         // the ResponseWrapperMiddleware owns (it buffers the body and copies it out after the action).
@@ -147,7 +177,6 @@ public sealed class AuditController : ControllerBase
         }
 
         await writer.FlushAsync(ct);
-        _logger.LogInformation("AuditController.ExportForWorkspace exit workspace={WorkspaceId}", workspaceId);
     }
 
     private AuditPageResponse BuildPage(IReadOnlyList<AuditEvent> items, int total, AuditQueryFilter filter)

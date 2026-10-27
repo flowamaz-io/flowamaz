@@ -62,13 +62,25 @@ describe('ScimProvisioningPanel', () => {
     expect(wrapper.text()).toContain('fmzscim_abcdef…');
   });
 
-  it('revokes a token', async () => {
+  it('revokes a token only after confirming', async () => {
     setup = { scimBaseUrl: 'https://app/api/scim/v2', tokens: [token] };
     const wrapper = await mountPanel();
     await wrapper.find('button[aria-label="Revoke Okta"]').trigger('click');
+    expect(revoke).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('Provisioning with this token stops at once.');
+    await wrapper.findAll('button').find((b) => b.text() === 'Revoke')!.trigger('click');
     await flushPromises();
     expect(revoke).toHaveBeenCalledWith('org-1', 't1');
     expect(wrapper.text()).toContain('No SCIM tokens yet');
+  });
+
+  it('keeps the token when the owner changes their mind', async () => {
+    setup = { scimBaseUrl: 'https://app/api/scim/v2', tokens: [token] };
+    const wrapper = await mountPanel();
+    await wrapper.find('button[aria-label="Revoke Okta"]').trigger('click');
+    await wrapper.findAll('button').find((b) => b.text() === 'Keep')!.trigger('click');
+    expect(revoke).not.toHaveBeenCalled();
+    expect(wrapper.find('button[aria-label="Revoke Okta"]').exists()).toBe(true);
   });
 
   it('shows an error with a retry when tokens fail to load', async () => {
