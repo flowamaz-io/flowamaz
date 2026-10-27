@@ -199,7 +199,7 @@ public sealed class OidcClient : IOidcClient
         if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
             throw SsoLoginException.Rejected("the id_token has no email. Add the 'email' scope/claim for the Flowamaz app in your IdP.");
         if (!IsTrue(token, "email_verified") && !IsTrue(token, "xms_edov"))
-            throw SsoLoginException.Rejected("the identity provider doesn't confirm your email address is verified (email_verified). Verify the address in your IdP, or for Microsoft Entra add the optional 'xms_edov' claim.");
+            throw SsoLoginException.EmailUnverified(); // Entra: add the optional 'xms_edov' claim (see SSO help)
         var sub = Claim(token, "sub")
             ?? throw SsoLoginException.Rejected("the id_token has no subject ('sub').");
 
@@ -255,6 +255,9 @@ public sealed class OidcClient : IOidcClient
                 expires is { } e && Now - p.ClockSkew < e && (notBefore is not { } nb || Now + p.ClockSkew >= nb),
         });
     }
+
+    public async Task<int> CountSigningKeysAsync(OidcDiscovery discovery, CancellationToken ct = default) =>
+        (await KeysAsync(discovery.JwksUri, refresh: true, ct)).GetSigningKeys().Count;
 
     private async Task<JsonWebKeySet> KeysAsync(string jwksUri, bool refresh, CancellationToken ct)
     {

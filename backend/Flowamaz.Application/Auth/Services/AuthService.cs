@@ -249,7 +249,7 @@ public sealed class AuthService
                 .ToList();
 
             _logger.LogDebug("AuthService.GetMeAsync exit userId={UserId} workspaceCount={Count}", orgUserId, workspaces.Count);
-            return new MeResponse(user.Id, user.Email, user.Name, user.OrgId, org.Slug, workspaces);
+            return new MeResponse(user.Id, user.Email, user.Name, user.OrgId, org.Slug, workspaces, user.IsOrgOwner);
         }
         catch (Exception ex)
         {

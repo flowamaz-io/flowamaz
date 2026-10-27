@@ -27,6 +27,18 @@ public sealed class SsoLoginException : AppException
     public static SsoLoginException Deactivated() => new("SSO_ACCOUNT_DEACTIVATED",
         "Your Flowamaz account in this organisation is deactivated. Ask your administrator to reactivate it.", 403);
 
+    public static SsoLoginException SubjectMismatch() => new("SSO_SUBJECT_MISMATCH",
+        "This Flowamaz account is linked to a different person at your identity provider, so this sign-in was refused. Ask your organisation owner to check the account's email address in your IdP.", 403);
+
+    public static SsoLoginException EmailUnverified() => new("SSO_EMAIL_UNVERIFIED",
+        "Your identity provider doesn't confirm that your email address is verified. Verify it with your IdP (or ask your IT team), then sign in again.", 403);
+
+    public static SsoLoginException DomainNotAllowed(string domain) => new("SSO_DOMAIN_NOT_ALLOWED",
+        $"Addresses at '{domain}' can't sign in to this organisation with SSO. Use your work email, or ask your organisation owner to add the domain in SSO settings.", 403);
+
+    public static SsoLoginException IdpInitiatedOff() => new("SSO_IDP_INITIATED_OFF",
+        "This organisation doesn't accept sign-ins started from the identity provider's app tile. Start from the Flowamaz sign-in page with \"Continue with SSO\", or ask your organisation owner to allow app-tile sign-in.", 403);
+
     public static SsoLoginException Required() => new("SSO_REQUIRED",
         "Your organisation signs in with single sign-on. Choose 'Sign in with SSO' instead of a password.", 403);
 }

@@ -8,15 +8,17 @@ import type { SsoConfig } from '@/services/sso.service';
 // SSO settings: Enterprise gate, the URLs the IdP admin needs, access rules and group mappings sent on save.
 
 let config: SsoConfig;
+let getConfig = async (): Promise<SsoConfig | null> => config;
 const configure = vi.fn(async (_org: string, payload: Record<string, unknown>) => ({ ...config, ...payload }) as SsoConfig);
 vi.mock('@/services/sso.service', () => ({
   ssoService: {
-    getConfig: async () => config,
+    getConfig: () => getConfig(),
     configure: (org: string, payload: Record<string, unknown>) => configure(org, payload),
     test: async () => ({ ok: true, message: 'ok' }),
   },
 }));
-vi.mock('@/composables/useAuth', () => ({ useAuth: () => ({ user: ref({ orgId: 'org-1' }) }) }));
+const authUser = ref<{ orgId: string; isOrgOwner?: boolean }>({ orgId: 'org-1', isOrgOwner: true });
+vi.mock('@/composables/useAuth', () => ({ useAuth: () => ({ user: authUser }) }));
 vi.mock('@/composables/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }) }));
 vi.mock('@/services/workspace.service', () => ({ workspaceService: { list: async () => ({ data: [{ id: 'ws-1', name: 'Lending', slug: 'lending', role: 'Admin' }] }) } }));
 
@@ -41,6 +43,37 @@ describe('SsoSettingsView', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     configure.mockClear();
+    authUser.value = { orgId: 'org-1', isOrgOwner: true };
+    getConfig = async () => config;
+  });
+
+  it('tells a non-owner that only owners manage SSO, without loading the settings', async () => {
+    config = base();
+    authUser.value = { orgId: 'org-1', isOrgOwner: false };
+    let loaded = false;
+    getConfig = async () => { loaded = true; return config; };
+    const wrapper = await mountView();
+    expect(wrapper.text()).toContain('Only organisation owners manage single sign-on');
+    expect(wrapper.text()).not.toContain('Not set up');
+    expect(loaded).toBe(false);
+  });
+
+  it('treats a 403 from the API as not an owner, not as an error', async () => {
+    authUser.value = { orgId: 'org-1' };
+    getConfig = async () => {
+      throw Object.assign(new Error('forbidden'), { isAxiosError: true, response: { status: 403 } });
+    };
+    const wrapper = await mountView();
+    expect(wrapper.text()).toContain('Only organisation owners manage single sign-on');
+    expect(wrapper.text()).not.toContain("Couldn't load SSO settings");
+  });
+
+  it('keeps browsers from autofilling the client ID and secret', async () => {
+    config = base({ provider: 'oidc' });
+    const wrapper = await mountView();
+    const input = (placeholder: string) => wrapper.findAll('input').find((i) => i.attributes('placeholder') === placeholder)!;
+    expect(input('your-client-id').attributes('autocomplete')).toBe('off');
+    expect(wrapper.find('input[type="password"]').attributes('autocomplete')).toBe('new-password');
   });
 
   it('shows the Enterprise gate and no form when the plan lacks SSO', async () => {

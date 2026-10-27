@@ -66,7 +66,8 @@ internal static class SsoSignInFlow
         }
         catch (SsoLoginException ex)
         {
-            logger.LogWarning("SSO sign-in refused org={OrgSlug} code={Code}", orgSlug, ex.ErrorCode);
+            // The reason is ours (never assertion or token content), so admins can see why someone was refused.
+            logger.LogWarning("SSO sign-in refused org={OrgSlug} code={Code} reason={Reason}", orgSlug, ex.ErrorCode, ex.Message);
             return controller.Redirect($"{app}/login?org={Uri.EscapeDataString(orgSlug)}&sso_error={Uri.EscapeDataString(ex.ErrorCode)}");
         }
     }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, useId } from 'vue';
+import axios from 'axios';
 import { Copy, Plus, ShieldCheck, Trash2 } from 'lucide-vue-next';
 import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
@@ -26,6 +27,8 @@ const saving = ref(false);
 const testing = ref(false);
 
 const orgId = computed(() => auth.user.value?.orgId ?? '');
+// Only organisation owners manage SSO. Known from /me; a 403 from the API settles it too.
+const notOwner = ref(auth.user.value?.isOrgOwner === false);
 
 const provider = ref<'saml' | 'oidc'>('saml');
 const isActive = ref(false);
@@ -59,7 +62,10 @@ const statusVariant = computed(() =>
 );
 
 async function load(): Promise<void> {
-  if (!orgId.value) return;
+  if (!orgId.value || notOwner.value) {
+    loading.value = false;
+    return;
+  }
   loading.value = true;
   loadError.value = '';
   try {
@@ -85,7 +91,8 @@ async function load(): Promise<void> {
       defaultWorkspaceIds.value = [...(existing.defaultWorkspaceIds ?? [])];
     }
   } catch (e) {
-    loadError.value = toUserFacingError(e).message;
+    if (axios.isAxiosError(e) && e.response?.status === 403) notOwner.value = true;
+    else loadError.value = toUserFacingError(e).message;
   } finally {
     loading.value = false;
   }
@@ -185,7 +192,10 @@ async function test(): Promise<void> {
           Your team signs in through your identity provider (Okta, Entra ID, Google Workspace, ADFS…) with SAML 2.0 or OIDC.
         </p>
       </div>
-      <FmBadge :variant="statusVariant">
+      <FmBadge
+        v-if="!notOwner && !loading && !loadError"
+        :variant="statusVariant"
+      >
         {{ statusLabel }}
       </FmBadge>
     </header>
@@ -196,6 +206,19 @@ async function test(): Promise<void> {
     >
       <FmSpinner size="lg" />
     </div>
+
+    <FmAlert
+      v-else-if="notOwner"
+      type="info"
+    >
+      <p class="text-sm font-medium">
+        Only organisation owners manage single sign-on
+      </p>
+      <p class="mt-1 text-sm">
+        If SSO is turned on, sign in with "Continue with SSO" on the sign-in page. To change how your organisation
+        signs in, ask your organisation owner.
+      </p>
+    </FmAlert>
 
     <FmErrorState
       v-else-if="loadError"
@@ -305,6 +328,7 @@ async function test(): Promise<void> {
         <template v-if="provider === 'saml'">
           <FmInput
             v-model="idpEntityId"
+            autocomplete="off"
             label="IdP entity ID (issuer)"
             placeholder="http://www.okta.com/exk123…"
           />
@@ -322,6 +346,8 @@ async function test(): Promise<void> {
               :id="ids.cert"
               v-model="idpCertificate"
               rows="4"
+              autocomplete="off"
+              spellcheck="false"
               :placeholder="config?.hasCertificate ? 'A certificate is saved. Paste a new one to replace it.' : '-----BEGIN CERTIFICATE-----'"
               class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs focus:border-primary-500 focus:outline-none"
             />
@@ -331,17 +357,20 @@ async function test(): Promise<void> {
         <template v-else>
           <FmInput
             v-model="issuerUrl"
+            autocomplete="off"
             label="Issuer URL"
             placeholder="https://login.microsoftonline.com/<tenant>/v2.0"
             help="Endpoints and signing keys are discovered from the issuer."
           />
           <FmInput
             v-model="clientId"
+            autocomplete="off"
             label="Client ID"
             placeholder="your-client-id"
           />
           <FmInput
             v-model="clientSecret"
+            autocomplete="new-password"
             type="password"
             label="Client secret"
             :placeholder="config?.hasClientSecret ? 'A secret is saved. Enter a new one to replace it.' : 'your-client-secret'"

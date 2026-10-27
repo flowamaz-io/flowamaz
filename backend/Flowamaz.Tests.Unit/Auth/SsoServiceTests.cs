@@ -349,7 +349,7 @@ public class SsoServiceTests
 
         var act = () => Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane", Subject: "oidc|https://idp|attacker"));
 
-        (await act.Should().ThrowAsync<SsoLoginException>()).Which.Message.Should().Contain("linked to a different person");
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_SUBJECT_MISMATCH");
         _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -358,7 +358,7 @@ public class SsoServiceTests
     {
         Saml();
         var act = () => Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane", EmailVerified: false));
-        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_RESPONSE_REJECTED");
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_EMAIL_UNVERIFIED");
     }
 
     [Fact]
@@ -367,7 +367,9 @@ public class SsoServiceTests
         Saml(c => c.AllowedEmailDomains = ["acme.com"]);
         NoUser("jane@gmail.com");
         var act = () => Service().ProvisionUserFromSsoAsync("jane@gmail.com", OrgId, new SsoClaims("jane@gmail.com", "Jane"));
-        (await act.Should().ThrowAsync<SsoLoginException>()).Which.Message.Should().Contain("gmail.com");
+        var refused = (await act.Should().ThrowAsync<SsoLoginException>()).Which;
+        refused.ErrorCode.Should().Be("SSO_DOMAIN_NOT_ALLOWED");
+        refused.Message.Should().Contain("gmail.com");
         _orgUsers.Verify(r => r.AddAsync(It.IsAny<OrgUser>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -476,7 +478,7 @@ public class SsoServiceTests
         NoUser();
         SamlReturns(inResponseTo: null);
         var act = () => Service().HandleSamlCallbackAsync(OrgSlug, "resp", relayState: null, browserBinding: null);
-        (await act.Should().ThrowAsync<SsoLoginException>()).Which.Message.Should().Contain("identity provider's app tile");
+        (await act.Should().ThrowAsync<SsoLoginException>()).Which.ErrorCode.Should().Be("SSO_IDP_INITIATED_OFF");
     }
 
     [Fact]
@@ -597,6 +599,75 @@ public class SsoServiceTests
         Saml(c => c.RequireSso = true);
         _enterprise = false;
         (await Service().IsPasswordLoginBlockedAsync(OrgId, new OrgUser())).Should().BeFalse();
+    }
+
+    // ── Check settings ────────────────────────────────────────────────────────────────
+
+    private static string CertPem(DateTimeOffset notBefore, DateTimeOffset notAfter)
+    {
+        using var rsa = System.Security.Cryptography.RSA.Create(2048);
+        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=idp", rsa, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        using var cert = request.CreateSelfSigned(notBefore, notAfter);
+        return cert.ExportCertificatePem();
+    }
+
+    [Fact]
+    public async Task Check_settings_contacts_the_oidc_idp_and_reports_a_typo_in_the_issuer()
+    {
+        Oidc();
+        _oidc.Setup(o => o.DiscoverAsync("https://idp", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new SsoLoginException("SSO_IDP_UNREACHABLE", "Flowamaz couldn't read your identity provider's OpenID configuration. Check the issuer URL.", 502));
+
+        var result = await Service().TestAsync(OrgId);
+
+        result.Ok.Should().BeFalse();
+        result.Message.Should().Contain("issuer URL");
+    }
+
+    [Fact]
+    public async Task Check_settings_reports_the_keys_found_and_that_sso_is_already_on()
+    {
+        Oidc();
+        var discovery = new OidcDiscovery("https://idp", "https://idp/a", "https://idp/t", "https://idp/k");
+        _oidc.Setup(o => o.DiscoverAsync("https://idp", It.IsAny<CancellationToken>())).ReturnsAsync(discovery);
+        _oidc.Setup(o => o.CountSigningKeysAsync(discovery, It.IsAny<CancellationToken>())).ReturnsAsync(2);
+
+        var result = await Service().TestAsync(OrgId);
+
+        result.Ok.Should().BeTrue();
+        result.Message.Should().Contain("2 signing keys").And.Contain("SSO is on").And.NotContain("ready to activate");
+    }
+
+    [Fact]
+    public async Task Check_settings_refuses_an_expired_saml_certificate()
+    {
+        Saml();
+        _protector.Setup(p => p.Unprotect(OrgId, "enc")).Returns(CertPem(DateTimeOffset.UtcNow.AddYears(-2), DateTimeOffset.UtcNow.AddDays(-1)));
+
+        var result = await Service().TestAsync(OrgId);
+
+        result.Ok.Should().BeFalse();
+        result.Message.Should().Contain("expired");
+    }
+
+    [Fact]
+    public async Task Check_settings_accepts_a_valid_saml_setup_and_asks_for_a_test_sign_in()
+    {
+        Saml(c => c.IsActive = false);
+        _protector.Setup(p => p.Unprotect(OrgId, "enc")).Returns(CertPem(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1)));
+
+        var result = await Service().TestAsync(OrgId);
+
+        result.Ok.Should().BeTrue();
+        result.Message.Should().Contain("private window").And.Contain("Turn on SSO");
+    }
+
+    [Fact]
+    public async Task Check_settings_names_what_is_missing()
+    {
+        Saml(c => c.EncryptedIdpCertificate = null);
+        (await Service().TestAsync(OrgId)).Message.Should().Contain("certificate");
     }
 
     // ── Return paths ──────────────────────────────────────────────────────────────────

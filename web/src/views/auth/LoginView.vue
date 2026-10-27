@@ -72,6 +72,10 @@ watch(orgSlug, onOrgInput);
 const SSO_ERRORS: Record<string, string> = {
   SSO_RESPONSE_REJECTED: "Your identity provider's sign-in couldn't be verified. Try again; if it keeps failing, ask your administrator to check the SSO settings.",
   SSO_SIGNIN_EXPIRED: 'That sign-in took too long, was already used, or was started in another browser. Start again here with "Continue with SSO".',
+  SSO_SUBJECT_MISMATCH: "This Flowamaz account is linked to a different person at your identity provider, so the sign-in was refused. Ask your organisation owner to check the account's email address in your IdP.",
+  SSO_EMAIL_UNVERIFIED: "Your identity provider doesn't confirm that your email address is verified. Verify it with your IdP (or ask your IT team), then sign in again.",
+  SSO_DOMAIN_NOT_ALLOWED: "This organisation only accepts SSO sign-ins from certain email domains, and yours isn't one of them. Sign in with your work email, or ask your organisation owner to add your domain.",
+  SSO_IDP_INITIATED_OFF: 'This organisation doesn\'t accept sign-ins started from your identity provider\'s app tile. Use "Continue with SSO" on this page instead.',
   SSO_NO_ACCOUNT: "You signed in with your identity provider, but you don't have a Flowamaz account in this organisation yet. Ask your administrator to invite you.",
   SSO_ACCOUNT_DEACTIVATED: 'Your Flowamaz account in this organisation is deactivated. Ask your administrator to reactivate it.',
   SSO_NOT_ON_PLAN: 'Single sign-on is part of the Enterprise plan, and this organisation is on a different plan. Sign in with your password or ask your organisation owner.',

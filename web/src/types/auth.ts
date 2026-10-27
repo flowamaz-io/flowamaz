@@ -6,6 +6,8 @@ export interface UserSummary {
   name: string;
   orgId: string;
   orgSlug: string;
+  /** From /me; undefined until the profile has loaded. */
+  isOrgOwner?: boolean;
 }
 
 export interface WorkspaceSummary {
@@ -23,6 +25,7 @@ export interface MeResponse {
   orgId: string;
   orgSlug: string;
   workspaces: WorkspaceSummary[];
+  isOrgOwner?: boolean;
 }
 
 /** POST /login and /register response body. */

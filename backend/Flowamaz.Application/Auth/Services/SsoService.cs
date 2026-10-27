@@ -215,17 +215,69 @@ public sealed class SsoService : ISsoService
         return org is not null && await PlanIncludesSsoAsync(org, ct);
     }
 
+    public async Task<SsoTestResult> TestAsync(Guid orgId, CancellationToken ct = default)
+    {
+        _logger.LogInformation("SsoService.TestAsync enter org={OrgId}", orgId);
+        var org = await _orgs.GetByIdAsync(orgId, ct);
+        if (org is null || !await PlanIncludesSsoAsync(org, ct))
+            return new(false, "Single sign-on is part of the Enterprise plan. Upgrade in Settings → Billing to use it.");
+        var config = await _configs.GetByOrgIdAsync(orgId, ct);
+        if (config is null) return new(false, "SSO isn't set up yet. Fill in your identity provider's details and save first.");
+        if (MissingForActivation(config) is { } missing) return new(false, $"Not finished yet: {missing} Then save and check again.");
+
+        var next = config.IsActive
+            ? "SSO is on: members can use \"Continue with SSO\" now."
+            : "Turn on SSO for this organisation and save to start using it.";
+
+        if (config.Provider == "oidc")
+        {
+            try
+            {
+                var discovery = await _oidc.DiscoverAsync(config.IssuerUrl!, ct);
+                var keys = await _oidc.CountSigningKeysAsync(discovery, ct);
+                if (keys == 0)
+                    return new(false, "Your identity provider answered, but its key set has no signing keys, so sign-ins can't be verified. Check the app's signing settings in your IdP.");
+                return new(true, $"Reached your identity provider: its configuration and {keys} signing key{(keys == 1 ? "" : "s")} were found. " +
+                    $"The client secret is only checked at the first sign-in. {next}");
+            }
+            catch (SsoLoginException ex)
+            {
+                _logger.LogInformation("SsoService.TestAsync oidc check failed org={OrgId} code={Code}", orgId, ex.ErrorCode);
+                return new(false, ex.Message);
+            }
+        }
+
+        // SAML: the IdP can't be contacted ahead of a sign-in; check what we can.
+        if (!Uri.TryCreate(config.IdpSsoUrl, UriKind.Absolute, out var ssoUrl) || ssoUrl.Scheme != Uri.UriSchemeHttps)
+            return new(false, "The IdP sign-in URL must be an https URL. Copy it from your IdP's SAML setup page.");
+        try
+        {
+            var pem = _protector.Unprotect(orgId, config.EncryptedIdpCertificate!);
+            using var cert = X509Certificate2.CreateFromPem(pem.Contains("BEGIN CERTIFICATE") ? pem : $"-----BEGIN CERTIFICATE-----\n{pem.Trim()}\n-----END CERTIFICATE-----");
+            var now = DateTime.UtcNow;
+            if (cert.NotAfter.ToUniversalTime() <= now)
+                return new(false, $"The IdP signing certificate expired on {cert.NotAfter:yyyy-MM-dd}. Paste the current certificate from your IdP.");
+            if (cert.NotBefore.ToUniversalTime() > now)
+                return new(false, $"The IdP signing certificate isn't valid until {cert.NotBefore:yyyy-MM-dd}. Paste the certificate your IdP uses today.");
+            var expiry = cert.NotAfter.ToUniversalTime() - now < TimeSpan.FromDays(30)
+                ? $" The certificate expires on {cert.NotAfter:yyyy-MM-dd}; plan to replace it before then." : "";
+            return new(true, "The SAML settings are complete and the certificate is valid. A SAML IdP can't be contacted ahead of time, " +
+                $"so finish the check by signing in with SSO in a private window.{expiry} {next}");
+        }
+        catch (CryptographicException)
+        {
+            return new(false, "The saved IdP certificate can't be read. Paste the certificate again from your IdP.");
+        }
+    }
+
     // ── Who gets in ─────────────────────────────────────────────────────────────────────
 
     public async Task<OrgUser> ProvisionUserFromSsoAsync(string email, Guid orgId, SsoClaims claims, CancellationToken ct = default)
     {
         var config = await _configs.GetByOrgIdAsync(orgId, ct) ?? new OrgSsoConfig { OrgId = orgId };
         var normalised = email.Trim().ToLowerInvariant();
-        if (!claims.EmailVerified)
-            throw SsoLoginException.Rejected("the identity provider doesn't confirm this email address is verified.");
-        if (!EmailDomainAllowed(normalised, config))
-            throw SsoLoginException.Rejected(
-                $"addresses at '{Domain(normalised)}' can't sign in to this organisation. Use your work email, or ask an org owner to add the domain in SSO settings.");
+        if (!claims.EmailVerified) throw SsoLoginException.EmailUnverified();
+        if (!EmailDomainAllowed(normalised, config)) throw SsoLoginException.DomainNotAllowed(Domain(normalised));
 
         await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
         var user = await _orgUsers.GetByEmailAndOrgAsync(normalised, orgId, ct);
@@ -239,8 +291,7 @@ public sealed class SsoService : ISsoService
                 else if (!string.Equals(user.SsoSubject, subject, StringComparison.Ordinal))
                 {
                     _logger.LogWarning("SsoService refused sign-in: subject mismatch user={UserId} org={OrgId}", user.Id, orgId);
-                    throw SsoLoginException.Rejected(
-                        "this Flowamaz account is linked to a different person at your identity provider. Ask an org owner to check the account's email address in your IdP.");
+                    throw SsoLoginException.SubjectMismatch();
                 }
             }
             if (!string.IsNullOrWhiteSpace(claims.Name) && claims.Name != user.Name) user.Name = claims.Name;
@@ -371,8 +422,7 @@ public sealed class SsoService : ISsoService
             }
             else if (!config.AllowIdpInitiated)
             {
-                throw SsoLoginException.Rejected(
-                    "sign-in started from the identity provider's app tile isn't allowed for this organisation. Start from the Flowamaz sign-in page, or ask an org owner to allow IdP-initiated sign-in in SSO settings.");
+                throw SsoLoginException.IdpInitiatedOff();
             }
 
             if (!await _replay.TryRecordAsync(orgSlug, assertion.AssertionId, assertion.NotOnOrAfterUtc, ct))

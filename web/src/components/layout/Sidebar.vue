@@ -9,6 +9,7 @@ import {
   ShoppingBag, Store,
 } from 'lucide-vue-next';
 import { useUiStore } from '@/stores/ui.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useHelp } from '@/composables/useHelp';
 import { gateService } from '@/services/gate.service';
@@ -33,6 +34,8 @@ interface NavItem {
   badgeKey?: 'gates';
   // Workspace Admin only (org-owner endpoints still enforce 403 server-side).
   adminOnly?: boolean;
+  /** Organisation owners only (hidden once /me says the user isn't one). */
+  ownerOnly?: boolean;
 }
 
 interface NavSection {
@@ -71,7 +74,7 @@ const sections: NavSection[] = [
       { label: 'Credentials', to: '/settings/credentials', icon: LockKeyhole },
       { label: 'API Keys', to: '/settings/api-keys', icon: KeyRound },
       { label: 'Webhooks', to: '/settings/webhooks', icon: Webhook },
-      { label: 'SSO', to: '/settings/sso', icon: ShieldCheck },
+      { label: 'SSO', to: '/settings/sso', icon: ShieldCheck, ownerOnly: true },
       { label: 'Billing', to: '/settings/billing', icon: CreditCard },
       { label: 'Publisher', to: '/settings/publisher', icon: Store, adminOnly: true },
       { label: 'Purchases', to: '/settings/purchases', icon: ShoppingBag },
@@ -107,10 +110,17 @@ const isAdmin = computed(() => {
   return !role || role === 'Admin';
 });
 
+// Unknown (profile not loaded yet) shows the item; the page itself explains when it isn't for this user.
+const authStore = useAuthStore();
+const isOrgOwner = computed(() => authStore.user?.isOrgOwner !== false);
+
 const visibleSections = computed(() =>
   sections
     .filter((s) => !s.designerOnly || isDesigner.value)
-    .map((s) => ({ ...s, items: s.items.filter((i) => !i.adminOnly || isAdmin.value) })),
+    .map((s) => ({
+      ...s,
+      items: s.items.filter((i) => (!i.adminOnly || isAdmin.value) && (!i.ownerOnly || isOrgOwner.value)),
+    })),
 );
 
 // ── Gates pending badge ──────────────────────────────────────────────────────

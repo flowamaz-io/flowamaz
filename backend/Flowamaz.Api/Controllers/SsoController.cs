@@ -98,29 +98,17 @@ public sealed class SsoController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>Validates that the organisation's saved SSO configuration is complete and ready to activate. Org-owner only.</summary>
+    /// <summary>
+    /// "Check settings": validates the saved configuration and, for OIDC, contacts the IdP (discovery and signing keys).
+    /// Org-owner only.
+    /// </summary>
     [HttpPost("/api/v1/organisations/{id:guid}/sso/test")]
     [RequireOrgOwner]
     public async Task<IActionResult> Test(Guid id, CancellationToken ct)
     {
         if (OtherOrg(id) is { } notFound) return notFound;
-        var config = await _sso.GetConfigAsync(id, ct);
-        if (config is null)
-            return Ok(new { ok = false, message = "SSO is not configured yet. Save a configuration first." });
-
-        if (!config.PlanIncludesSso)
-            return Ok(new { ok = false, message = "Single sign-on is part of the Enterprise plan. Upgrade in Settings → Billing to use it." });
-        var ready = config.Provider == "saml"
-            ? config is { IdpEntityId: not null, IdpSsoUrl: not null, HasCertificate: true }
-            : config is { IssuerUrl: not null, ClientId: not null, HasClientSecret: true };
-
-        return Ok(new
-        {
-            ok = ready,
-            message = ready
-                ? $"{config.Provider.ToUpperInvariant()} configuration looks complete and ready to activate."
-                : "Configuration is incomplete. Fill in all IdP fields before enabling SSO.",
-        });
+        var result = await _sso.TestAsync(id, ct);
+        return Ok(new { ok = result.Ok, message = result.Message });
     }
 
     /// <summary>Disables SSO for the organisation, reverting members to password login. Org-owner only.</summary>

@@ -168,14 +168,14 @@ public sealed class OidcClientTests : IDisposable
     public async Task An_unverified_email_is_refused()
     {
         TokenEndpointReturns(IdToken(c => c["email_verified"] = false));
-        await FluentActions.Awaiting(Exchange).Should().ThrowAsync<SsoLoginException>().WithMessage("*email_verified*");
+        await FluentActions.Awaiting(Exchange).Should().ThrowAsync<SsoLoginException>().Where(e => e.ErrorCode == "SSO_EMAIL_UNVERIFIED");
     }
 
     [Fact]
     public async Task An_email_the_idp_doesnt_mark_verified_is_refused()
     {
         TokenEndpointReturns(IdToken(c => c.Remove("email_verified")));
-        await FluentActions.Awaiting(Exchange).Should().ThrowAsync<SsoLoginException>().WithMessage("*email_verified*");
+        await FluentActions.Awaiting(Exchange).Should().ThrowAsync<SsoLoginException>().Where(e => e.ErrorCode == "SSO_EMAIL_UNVERIFIED");
     }
 
     [Fact]

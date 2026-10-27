@@ -129,7 +129,7 @@ public sealed class EnterpriseSsoTests : ApiTestBase, IDisposable
         var unsolicited = _idp.Build(new() { Email = "tile@ent-sso-idp-init.test", Audience = Sp(slug), Recipient = Acs(slug) });
 
         var off = await PostAcsAsync(Fixture.NewClientWithoutRedirects(), slug, unsolicited, null);
-        off.Headers.Location!.ToString().Should().Contain("sso_error=SSO_RESPONSE_REJECTED");
+        off.Headers.Location!.ToString().Should().Contain("sso_error=SSO_IDP_INITIATED_OFF");
 
         var put = await owner.Client.PutAsJsonAsync($"/api/v1/organisations/{owner.OrgId}/sso", new
         {

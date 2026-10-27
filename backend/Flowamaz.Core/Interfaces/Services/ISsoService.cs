@@ -15,6 +15,9 @@ public sealed record SsoClaims(
     public IReadOnlyList<string> GroupList => Groups ?? [];
 }
 
+/// <summary>Result of "Check settings": whether the setup works, and a message that says what to do next.</summary>
+public sealed record SsoTestResult(bool Ok, string Message);
+
 /// <summary>Where to send the browser to start an SSO sign-in, and the state key to bind to that browser.</summary>
 public sealed record SsoRedirect(string Url, string StateKey);
 
@@ -132,6 +135,12 @@ public interface ISsoService
     /// <summary>True when the org requires SSO and this user may not use a password (everyone but org owners).</summary>
     Task<bool> IsPasswordLoginBlockedAsync(Guid orgId, OrgUser user, CancellationToken ct = default);
 
+    /// <summary>
+    /// "Check settings": checks the saved configuration and, for OIDC, contacts the IdP (discovery and signing keys).
+    /// SAML IdPs can't be contacted ahead of a sign-in, so the certificate is checked instead.
+    /// </summary>
+    Task<SsoTestResult> TestAsync(Guid orgId, CancellationToken ct = default);
+
     // ── SAML ──────────────────────────────────────────────────────────────────
     Task<string> GetSpMetadataAsync(string orgSlug, CancellationToken ct = default);
     Task<SsoRedirect> InitiateSamlLoginAsync(string orgSlug, string? returnUrl, CancellationToken ct = default);
@@ -178,6 +187,9 @@ public interface IOidcClient
     /// </summary>
     Task<SsoClaims> ExchangeCodeAsync(OidcDiscovery discovery, string clientId, string clientSecret, string redirectUri,
         string code, string codeVerifier, string nonce, string groupsClaim, CancellationToken ct = default);
+
+    /// <summary>Fetches the IdP's key set fresh (no cache) and returns how many signing keys it has, or throws.</summary>
+    Task<int> CountSigningKeysAsync(OidcDiscovery discovery, CancellationToken ct = default);
 }
 
 /// <summary>What an SSO sign-in carries from the start (redirect to the IdP) to the callback.</summary>

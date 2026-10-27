@@ -28,7 +28,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function applyMe(me: MeResponse): void {
-    user.value = { id: me.id, email: me.email, name: me.name, orgId: me.orgId, orgSlug: me.orgSlug };
+    user.value = { id: me.id, email: me.email, name: me.name, orgId: me.orgId, orgSlug: me.orgSlug, isOrgOwner: me.isOrgOwner };
     workspaces.value = me.workspaces;
   }
 

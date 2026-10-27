@@ -81,4 +81,24 @@ describe('LoginView after a refused SSO sign-in', () => {
     expect(wrapper.text()).toContain("you don't have a Flowamaz account in this organisation yet");
     expect((wrapper.vm as unknown as { orgSlug: string }).orgSlug).toBe('acme');
   });
+
+  it.each([
+    ['SSO_SUBJECT_MISMATCH', 'linked to a different person'],
+    ['SSO_EMAIL_UNVERIFIED', "doesn't confirm that your email address is verified"],
+    ['SSO_DOMAIN_NOT_ALLOWED', 'certain email domains'],
+    ['SSO_IDP_INITIATED_OFF', 'app tile'],
+  ])('shows its own message for %s', async (code, text) => {
+    vi.resetModules();
+    vi.doMock('vue-router', () => ({
+      useRouter: () => ({ push: vi.fn() }),
+      useRoute: () => ({ query: { org: 'acme', sso_error: code } }),
+    }));
+    setActivePinia(createPinia());
+    const { default: View } = await import('@/views/auth/LoginView.vue');
+    const wrapper = mount(View, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(text);
+    expect(wrapper.text()).not.toContain("couldn't be verified");
+  });
 });
