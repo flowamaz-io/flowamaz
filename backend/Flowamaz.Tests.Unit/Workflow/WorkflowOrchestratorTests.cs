@@ -195,6 +195,57 @@ public class WorkflowOrchestratorTests
         _queue.Verify(q => q.EnqueueAsync(_workspaceId, instanceId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Theory]
+    [InlineData(InstanceStatus.Cancelled)]
+    [InlineData(InstanceStatus.Completed)]
+    [InlineData(InstanceStatus.Failed)]
+    public async Task Node_results_for_a_run_that_already_ended_change_nothing(InstanceStatus ended)
+    {
+        // The run was cancelled while its node was executing: the late result must not reopen it.
+        var instanceId = Guid.NewGuid();
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, WorkflowVersionId = _versionId, Status = ended });
+
+        await NewOrchestrator().CompleteNodeAsync(instanceId, "a", "{}", "worker-1");
+        await NewOrchestrator().FailNodeAsync(instanceId, "a", "boom", "worker-1");
+        await NewOrchestrator().ParkAtGateAsync(instanceId, "a", Guid.NewGuid());
+
+        _nodeStates.Verify(r => r.Update(It.IsAny<WorkflowNodeState>()), Times.Never);
+        _events.Verify(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+        _queue.Verify(q => q.EnqueueAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Every_change_takes_the_runs_row_lock_before_reading_it_and_commits()
+    {
+        var instanceId = Guid.NewGuid();
+        var order = new List<string>();
+        var transaction = new Mock<IUnitOfWorkTransaction>();
+        transaction.Setup(t => t.CommitAsync(It.IsAny<CancellationToken>())).Callback(() => order.Add("commit")).Returns(Task.CompletedTask);
+        _unitOfWork.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).Callback(() => order.Add("begin")).ReturnsAsync(transaction.Object);
+        _instances.Setup(r => r.LockForUpdateAsync(instanceId, It.IsAny<CancellationToken>())).Callback(() => order.Add("lock")).Returns(Task.CompletedTask);
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).Callback(() => order.Add("read"))
+            .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, Status = InstanceStatus.Completed });
+
+        await NewOrchestrator().CancelAsync(instanceId, Guid.NewGuid());
+
+        order.Should().Equal("begin", "lock", "read", "commit");
+    }
+
+    [Fact]
+    public async Task Inside_a_callers_transaction_the_lock_joins_it()
+    {
+        var instanceId = Guid.NewGuid();
+        _unitOfWork.Setup(u => u.HasActiveTransaction).Returns(true);
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, Status = InstanceStatus.Completed });
+
+        await NewOrchestrator().CancelAsync(instanceId, Guid.NewGuid());
+
+        _unitOfWork.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _instances.Verify(r => r.LockForUpdateAsync(instanceId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task CancelAsync_running_instance_sets_cancelled_releases_lease_and_appends_event()
     {

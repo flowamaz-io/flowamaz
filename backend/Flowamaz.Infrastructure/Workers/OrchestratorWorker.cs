@@ -1,3 +1,4 @@
+using Flowamaz.Core.Enums;
 using System.Text.Json;
 using Flowamaz.Core.Interfaces.Queue;
 using Flowamaz.Core.Interfaces.Repositories;
@@ -172,6 +173,13 @@ public sealed class OrchestratorWorker : BackgroundService
         {
             var node = graph.FindNode(nodeId);
             if (node is null) continue;
+            // Cancelled (or otherwise ended) since the step: don't run the node's side effects (HTTP calls, emails).
+            if (await instances.GetCurrentStatusAsync(instanceId, cancellationToken)
+                is InstanceStatus.Cancelled or InstanceStatus.Completed or InstanceStatus.Failed)
+            {
+                _logger.LogInformation("OrchestratorWorker {WorkerId} skips node={NodeId}: instance={InstanceId} has ended", _workerId, nodeId, instanceId);
+                return;
+            }
             var nodeWorker = registry.Resolve(node.Type);
             if (nodeWorker is null) continue; // no executor for this type yet — leave it Pending
 

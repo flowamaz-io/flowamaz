@@ -179,6 +179,24 @@ public class OrchestratorWorkerTests
     }
 
     [Fact]
+    public async Task ProcessInstance_does_not_execute_nodes_of_a_run_cancelled_after_the_step()
+    {
+        _instances.Setup(r => r.TryAcquireLeaseAsync(_instanceId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _orchestrator.Setup(o => o.StepAsync(_instanceId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(OrchestratorResult.Continue(["a"]));
+        SetupRunnableInstance();
+        _instances.Setup(r => r.GetCurrentStatusAsync(_instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(InstanceStatus.Cancelled);
+        var nodeWorker = new Mock<INodeWorker>();
+        _registry.Setup(r => r.Resolve(NodeType.Action)).Returns(nodeWorker.Object);
+
+        await NewWorker().ProcessInstanceAsync(BuildProvider(), _ws, _instanceId, CancellationToken.None);
+
+        nodeWorker.Verify(w => w.ExecuteAsync(It.IsAny<NodeExecutionContext>(), It.IsAny<CancellationToken>()), Times.Never);
+        _orchestrator.Verify(o => o.CompleteNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ProcessInstance_ContinueWithNode_WorkerFails_FailsNode()
     {
         _instances.Setup(r => r.TryAcquireLeaseAsync(_instanceId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
