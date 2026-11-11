@@ -1,4 +1,5 @@
 using Flowamaz.Core.Entities.Workflow;
+using Flowamaz.Core.Enums;
 
 namespace Flowamaz.Core.Interfaces.Repositories;
 
@@ -18,6 +19,16 @@ public interface IWorkflowInstanceRepository
     /// returned instance's <c>WorkspaceId</c> to scope every follow-on query.
     /// </summary>
     Task<WorkflowInstance?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Takes the instance's row lock (SELECT … FOR UPDATE) until the current transaction ends, then refreshes the
+    /// instance if this context already tracks it. Every change to a run goes through this, so a cancel and the worker
+    /// can't overwrite each other or write the same event sequence number. Call inside a transaction.
+    /// </summary>
+    Task LockForUpdateAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>The instance's status as stored right now (no tracking), or null if it doesn't exist.</summary>
+    Task<InstanceStatus?> GetCurrentStatusAsync(Guid id, CancellationToken cancellationToken = default);
     Task<WorkflowInstance?> GetByIdempotencyKeyAsync(Guid workspaceId, string idempotencyKey, CancellationToken cancellationToken = default);
     Task<List<WorkflowInstance>> GetForWorkspaceAsync(Guid workspaceId, bool includeTest = false, CancellationToken cancellationToken = default);
 

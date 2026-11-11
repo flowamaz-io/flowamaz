@@ -24,6 +24,7 @@ public sealed class GateService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<GateService> _logger;
     private readonly IAuditService? _audit;
+    private readonly IWorkflowInstanceRepository? _instances;
 
     public GateService(
         IGateDecisionRepository gates,
@@ -31,8 +32,10 @@ public sealed class GateService
         IWorkflowOrchestrator orchestrator,
         IUnitOfWork unitOfWork,
         ILogger<GateService> logger,
-        IAuditService? audit = null)
+        IAuditService? audit = null,
+        IWorkflowInstanceRepository? instances = null)
     {
+        _instances = instances;
         _gates = gates;
         _events = events;
         _orchestrator = orchestrator;
@@ -121,6 +124,11 @@ public sealed class GateService
             "GateService.DecideAsync enter workspace={WorkspaceId} instance={InstanceId} node={NodeId} decision={Decision}",
             workspaceId, instanceId, nodeId, decision);
 
+        // Under the run's row lock (like the orchestrator), so a cancel landing at the same moment either ends the
+        // run first (and this decision is refused below) or waits until the decision has been applied.
+        await using var transaction = _unitOfWork.HasActiveTransaction ? null : await _unitOfWork.BeginTransactionAsync(ct);
+        if (_instances is not null) await _instances.LockForUpdateAsync(instanceId, ct);
+
         var gate = await _gates.GetByNodeAsync(instanceId, nodeId, ct);
         if (gate is null || gate.WorkspaceId != workspaceId) return null;
         if (gate.Decision != GateDecisionStatus.Pending) throw new GateAlreadyDecidedException(nodeId);
@@ -167,6 +175,8 @@ public sealed class GateService
             await _orchestrator.FailNodeAsync(instanceId, nodeId, $"Gate rejected{(string.IsNullOrWhiteSpace(note) ? "" : $": {note}")}", "gate", ct,
                 retryable: false);
         }
+
+        if (transaction is not null) await transaction.CommitAsync(ct);
 
         _audit?.RecordAsync(new Core.Models.AuditEventRequest
         {

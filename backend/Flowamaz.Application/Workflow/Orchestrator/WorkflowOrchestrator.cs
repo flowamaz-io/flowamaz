@@ -214,7 +214,42 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         return snapshot;
     }
 
-    public async Task<OrchestratorResult> StepAsync(Guid instanceId, string leaseId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Runs one change to a run under its row lock, in a transaction (joining the caller's, if one is open). A cancel,
+    /// a gate decision and the worker's step then happen one after another, each seeing the others' result, instead
+    /// of overwriting each other's status or writing the same event sequence number.
+    /// </summary>
+    private async Task<T> LockedAsync<T>(Guid instanceId, Func<Task<T>> change, CancellationToken ct)
+    {
+        if (_unitOfWork.HasActiveTransaction)
+        {
+            await _instances.LockForUpdateAsync(instanceId, ct);
+            return await change();
+        }
+
+        await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
+        await _instances.LockForUpdateAsync(instanceId, ct);
+        var result = await change();
+        if (transaction is not null) await transaction.CommitAsync(ct);
+        return result;
+    }
+
+    private async Task LockedAsync(Guid instanceId, Func<Task<bool>> change, CancellationToken ct) =>
+        await LockedAsync<bool>(instanceId, change, ct);
+
+    /// <summary>A run that already ended (e.g. cancelled while a node was executing) takes no further changes.</summary>
+    private bool HasEnded(WorkflowInstance instance, string operation, string nodeId)
+    {
+        if (instance.Status is not (InstanceStatus.Cancelled or InstanceStatus.Completed or InstanceStatus.Failed)) return false;
+        _logger.LogInformation("WorkflowOrchestrator.{Operation} ignored — instance={InstanceId} already {Status} (node {NodeId})",
+            operation, instance.Id, instance.Status, nodeId);
+        return true;
+    }
+
+    public Task<OrchestratorResult> StepAsync(Guid instanceId, string leaseId, CancellationToken cancellationToken = default) =>
+        LockedAsync(instanceId, () => StepCoreAsync(instanceId, leaseId, cancellationToken), cancellationToken);
+
+    private async Task<OrchestratorResult> StepCoreAsync(Guid instanceId, string leaseId, CancellationToken cancellationToken)
     {
         _logger.LogInformation("WorkflowOrchestrator.StepAsync enter instance={InstanceId} lease={LeaseId}", instanceId, leaseId);
 
@@ -388,12 +423,16 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         }
     }
 
-    public async Task CompleteNodeAsync(Guid instanceId, string nodeId, string output, string leaseId, CancellationToken cancellationToken = default)
+    public Task CompleteNodeAsync(Guid instanceId, string nodeId, string output, string leaseId, CancellationToken cancellationToken = default) =>
+        LockedAsync(instanceId, () => CompleteNodeCoreAsync(instanceId, nodeId, output, cancellationToken), cancellationToken);
+
+    private async Task<bool> CompleteNodeCoreAsync(Guid instanceId, string nodeId, string output, CancellationToken cancellationToken)
     {
         _logger.LogInformation("WorkflowOrchestrator.CompleteNodeAsync enter instance={InstanceId} node={NodeId}", instanceId, nodeId);
 
         var instance = await _instances.GetByIdAsync(instanceId, cancellationToken)
             ?? throw new InvalidOperationException($"Instance '{instanceId}' not found completing node '{nodeId}'.");
+        if (HasEnded(instance, "CompleteNodeAsync", nodeId)) return false;
         var state = await _nodeStates.GetByNodeAsync(instanceId, nodeId, cancellationToken)
             ?? throw new InvalidOperationException($"Node state '{nodeId}' not found on instance '{instanceId}'.");
 
@@ -425,15 +464,20 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         // More steps remain — put the instance back on its queue for the next frontier.
         await _queue.EnqueueAsync(instance.WorkspaceId, instanceId, cancellationToken);
         _logger.LogInformation("WorkflowOrchestrator.CompleteNodeAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
+        return true;
     }
 
-    public async Task FailNodeAsync(Guid instanceId, string nodeId, string error, string leaseId, CancellationToken cancellationToken = default,
-        bool retryable = true)
+    public Task FailNodeAsync(Guid instanceId, string nodeId, string error, string leaseId, CancellationToken cancellationToken = default,
+        bool retryable = true) =>
+        LockedAsync(instanceId, () => FailNodeCoreAsync(instanceId, nodeId, error, retryable, cancellationToken), cancellationToken);
+
+    private async Task<bool> FailNodeCoreAsync(Guid instanceId, string nodeId, string error, bool retryable, CancellationToken cancellationToken)
     {
         _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync enter instance={InstanceId} node={NodeId}", instanceId, nodeId);
 
         var instance = await _instances.GetByIdAsync(instanceId, cancellationToken)
             ?? throw new InvalidOperationException($"Instance '{instanceId}' not found failing node '{nodeId}'.");
+        if (HasEnded(instance, "FailNodeAsync", nodeId)) return false;
         var state = await _nodeStates.GetByNodeAsync(instanceId, nodeId, cancellationToken)
             ?? throw new InvalidOperationException($"Node state '{nodeId}' not found on instance '{instanceId}'.");
 
@@ -458,7 +502,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             _logger.LogWarning(
                 "WorkflowOrchestrator.FailNodeAsync retry instance={InstanceId} node={NodeId} attempt={Attempt} delay={Delay}s",
                 instanceId, nodeId, state.RetryCount, delay);
-            return;
+            return true;
         }
 
         state.Status = NodeStatus.Failed;
@@ -477,7 +521,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                 ? parsed : SagaStrategyType.Backward;
             await _sagaEngine.StartAsync(instanceId, nodeId, strategy, cancellationToken);
             _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync exit instance={InstanceId} node={NodeId} — saga {Strategy}", instanceId, nodeId, strategy);
-            return;
+            return true;
         }
 
         if (compensation is not null)
@@ -501,15 +545,20 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
+        return true;
     }
 
-    public async Task ParkAtGateAsync(Guid instanceId, string nodeId, Guid gateId, CancellationToken cancellationToken = default)
+    public Task ParkAtGateAsync(Guid instanceId, string nodeId, Guid gateId, CancellationToken cancellationToken = default) =>
+        LockedAsync(instanceId, () => ParkAtGateCoreAsync(instanceId, nodeId, gateId, cancellationToken), cancellationToken);
+
+    private async Task<bool> ParkAtGateCoreAsync(Guid instanceId, string nodeId, Guid gateId, CancellationToken cancellationToken)
     {
         _logger.LogInformation("WorkflowOrchestrator.ParkAtGateAsync enter instance={InstanceId} node={NodeId} gate={GateId}",
             instanceId, nodeId, gateId);
 
         var instance = await _instances.GetByIdAsync(instanceId, cancellationToken)
             ?? throw new InvalidOperationException($"Instance '{instanceId}' not found parking at gate '{nodeId}'.");
+        if (HasEnded(instance, "ParkAtGateAsync", nodeId)) return false;
         var state = await _nodeStates.GetByNodeAsync(instanceId, nodeId, cancellationToken)
             ?? throw new InvalidOperationException($"Node state '{nodeId}' not found on instance '{instanceId}'.");
 
@@ -529,9 +578,13 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("WorkflowOrchestrator.ParkAtGateAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
+        return true;
     }
 
-    public async Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default, string? cancelledByLabel = null)
+    public Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default, string? cancelledByLabel = null) =>
+        LockedAsync(instanceId, () => CancelCoreAsync(instanceId, requestedBy, cancelledByLabel, cancellationToken), cancellationToken);
+
+    private async Task<bool> CancelCoreAsync(Guid instanceId, Guid requestedBy, string? cancelledByLabel, CancellationToken cancellationToken)
     {
         _logger.LogInformation("WorkflowOrchestrator.CancelAsync enter instance={InstanceId} by={RequestedBy}", instanceId, requestedBy);
 
@@ -541,7 +594,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         if (!instance.CanTransitionTo(InstanceStatus.Cancelled))
         {
             _logger.LogInformation("WorkflowOrchestrator.CancelAsync no-op — instance={InstanceId} already {Status}", instanceId, instance.Status);
-            return;
+            return false;
         }
 
         var now = DateTime.UtcNow;
@@ -598,6 +651,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         }, cancellationToken);
 
         _logger.LogInformation("WorkflowOrchestrator.CancelAsync exit instance={InstanceId}", instanceId);
+        return true;
     }
 
     private async Task<WorkflowGraph> LoadGraphAsync(WorkflowInstance instance, CancellationToken ct)

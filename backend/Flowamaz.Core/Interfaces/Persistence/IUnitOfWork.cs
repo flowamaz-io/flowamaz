@@ -12,6 +12,9 @@ public interface IUnitOfWork
 
     /// <summary>Begin an explicit transaction spanning multiple operations.</summary>
     Task<IUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>True while a transaction from <see cref="BeginTransactionAsync"/> is open on this unit of work.</summary>
+    bool HasActiveTransaction => false;
 }
 
 /// <summary>A transaction scope. Dispose without commit rolls back.</summary>

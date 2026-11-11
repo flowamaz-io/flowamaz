@@ -12,6 +12,8 @@ public sealed class EfUnitOfWork(FlowAmazDbContext db) : IUnitOfWork
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
         db.SaveChangesAsync(cancellationToken);
 
+    public bool HasActiveTransaction => db.Database.CurrentTransaction is not null;
+
     public async Task<IUnitOfWorkTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
     {
         var transaction = await db.Database.BeginTransactionAsync(cancellationToken);

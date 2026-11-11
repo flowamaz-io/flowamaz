@@ -17,6 +17,19 @@ public sealed class WorkflowInstanceRepository(FlowAmazDbContext db) : IWorkflow
     public Task<WorkflowInstance?> GetByIdForWorkspaceAsync(Guid id, Guid workspaceId, CancellationToken cancellationToken = default) =>
         db.WorkflowInstances.FirstOrDefaultAsync(i => i.Id == id && i.WorkspaceId == workspaceId, cancellationToken);
 
+    public async Task LockForUpdateAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        if (db.Database.IsNpgsql())
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM workflow_instances WHERE id = {id} FOR UPDATE", cancellationToken);
+        var tracked = db.ChangeTracker.Entries<WorkflowInstance>().FirstOrDefault(e => e.Entity.Id == id);
+        if (tracked is not null) await tracked.ReloadAsync(cancellationToken);
+    }
+
+    public async Task<InstanceStatus?> GetCurrentStatusAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await db.WorkflowInstances.AsNoTracking().IgnoreQueryFilters().Where(i => i.Id == id)
+            .Select(i => (InstanceStatus?)i.Status).FirstOrDefaultAsync(cancellationToken);
+
     public Task<WorkflowInstance?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         db.WorkflowInstances.FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
 
