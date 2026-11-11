@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { useWorkspaceStore } from '@/stores/workspace.store';
 import { computed, ref } from 'vue';
 import { authService } from '@/services/auth.service';
 import { registerAuthBridge } from '@/services/api.service';
@@ -30,6 +31,8 @@ export const useAuthStore = defineStore('auth', () => {
   function applyMe(me: MeResponse): void {
     user.value = { id: me.id, email: me.email, name: me.name, orgId: me.orgId, orgSlug: me.orgSlug, isOrgOwner: me.isOrgOwner };
     workspaces.value = me.workspaces;
+    // Don't carry the previous account's workspace into this session.
+    useWorkspaceStore().adoptMemberships(me.workspaces.map((w) => w.id));
   }
 
   async function login(payload: LoginRequest): Promise<void> {

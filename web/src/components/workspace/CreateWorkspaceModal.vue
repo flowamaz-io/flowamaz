@@ -20,6 +20,8 @@ const slug = ref('');
 // Once the user edits the slug by hand we stop auto-syncing it from the name.
 const slugTouched = ref(false);
 const error = ref('');
+// A URL already in use belongs under the URL field, not the name.
+const slugError = ref('');
 const creating = ref(false);
 
 watch(
@@ -41,6 +43,7 @@ function onNameInput(value: string): void {
 
 function onSlugInput(value: string): void {
   slugTouched.value = true;
+  slugError.value = '';
   slug.value = slugify(value);
 }
 
@@ -51,6 +54,7 @@ async function submit(): Promise<void> {
   }
   creating.value = true;
   error.value = '';
+  slugError.value = '';
   try {
     const created = await ws.createWorkspace({ name: name.value.trim(), slug: slug.value });
     // Creating a workspace also switches into it — say so, or the context change goes unnoticed.
@@ -58,7 +62,9 @@ async function submit(): Promise<void> {
     emit('created', created);
     emit('close');
   } catch (e) {
-    error.value = toUserFacingError(e).message;
+    const failure = toUserFacingError(e);
+    if (failure.code === 'WORKSPACE_SLUG_TAKEN') slugError.value = failure.message;
+    else error.value = failure.message;
   } finally {
     creating.value = false;
   }
@@ -87,6 +93,7 @@ async function submit(): Promise<void> {
           prefix="flowamaz.io/"
           placeholder="finance-ops"
           hint="Lowercase letters, numbers and hyphens. This becomes the workspace address."
+          :error="slugError"
           @update:model-value="onSlugInput"
         />
         <p class="mt-1 text-xs text-slate-500">

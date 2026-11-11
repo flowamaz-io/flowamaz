@@ -29,6 +29,7 @@ const workspaceSlug = ref('');
 const slugTouched = ref(false);
 const submitting = ref(false);
 const error = ref('');
+const slugError = ref('');
 
 function onNameInput(value: string): void {
   workspaceName.value = value;
@@ -52,6 +53,7 @@ async function enterCreatedWorkspace(): Promise<void> {
 async function createWorkspaceAndAdvance(): Promise<void> {
   if (submitting.value) return; // a second click while the first is still running
   error.value = '';
+  slugError.value = '';
   if (workspaceName.value.trim().length < 2) {
     error.value = 'Give your workspace a name of at least 2 characters so your team can recognise it.';
     return;
@@ -72,7 +74,9 @@ async function createWorkspaceAndAdvance(): Promise<void> {
     }
     await enterCreatedWorkspace();
   } catch (e) {
-    error.value = toUserFacingError(e).message;
+    const failure = toUserFacingError(e);
+    if (failure.code === 'WORKSPACE_SLUG_TAKEN') slugError.value = failure.message;
+    else error.value = failure.message;
   } finally {
     submitting.value = false;
   }
@@ -148,7 +152,8 @@ function skipInvite(): void {
           label="Workspace URL"
           prefix="flowamaz.io/"
           hint="Auto-generated from the name. You can edit it."
-          @update:model-value="slugTouched = true"
+          :error="slugError"
+          @update:model-value="slugTouched = true; slugError = ''"
         />
       </div>
       <div class="mt-8 flex justify-end">

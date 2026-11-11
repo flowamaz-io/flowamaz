@@ -67,5 +67,6 @@ describe('OnboardingWizard workspace step', () => {
     await flushPromises();
     expect(wrapper.text()).toContain("already has a workspace with the URL 'lending'");
     expect(wrapper.text()).not.toContain('organisation slug');
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false); // shown under the URL field, not as a banner
   });
 });
