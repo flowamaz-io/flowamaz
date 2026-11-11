@@ -75,7 +75,9 @@ public class WorkspaceServiceTests
 
         var act = () => service.CreateWorkspaceAsync(orgId, "Taken", "taken", Guid.NewGuid());
 
-        await act.Should().ThrowAsync<SlugAlreadyExistsException>();
+        var ex = (await act.Should().ThrowAsync<WorkspaceSlugTakenException>()).Which;
+        ex.ErrorCode.Should().Be("WORKSPACE_SLUG_TAKEN");
+        ex.Message.Should().Contain("workspace with the URL 'taken'").And.NotContain("organisation slug");
         _uow.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 

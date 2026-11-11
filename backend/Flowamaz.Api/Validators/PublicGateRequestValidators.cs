@@ -31,3 +31,16 @@ public sealed class PublicGateDecisionRequestValidator : AbstractValidator<Publi
             .WithMessage("'decided_by' contains control characters (such as line breaks). Send the name as a single line of text.");
     }
 }
+
+/// <summary>Validates the optional body of a public cancel: <c>cancelled_by</c> ends up in the audit log.</summary>
+public sealed class PublicCancelRequestValidator : AbstractValidator<PublicCancelRequest>
+{
+    public PublicCancelRequestValidator()
+    {
+        RuleFor(x => x.CancelledBy)
+            .MaximumLength(GateDecisionLimits.DecidedByMaxLength)
+            .WithMessage($"'cancelled_by' is too long. Send the person's name (and role) in {GateDecisionLimits.DecidedByMaxLength} characters or fewer.")
+            .Must(v => v is null || !v.Any(char.IsControl))
+            .WithMessage("'cancelled_by' contains control characters (such as line breaks). Send the name as a single line of text.");
+    }
+}

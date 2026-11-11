@@ -82,6 +82,29 @@ describe('LoginView after a refused SSO sign-in', () => {
     expect((wrapper.vm as unknown as { orgSlug: string }).orgSlug).toBe('acme');
   });
 
+  it('shows "Continue with SSO" without waiting for the typing delay', async () => {
+    vi.resetModules();
+    vi.doMock('vue-router', () => ({
+      useRouter: () => ({ push: vi.fn() }),
+      useRoute: () => ({ query: { org: 'acme', sso_error: 'SSO_SIGNIN_EXPIRED' } }),
+    }));
+    const getStatus = vi.fn().mockResolvedValue({ enabled: true, provider: 'saml', required: false });
+    vi.doMock('@/services/sso.service', () => ({ ssoService: { getStatus, initiateUrl: vi.fn() } }));
+    vi.useFakeTimers();
+    try {
+      setActivePinia(createPinia());
+      const { default: View } = await import('@/views/auth/LoginView.vue');
+      const wrapper = mount(View, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } });
+      await flushPromises();
+      // No timers advanced: the status check didn't wait for the 400 ms debounce.
+      expect(getStatus).toHaveBeenCalledWith('acme');
+      expect(wrapper.find('[data-test="sso-button"]').exists()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      vi.doUnmock('@/services/sso.service');
+    }
+  });
+
   it.each([
     ['SSO_SUBJECT_MISMATCH', 'linked to a different person'],
     ['SSO_EMAIL_UNVERIFIED', "doesn't confirm that your email address is verified"],

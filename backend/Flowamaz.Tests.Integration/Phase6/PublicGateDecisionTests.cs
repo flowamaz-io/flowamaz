@@ -151,7 +151,8 @@ public class PublicGateDecisionTests : ApiTestBase
             instanceId = (await db.GateDecisions.AsNoTracking().IgnoreQueryFilters().SingleAsync(g => g.Id == gateId)).InstanceId;
         }
 
-        var resp = await KeyClient(key).PostAsync($"/api/public/v1/instances/{instanceId}/cancel", null);
+        var resp = await KeyClient(key).PostAsJsonAsync($"/api/public/v1/instances/{instanceId}/cancel",
+            new { cancelled_by = "Aisha Rahman (customer)" });
         resp.StatusCode.Should().Be(HttpStatusCode.OK, await resp.Content.ReadAsStringAsync());
 
         using var verify = Fixture.Services.CreateScope();
@@ -167,5 +168,20 @@ public class PublicGateDecisionTests : ApiTestBase
         row!.ResourceId.Should().Be(instanceId);
         row.ActorType.Should().Be("api_key");
         row.ActorLabel.Should().Contain("Loan app");
+        row.ActorLabel.Should().StartWith("Aisha Rahman (customer) via API key", "cancelled_by is named like decided_by");
+    }
+
+    [Fact]
+    public async Task Cancel_without_a_body_still_works()
+    {
+        var (_, gateId, key) = await SetupAsync("pgd-cancel-nobody");
+        Guid instanceId;
+        using (var scope = Fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+            instanceId = (await db.GateDecisions.AsNoTracking().IgnoreQueryFilters().SingleAsync(g => g.Id == gateId)).InstanceId;
+        }
+        var resp = await KeyClient(key).PostAsync($"/api/public/v1/instances/{instanceId}/cancel", null);
+        resp.StatusCode.Should().Be(HttpStatusCode.OK, await resp.Content.ReadAsStringAsync());
     }
 }

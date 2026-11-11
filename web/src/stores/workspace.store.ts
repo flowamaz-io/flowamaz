@@ -50,6 +50,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  /**
+   * After sign-in: the remembered workspace may belong to the previous account on this browser. Keep it only if
+   * this person is a member, otherwise start in their first workspace, so pages don't open a workspace they can't see.
+   */
+  function adoptMemberships(workspaceIds: string[]): void {
+    if (currentWorkspaceId.value && workspaceIds.includes(currentWorkspaceId.value)) return;
+    if (workspaceIds.length > 0) {
+      switchWorkspace(workspaceIds[0]!);
+      return;
+    }
+    currentWorkspaceId.value = null;
+    currentWorkspace.value = null;
+    localStorage.removeItem(CURRENT_WS_KEY);
+  }
+
   function switchWorkspace(id: string): void {
     currentWorkspaceId.value = id;
     localStorage.setItem(CURRENT_WS_KEY, id);
@@ -143,6 +158,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   return {
+    adoptMemberships,
     allWorkspaces,
     currentWorkspaceId,
     currentWorkspace,

@@ -34,7 +34,8 @@ public class PublicInstancesControllerTests
     private PublicInstancesController CreateController()
     {
         var controller = new PublicInstancesController(
-            _instances.Object, _events.Object, _orchestrator.Object, _currentUser.Object, _rateLimiter.Object);
+            _instances.Object, _events.Object, _orchestrator.Object, _currentUser.Object, _rateLimiter.Object,
+            new Flowamaz.Api.Validators.PublicCancelRequestValidator());
         controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
         return controller;
     }
@@ -82,10 +83,10 @@ public class PublicInstancesControllerTests
         _instances.Setup(r => r.GetByIdForWorkspaceAsync(instanceId, Workspace, It.IsAny<CancellationToken>()))
             .ReturnsAsync((WorkflowInstance?)null);
 
-        var result = await CreateController().Cancel(instanceId, CancellationToken.None);
+        var result = await CreateController().Cancel(instanceId, null, CancellationToken.None);
 
         result.Should().BeOfType<JsonResult>().Which.StatusCode.Should().Be(404);
-        _orchestrator.Verify(o => o.CancelAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _orchestrator.Verify(o => o.CancelAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()), Times.Never);
     }
 
     [Theory]
@@ -98,11 +99,40 @@ public class PublicInstancesControllerTests
         _instances.Setup(r => r.GetByIdForWorkspaceAsync(instanceId, Workspace, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = Workspace, Status = current });
 
-        var result = await CreateController().Cancel(instanceId, CancellationToken.None);
+        var result = await CreateController().Cancel(instanceId, null, CancellationToken.None);
 
         var json = result.Should().BeOfType<JsonResult>().Which;
         json.StatusCode.Should().Be(200);
         JsonSerializer.Serialize(json.Value, (JsonSerializerOptions)json.SerializerSettings!)
             .Should().Contain($"\"status\":\"{expected}\"");
+    }
+
+    [Fact]
+    public async Task Cancel_passes_cancelled_by_to_the_audit()
+    {
+        var instanceId = Guid.NewGuid();
+        _instances.Setup(r => r.GetByIdForWorkspaceAsync(instanceId, Workspace, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = Workspace, Status = InstanceStatus.Waiting });
+
+        await CreateController().Cancel(instanceId, new PublicCancelRequest("Aisha Rahman (customer)"), CancellationToken.None);
+
+        _orchestrator.Verify(o => o.CancelAsync(instanceId, Guid.Empty, It.IsAny<CancellationToken>(), "Aisha Rahman (customer)"), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("Line one\nLine two", "control characters")]
+    [InlineData(null, "too long")]
+    public async Task Cancel_refuses_a_bad_cancelled_by(string? value, string message)
+    {
+        var instanceId = Guid.NewGuid();
+        _instances.Setup(r => r.GetByIdForWorkspaceAsync(instanceId, Workspace, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = Workspace, Status = InstanceStatus.Waiting });
+
+        var result = await CreateController().Cancel(instanceId, new PublicCancelRequest(value ?? new string('x', 201)), CancellationToken.None);
+
+        var json = result.Should().BeOfType<JsonResult>().Which;
+        json.StatusCode.Should().Be(400);
+        JsonSerializer.Serialize(json.Value, new JsonSerializerOptions()).Should().Contain(message);
+        _orchestrator.Verify(o => o.CancelAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()), Times.Never);
     }
 }

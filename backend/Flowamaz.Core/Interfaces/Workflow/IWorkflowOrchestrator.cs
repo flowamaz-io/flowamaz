@@ -55,7 +55,8 @@ public interface IWorkflowOrchestrator
     Task<bool> HasDecisionRouteAsync(Guid instanceId, string nodeId, string decision, CancellationToken cancellationToken = default);
 
     /// <summary>Cancels the instance, appends the event, and releases any worker lease.</summary>
-    Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default);
+    /// <param name="cancelledByLabel">For public-API cancels: who stopped the run in the calling application.</param>
+    Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default, string? cancelledByLabel = null);
 }
 
 /// <summary>Outcome of a single <see cref="IWorkflowOrchestrator.StepAsync"/> call.</summary>
