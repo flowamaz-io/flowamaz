@@ -39,7 +39,7 @@ with the scopes **workflows:read, workflows:trigger, instances:read, instances:w
 | Show the reviewer or approver their queue | `GET /api/public/v1/gates/pending` → each item has `id`, `instance_id`, `node_id` (`credit-review`, `l1-approval`, `l2-approval`, `l3-approval`, `lo-acceptance`) |
 | Reviewer, approver or customer decides | `POST /api/public/v1/gates/{id}/decide` with `{ "decision": "approved" \| "rejected", "note": "…", "decided_by": "Aisha Rahman (Branch Manager)" }`. `decided_by` is optional (max 200 characters, one line): Flowamaz stores it on the gate (`decided_by_label`) and the audit log shows "Aisha Rahman (Branch Manager) via API key …". Any other `decision` value is a 400 `validation_error`. |
 | Track progress | `GET /api/public/v1/instances/{id}` (status) and `GET /api/public/v1/instances/{id}/events` (Server-Sent Events: the steps taken) |
-| Withdraw an application | `POST /api/public/v1/instances/{id}/cancel` |
+| Withdraw an application | `POST /api/public/v1/instances/{id}/cancel`, optionally with `{ "cancelled_by": "Aisha Rahman (customer)" }` (max 200 characters, one line). The audit log then shows "Aisha Rahman (customer) via API key …"; without it, just the API key. |
 
 Form fields (the trigger payload): `application_id`, `applicant_name`, `applicant_email`,
 `loan_amount` (number), `tenure_months` (number), `purpose`, `monthly_income`.

@@ -51,7 +51,7 @@ public sealed class WorkspaceService : IWorkspaceService
         {
             if (await _workspaceRepository.SlugExistsInOrgAsync(orgId, normalisedSlug, cancellationToken))
             {
-                throw new SlugAlreadyExistsException(normalisedSlug);
+                throw new WorkspaceSlugTakenException(normalisedSlug);
             }
 
             var workspace = new Core.Entities.Workspaces.Workspace
@@ -113,7 +113,7 @@ public sealed class WorkspaceService : IWorkspaceService
                 workspace.Id, orgId, environments.Count, createdByUserId);
             return workspace;
         }
-        catch (SlugAlreadyExistsException)
+        catch (WorkspaceSlugTakenException)
         {
             // Expected business outcome — surfaced to the caller without an error log.
             throw;

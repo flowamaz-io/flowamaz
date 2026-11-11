@@ -531,7 +531,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         _logger.LogInformation("WorkflowOrchestrator.ParkAtGateAsync exit instance={InstanceId} node={NodeId}", instanceId, nodeId);
     }
 
-    public async Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default)
+    public async Task CancelAsync(Guid instanceId, Guid requestedBy, CancellationToken cancellationToken = default, string? cancelledByLabel = null)
     {
         _logger.LogInformation("WorkflowOrchestrator.CancelAsync enter instance={InstanceId} by={RequestedBy}", instanceId, requestedBy);
 
@@ -579,17 +579,22 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         // AuditService attributes from the request. A withdrawn loan application must be traceable.
         var definition = await _definitions.GetByIdForWorkspaceAsync(instance.WorkflowDefinitionId, instance.WorkspaceId, cancellationToken);
         Guid? actor = requestedBy == Guid.Empty ? null : requestedBy;
+        var cancelledBy = actor.HasValue || string.IsNullOrWhiteSpace(cancelledByLabel) ? null : cancelledByLabel.Trim();
         _audit?.RecordAsync(new Core.Models.AuditEventRequest
         {
             WorkspaceId = instance.WorkspaceId,
             ActorUserId = actor,
             ActorType = actor.HasValue ? "user" : "system",
+            // Named by the calling application; AuditService adds the API key ("… via API key …"), as for decided_by.
+            ActorLabel = cancelledBy,
             EventType = "instance.cancelled",
             ResourceType = "instance",
             ResourceId = instance.Id,
             ResourceLabel = definition?.Name,
             Action = "cancelled",
-            Metadata = new { workflowId = instance.WorkflowDefinitionId, closedNodes = closed, isTest = instance.IsTest },
+            Metadata = cancelledBy is null
+                ? new { workflowId = instance.WorkflowDefinitionId, closedNodes = closed, isTest = instance.IsTest }
+                : (object)new { workflowId = instance.WorkflowDefinitionId, closedNodes = closed, isTest = instance.IsTest, cancelledBy },
         }, cancellationToken);
 
         _logger.LogInformation("WorkflowOrchestrator.CancelAsync exit instance={InstanceId}", instanceId);

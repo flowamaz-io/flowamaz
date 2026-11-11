@@ -578,6 +578,28 @@ public class WorkflowOrchestratorTests
     }
 
     [Fact]
+    public async Task CancelAsync_through_the_public_api_names_who_cancelled_when_given()
+    {
+        var (orchestrator, recorded, instanceId) = CancellableRun();
+
+        await orchestrator.CancelAsync(instanceId, Guid.Empty, cancelledByLabel: "  Aisha Rahman (customer) ");
+
+        var row = recorded.Should().ContainSingle().Subject;
+        row.ActorLabel.Should().Be("Aisha Rahman (customer)");
+        System.Text.Json.JsonSerializer.Serialize(row.Metadata).Should().Contain("\"cancelledBy\":\"Aisha Rahman (customer)\"");
+    }
+
+    [Fact]
+    public async Task CancelAsync_by_a_user_ignores_a_cancelled_by_label()
+    {
+        var (orchestrator, recorded, instanceId) = CancellableRun();
+
+        await orchestrator.CancelAsync(instanceId, Guid.NewGuid(), cancelledByLabel: "someone else");
+
+        recorded.Should().ContainSingle().Which.ActorLabel.Should().BeNull();
+    }
+
+    [Fact]
     public async Task CancelAsync_of_a_finished_run_records_nothing()
     {
         var (orchestrator, recorded, instanceId) = CancellableRun();

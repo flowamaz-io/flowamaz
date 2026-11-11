@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
@@ -84,8 +84,15 @@ const SSO_ERRORS: Record<string, string> = {
   SSO_IDP_MISCONFIGURED: "Your organisation's SSO settings don't match the identity provider. Ask your administrator to check them.",
 };
 
-onMounted(() => {
-  if (typeof route.query.org === 'string' && route.query.org) orgSlug.value = route.query.org;
+onMounted(async () => {
+  if (typeof route.query.org === 'string' && route.query.org) {
+    orgSlug.value = route.query.org;
+    // The org came in the link (e.g. back from a refused SSO sign-in): check SSO now, not after the typing delay,
+    // so "Continue with SSO" is there straight away.
+    await nextTick();
+    if (ssoTimer) clearTimeout(ssoTimer);
+    void checkSso();
+  }
   const code = route.query.sso_error;
   if (typeof code === 'string' && code) {
     error.value = SSO_ERRORS[code] ?? 'Single sign-on didn\'t complete. Try again, or ask your administrator to check the SSO settings.';

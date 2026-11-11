@@ -35,7 +35,22 @@ function onNameInput(value: string): void {
   if (!slugTouched.value) workspaceSlug.value = slugify(value);
 }
 
+// The slug this wizard already created. A retry after a slow or failed refresh must not create it again
+// (that answered "already used" before).
+const createdSlug = ref<string | null>(null);
+
+async function enterCreatedWorkspace(): Promise<void> {
+  // Refresh the JWT so the new workspace membership claim is included, then reload
+  // the workspace list so the selector in the app shell reflects it immediately.
+  const authStore = useAuthStore();
+  await authStore.refreshToken();
+  await ws.loadWorkspaces();
+  onboarding.markWorkspaceCreated();
+  onboarding.setStep(2);
+}
+
 async function createWorkspaceAndAdvance(): Promise<void> {
+  if (submitting.value) return; // a second click while the first is still running
   error.value = '';
   if (workspaceName.value.trim().length < 2) {
     error.value = 'Give your workspace a name of at least 2 characters so your team can recognise it.';
@@ -43,14 +58,19 @@ async function createWorkspaceAndAdvance(): Promise<void> {
   }
   submitting.value = true;
   try {
-    await ws.createWorkspace({ name: workspaceName.value.trim(), slug: workspaceSlug.value });
-    // Refresh the JWT so the new workspace membership claim is included, then reload
-    // the workspace list so the selector in the app shell reflects it immediately.
-    const authStore = useAuthStore();
-    await authStore.refreshToken();
-    await ws.loadWorkspaces();
-    onboarding.markWorkspaceCreated();
-    onboarding.setStep(2);
+    if (createdSlug.value !== workspaceSlug.value) {
+      try {
+        await ws.createWorkspace({ name: workspaceName.value.trim(), slug: workspaceSlug.value });
+      } catch (e) {
+        // Already used: if it's a workspace this person can open (made by an earlier click), carry on with it.
+        if (toUserFacingError(e).code !== 'WORKSPACE_SLUG_TAKEN') throw e;
+        await useAuthStore().refreshToken();
+        await ws.loadWorkspaces();
+        if (!ws.allWorkspaces.value.some((w) => w.slug === workspaceSlug.value)) throw e;
+      }
+      createdSlug.value = workspaceSlug.value;
+    }
+    await enterCreatedWorkspace();
   } catch (e) {
     error.value = toUserFacingError(e).message;
   } finally {

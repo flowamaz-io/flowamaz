@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
@@ -14,6 +14,18 @@ const auth = useAuth();
 
 // New organisations start on Community (free); they upgrade from Settings → Billing.
 const plan = ref('community');
+
+// The plan cards are a radio group: arrow keys move the choice (and focus), as screen-reader users expect.
+function onPlanKey(event: KeyboardEvent): void {
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+  if (step === undefined) return;
+  event.preventDefault();
+  const index = PLANS.findIndex((p) => p.slug === plan.value);
+  const next = PLANS[(index + step + PLANS.length) % PLANS.length]!;
+  plan.value = next.slug;
+  const group = event.currentTarget as HTMLElement;
+  void nextTick(() => group.querySelector<HTMLElement>(`[data-plan="${next.slug}"]`)?.focus());
+}
 const orgName = ref('');
 const orgSlug = ref('');
 const slugTouched = ref(false);
@@ -96,16 +108,28 @@ async function submit(): Promise<void> {
         </FmAlert>
 
         <fieldset class="mb-5">
-          <legend class="mb-2 text-sm font-medium text-slate-700">
+          <legend
+            id="plan-legend"
+            class="mb-2 text-sm font-medium text-slate-700"
+          >
             Choose a plan
           </legend>
-          <div class="grid grid-cols-3 gap-2">
+          <div
+            class="grid grid-cols-3 gap-2"
+            role="radiogroup"
+            aria-labelledby="plan-legend"
+            @keydown="onPlanKey"
+          >
             <button
               v-for="p in PLANS"
               :key="p.slug"
               type="button"
+              role="radio"
+              :aria-checked="plan === p.slug"
+              :tabindex="plan === p.slug ? 0 : -1"
+              :data-plan="p.slug"
               :class="[
-                'rounded-lg border p-3 text-left transition-colors',
+                'rounded-lg border p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
                 plan === p.slug ? 'border-primary-500 ring-2 ring-primary-200' : 'border-slate-200 hover:border-slate-300',
               ]"
               @click="plan = p.slug"

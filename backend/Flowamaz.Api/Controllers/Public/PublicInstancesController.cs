@@ -3,7 +3,10 @@ using System.Text.Json;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
+using System.Text.Json.Serialization;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace Flowamaz.Api.Controllers.Public;
 
@@ -14,18 +17,21 @@ public sealed class PublicInstancesController : PublicApiController
     private readonly IWorkflowInstanceRepository _instances;
     private readonly IWorkflowEventRepository _events;
     private readonly IWorkflowOrchestrator _orchestrator;
+    private readonly IValidator<PublicCancelRequest> _cancelValidator;
 
     public PublicInstancesController(
         IWorkflowInstanceRepository instances,
         IWorkflowEventRepository events,
         IWorkflowOrchestrator orchestrator,
         ICurrentUserService currentUser,
-        IPublicApiRateLimiter rateLimiter)
+        IPublicApiRateLimiter rateLimiter,
+        IValidator<PublicCancelRequest> cancelValidator)
         : base(currentUser, rateLimiter)
     {
         _instances = instances;
         _events = events;
         _orchestrator = orchestrator;
+        _cancelValidator = cancelValidator;
     }
 
     /// <summary>Public API: returns the status and result of a single workflow instance in the workspace. Authenticated by workspace API key and rate limited.</summary>
@@ -61,12 +67,25 @@ public sealed class PublicInstancesController : PublicApiController
         return new EmptyResult();
     }
 
-    /// <summary>Public API: cancels a running workflow instance in the workspace. Authenticated by workspace API key and rate limited.</summary>
+    /// <summary>
+    /// Public API: cancels a running workflow instance in the workspace. Authenticated by workspace API key and rate
+    /// limited. The body is optional; <c>cancelled_by</c> names who stopped the run in the calling application, and
+    /// the audit log shows "&lt;cancelled_by&gt; via API key …".
+    /// </summary>
     [HttpPost("{id:guid}/cancel")]
-    public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
+    public async Task<IActionResult> Cancel(
+        Guid id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PublicCancelRequest? request, CancellationToken ct)
     {
         if (await GuardAsync(ApiKeyScope.InstancesWrite, DecideBucket, ct) is { } blocked) return blocked;
         var ws = WorkspaceId!.Value;
+
+        if (request is not null)
+        {
+            var validation = await _cancelValidator.ValidateAsync(request, ct);
+            if (!validation.IsValid)
+                return ApiError(StatusCodes.Status400BadRequest, "validation_error",
+                    string.Join(" ", validation.Errors.Select(e => e.ErrorMessage).Distinct()), "errors#validation_error");
+        }
 
         var instance = await _instances.GetByIdForWorkspaceAsync(id, ws, ct);
         if (instance is null) return NotFoundInstance(id);
@@ -75,7 +94,7 @@ public sealed class PublicInstancesController : PublicApiController
         var status = instance.CanTransitionTo(InstanceStatus.Cancelled)
             ? "cancelled"
             : instance.Status.ToString().ToLowerInvariant();
-        await _orchestrator.CancelAsync(id, Guid.Empty, ct);
+        await _orchestrator.CancelAsync(id, Guid.Empty, ct, cancelledByLabel: request?.CancelledBy);
         return Data(new { InstanceId = id, Status = status });
     }
 
@@ -83,3 +102,7 @@ public sealed class PublicInstancesController : PublicApiController
         ApiError(StatusCodes.Status404NotFound, "instance_not_found",
             $"No instance found with id '{id}' in this workspace.", "errors#instance_not_found");
 }
+
+/// <summary>Optional body for a public cancel. <c>cancelled_by</c>: who stopped the run, e.g. "Aisha Rahman (customer)".</summary>
+public sealed record PublicCancelRequest(
+    [property: JsonPropertyName("cancelled_by")] string? CancelledBy = null);
