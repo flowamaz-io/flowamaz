@@ -21,6 +21,9 @@ public interface IWorkspaceMemberRepository
     /// <summary>Count of active Admins in the workspace — used to guard the last-admin rule.</summary>
     Task<int> CountActiveAdminsAsync(Guid workspaceId, CancellationToken cancellationToken = default);
 
+    /// <summary>All of a user's memberships (active or not), tracked, for removing someone from every workspace.</summary>
+    Task<List<WorkspaceMember>> GetAllForUserAsync(Guid orgUserId, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Serialises changes to a workspace's Admins until the current transaction ends (a Postgres transaction-level
     /// advisory lock), so two concurrent demotions can't both pass the last-admin check. Call inside a transaction,

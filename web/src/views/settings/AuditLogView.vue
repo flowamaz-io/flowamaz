@@ -7,14 +7,21 @@ import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmEmptyState from '@/components/common/FmEmptyState.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import { useWorkspace } from '@/composables/useWorkspace';
+import { useAuth } from '@/composables/useAuth';
 import { useToast } from '@/composables/useToast';
 import { toUserFacingError } from '@/utils/error.util';
 import { auditService, type AuditRow, type AuditPagination } from '@/services/audit.service';
 
 const ws = useWorkspace();
 const toast = useToast();
+const auth = useAuth();
 
 const workspaceId = computed(() => ws.currentWorkspaceId.value ?? '');
+const orgId = computed(() => auth.user.value?.orgId ?? '');
+const isOwner = computed(() => auth.user.value?.isOrgOwner === true);
+// Owners can also see the whole organisation: every workspace plus organisation events (SSO, SCIM, billing).
+const scope = ref<'workspace' | 'organisation'>('workspace');
+const orgScope = computed(() => scope.value === 'organisation' && isOwner.value);
 
 // Filters — default to the last 7 days.
 const fromDate = ref(dayjs().subtract(7, 'day').format('YYYY-MM-DD'));
@@ -38,6 +45,7 @@ const eventTypeOptions = [
   { value: 'workflow.created', label: 'Workflow created' },
   { value: 'workflow.published', label: 'Workflow published' },
   { value: 'instance.started', label: 'Instance started' },
+  { value: 'instance.cancelled', label: 'Instance cancelled' },
   { value: 'gate.approved', label: 'Gate approved' },
   { value: 'gate.rejected', label: 'Gate rejected' },
   { value: 'member.invited', label: 'Member invited' },
@@ -45,6 +53,13 @@ const eventTypeOptions = [
   { value: 'api_key.revoked', label: 'API key revoked' },
   { value: 'webhook.created', label: 'Webhook created' },
   { value: 'sso.login_succeeded', label: 'SSO login' },
+  { value: 'sso.configured', label: 'SSO settings changed' },
+  { value: 'scim.user_created', label: 'SCIM: user created' },
+  { value: 'scim.user_deactivated', label: 'SCIM: user deactivated' },
+  { value: 'scim.user_deleted', label: 'SCIM: user deleted' },
+  { value: 'scim.group_updated', label: 'SCIM: group changed' },
+  { value: 'scim.token_created', label: 'SCIM token created' },
+  { value: 'scim.token_revoked', label: 'SCIM token revoked' },
   { value: 'billing.plan_upgraded', label: 'Plan upgraded' },
 ];
 
@@ -57,6 +72,9 @@ const resourceTypeOptions = [
   { value: 'api_key', label: 'API key' },
   { value: 'webhook', label: 'Webhook' },
   { value: 'sso', label: 'SSO' },
+  { value: 'user', label: 'User' },
+  { value: 'scim_group', label: 'SCIM group' },
+  { value: 'scim_token', label: 'SCIM token' },
   { value: 'billing', label: 'Billing' },
 ];
 
@@ -71,15 +89,14 @@ function queryArgs() {
 }
 
 async function load(): Promise<void> {
-  if (!workspaceId.value) return;
+  if (orgScope.value ? !orgId.value : !workspaceId.value) return;
   loading.value = true;
   loadError.value = '';
   try {
-    const result = await auditService.list(workspaceId.value, {
-      ...queryArgs(),
-      page: page.value,
-      pageSize: pageSize.value,
-    });
+    const args = { ...queryArgs(), page: page.value, pageSize: pageSize.value };
+    const result = orgScope.value
+      ? await auditService.listOrg(orgId.value, args)
+      : await auditService.list(workspaceId.value, args);
     rows.value = result.data;
     pagination.value = result.pagination;
     expanded.value = new Set();
@@ -116,10 +133,12 @@ function formatTimestamp(value: string): string {
 }
 
 async function exportCsv(): Promise<void> {
-  if (!workspaceId.value) return;
+  if (orgScope.value ? !orgId.value : !workspaceId.value) return;
   exporting.value = true;
   try {
-    const blob = await auditService.exportCsv(workspaceId.value, queryArgs());
+    const blob = orgScope.value
+      ? await auditService.exportOrgCsv(orgId.value, queryArgs())
+      : await auditService.exportCsv(workspaceId.value, queryArgs());
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -144,7 +163,7 @@ function goToPage(next: number): void {
 }
 
 onMounted(load);
-watch(() => ws.currentWorkspaceId.value, () => {
+watch([() => ws.currentWorkspaceId.value, scope], () => {
   page.value = 1;
   void load();
 });
@@ -169,8 +188,28 @@ function eventText(row: { actor?: string | null; summary: string }): string {
           Audit Log
         </h1>
         <p class="text-sm text-slate-500">
-          An immutable record of who did what, when, and from where across this workspace.
+          {{ orgScope
+            ? 'An immutable record of who did what, across every workspace and your organisation settings (SSO, SCIM, billing).'
+            : 'An immutable record of who did what, when, and from where across this workspace.' }}
         </p>
+        <div
+          v-if="isOwner"
+          role="radiogroup"
+          aria-label="Audit log scope"
+          class="mt-3 inline-flex rounded-lg border border-slate-300 p-0.5 text-sm"
+        >
+          <button
+            v-for="opt in ([['workspace', 'This workspace'], ['organisation', 'Whole organisation']] as const)"
+            :key="opt[0]"
+            type="button"
+            role="radio"
+            :aria-checked="scope === opt[0]"
+            :class="['rounded-md px-3 py-1', scope === opt[0] ? 'bg-primary-50 font-medium text-primary-700' : 'text-slate-600']"
+            @click="scope = opt[0]"
+          >
+            {{ opt[1] }}
+          </button>
+        </div>
       </div>
       <FmButton
         variant="secondary"
@@ -270,7 +309,9 @@ function eventText(row: { actor?: string | null; summary: string }): string {
       v-else-if="rows.length === 0"
       :icon="ScrollText"
       title="No activity yet"
-      description="As people create workflows, trigger runs, decide gates, and invite members, every action will appear here. Try widening the date range or clearing filters to see more."
+      :description="isOwner && !orgScope
+        ? 'As people create workflows, trigger runs, decide gates, and invite members, every action will appear here. Organisation changes (SSO, SCIM, billing) are under Whole organisation. Try widening the date range or clearing filters to see more.'
+        : 'As people create workflows, trigger runs, decide gates, and invite members, every action will appear here. Try widening the date range or clearing filters to see more.'"
       cta-label="Reset to last 7 days"
       @cta="() => { fromDate = dayjs().subtract(7, 'day').format('YYYY-MM-DD'); toDate = dayjs().format('YYYY-MM-DD'); eventType = ''; resourceType = ''; actorId = ''; applyFilters(); }"
     />

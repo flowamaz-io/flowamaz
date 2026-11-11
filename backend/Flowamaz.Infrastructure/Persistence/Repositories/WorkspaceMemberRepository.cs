@@ -43,9 +43,15 @@ public sealed class WorkspaceMemberRepository(FlowAmazDbContext db) : IWorkspace
          select new WorkspaceMemberDetailDto(m.OrgUserId, u.Email, u.Name, m.Role, m.JoinedAt, m.IsActive))
         .ToListAsync(cancellationToken);
 
+    /// <summary>Admins who can actually act: the membership is active and so is the person's account.</summary>
     public Task<int> CountActiveAdminsAsync(Guid workspaceId, CancellationToken cancellationToken = default) =>
         db.WorkspaceMembers.CountAsync(
-            m => m.WorkspaceId == workspaceId && m.IsActive && m.Role == WorkspaceRole.Admin, cancellationToken);
+            m => m.WorkspaceId == workspaceId && m.IsActive && m.Role == WorkspaceRole.Admin
+                && db.OrgUsers.Any(u => u.Id == m.OrgUserId && u.IsActive && u.ScimDeletedAt == null),
+            cancellationToken);
+
+    public Task<List<WorkspaceMember>> GetAllForUserAsync(Guid orgUserId, CancellationToken cancellationToken = default) =>
+        db.WorkspaceMembers.Where(m => m.OrgUserId == orgUserId).ToListAsync(cancellationToken);
 
     public async Task LockAdminsAsync(Guid workspaceId, CancellationToken cancellationToken = default)
     {

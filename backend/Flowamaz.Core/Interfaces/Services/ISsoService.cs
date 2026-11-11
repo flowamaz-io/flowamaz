@@ -91,7 +91,8 @@ public sealed record SsoConfigDto(
     bool PlanIncludesSso = true,
     bool AllowIdpInitiated = false,
     IReadOnlyList<string>? AllowedEmailDomains = null,
-    IReadOnlyList<Guid>? DefaultWorkspaceIds = null);
+    IReadOnlyList<Guid>? DefaultWorkspaceIds = null,
+    bool RolesFromScim = false);
 
 /// <summary>Request to configure an org's SSO (provider, IdP details, secret material, access rules).</summary>
 public sealed record ConfigureSsoRequest(
@@ -111,7 +112,8 @@ public sealed record ConfigureSsoRequest(
     IReadOnlyList<SsoGroupRoleMapping>? GroupRoleMappings = null,
     bool? AllowIdpInitiated = null,
     IReadOnlyList<string>? AllowedEmailDomains = null,
-    IReadOnlyList<Guid>? DefaultWorkspaceIds = null);
+    IReadOnlyList<Guid>? DefaultWorkspaceIds = null,
+    bool? RolesFromScim = null);
 
 /// <summary>
 /// Single sign-on for Enterprise organisations (FUNCTIONAL.md §12.6): SAML 2.0 and OIDC, just-in-time

@@ -11,4 +11,11 @@ public sealed class PasswordResetTokenRepository(FlowAmazDbContext db) : IPasswo
 
     public Task<PasswordResetToken?> GetByHashAsync(string hash, CancellationToken ct = default) =>
         db.PasswordResetTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+
+    public Task InvalidateAllForUserAsync(Guid orgUserId, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        return db.PasswordResetTokens.Where(t => t.OrgUserId == orgUserId && t.UsedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.UsedAt, now), ct);
+    }
 }

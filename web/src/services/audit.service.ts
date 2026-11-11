@@ -61,6 +61,17 @@ export const auditService = {
     return unwrap(res);
   },
 
+  /** Organisation-wide feed (org owners): every workspace plus organisation events such as SSO, SCIM and billing. */
+  async listOrg(orgId: string, query: AuditQuery): Promise<AuditPage> {
+    const res = await http.get<ApiEnvelope<AuditPage>>(`/api/v1/organisations/${orgId}/audit`, { params: toParams(query) });
+    return unwrap(res);
+  },
+
+  async exportOrgCsv(orgId: string, query: AuditQuery): Promise<Blob> {
+    const res = await http.get(`/api/v1/organisations/${orgId}/audit/export`, { params: toParams(query), responseType: 'blob' });
+    return res.data as Blob;
+  },
+
   /** Downloads a CSV export of the workspace audit log for the given range. */
   async exportCsv(workspaceId: string, query: AuditQuery): Promise<Blob> {
     const res = await http.get(`/api/v1/workspaces/${workspaceId}/audit/export`, {

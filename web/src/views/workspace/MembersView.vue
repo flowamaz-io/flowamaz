@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { Users, UserPlus } from 'lucide-vue-next';
 import FmButton from '@/components/common/FmButton.vue';
 import FmInput from '@/components/common/FmInput.vue';
@@ -92,6 +92,11 @@ async function confirmRemove(): Promise<void> {
   }
 }
 
+// People who no longer have access (SSO/SCIM removed them, or they were deactivated) go last.
+const sortedMembers = computed(() =>
+  [...ws.members.value].sort((a, b) => Number(b.isActive) - Number(a.isActive)),
+);
+
 function isSelf(member: MemberResponse): boolean {
   return member.orgUserId === user.value?.id;
 }
@@ -164,8 +169,9 @@ function isSelf(member: MemberResponse): boolean {
         </thead>
         <tbody class="divide-y divide-slate-100">
           <tr
-            v-for="m in ws.members.value"
+            v-for="m in sortedMembers"
             :key="m.orgUserId"
+            :class="m.isActive ? '' : 'bg-slate-50'"
           >
             <td class="px-4 py-3">
               <div class="flex items-center gap-3">
@@ -179,12 +185,24 @@ function isSelf(member: MemberResponse): boolean {
                   <p class="text-xs text-slate-400">
                     {{ m.email }}
                   </p>
+                  <p
+                    v-if="!m.isActive"
+                    class="mt-0.5 text-xs font-medium text-amber-700"
+                    data-test="member-no-access"
+                  >
+                    No access: removed by single sign-on or deactivated. Remove the row, or ask your organisation owner.
+                  </p>
                 </div>
               </div>
             </td>
             <td class="px-4 py-3">
+              <span
+                v-if="!m.isActive"
+                class="text-sm text-slate-400 line-through"
+                :title="`Was ${m.role}`"
+              >{{ m.role }}</span>
               <select
-                v-if="!isSelf(m)"
+                v-else-if="!isSelf(m)"
                 :value="m.role"
                 class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm focus:border-primary-500 focus:outline-none"
                 @change="changeRole(m, ($event.target as HTMLSelectElement).value as WorkspaceRole)"

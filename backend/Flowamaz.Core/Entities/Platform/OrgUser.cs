@@ -25,4 +25,16 @@ public class OrgUser : BaseEntity
     /// subject, so changing an email at the IdP can't take over another account.
     /// </summary>
     public string? SsoSubject { get; set; }
+
+    /// <summary>The IdP's id for this person when provisioned over SCIM (SCIM <c>externalId</c>).</summary>
+    public string? ScimExternalId { get; set; }
+
+    /// <summary>The SCIM <c>userName</c> the IdP uses (often the email; Entra sends the UPN).</summary>
+    public string? ScimUserName { get; set; }
+
+    /// <summary>
+    /// Set when the IdP deleted the user over SCIM: the account is deactivated and no longer listed over SCIM.
+    /// Creating the same person again over SCIM reuses the account.
+    /// </summary>
+    public DateTime? ScimDeletedAt { get; set; }
 }

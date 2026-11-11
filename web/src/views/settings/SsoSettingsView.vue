@@ -8,6 +8,7 @@ import FmBadge from '@/components/common/FmBadge.vue';
 import FmAlert from '@/components/common/FmAlert.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
+import ScimProvisioningPanel from '@/components/settings/ScimProvisioningPanel.vue';
 import { useAuth } from '@/composables/useAuth';
 import { useToast } from '@/composables/useToast';
 import { useWorkspaceStore } from '@/stores/workspace.store';
@@ -17,7 +18,7 @@ import { ssoService, type SsoConfig, type SsoGroupRoleMapping, type WorkspaceRol
 const auth = useAuth();
 const toast = useToast();
 const workspaceStore = useWorkspaceStore();
-const ids = { cert: useId(), require: useId(), jit: useId(), active: useId(), role: useId(), idpInit: useId() };
+const ids = { cert: useId(), require: useId(), jit: useId(), active: useId(), role: useId(), idpInit: useId(), rolesFromScim: useId() };
 
 const ROLES: WorkspaceRoleName[] = ['Viewer', 'Runner', 'Operator', 'Designer', 'Admin'];
 
@@ -46,6 +47,7 @@ const mappings = ref<SsoGroupRoleMapping[]>([]);
 const allowIdpInitiated = ref(false);
 const allowedDomains = ref('');
 const defaultWorkspaceIds = ref<string[]>([]);
+const rolesFromScim = ref(false);
 const config = ref<SsoConfig | null>(null);
 
 const planIncludesSso = computed(() => config.value?.planIncludesSso ?? true);
@@ -67,7 +69,7 @@ function formSnapshot(): string {
     provider.value, isActive.value, idpEntityId.value.trim(), idpSsoUrl.value.trim(), idpCertificate.value.trim(),
     issuerUrl.value.trim(), clientId.value.trim(), clientSecret.value, requireSso.value, jitProvisioning.value,
     defaultRole.value, groupsAttribute.value.trim(), mappings.value, allowIdpInitiated.value, domainList.value,
-    [...defaultWorkspaceIds.value].sort(),
+    [...defaultWorkspaceIds.value].sort(), rolesFromScim.value,
   ]);
 }
 const savedSnapshot = ref('');
@@ -101,6 +103,7 @@ async function load(): Promise<void> {
       allowIdpInitiated.value = existing.allowIdpInitiated ?? false;
       allowedDomains.value = (existing.allowedEmailDomains ?? []).join(', ');
       defaultWorkspaceIds.value = [...(existing.defaultWorkspaceIds ?? [])];
+      rolesFromScim.value = existing.rolesFromScim ?? false;
     }
     savedSnapshot.value = formSnapshot();
   } catch (e) {
@@ -167,6 +170,7 @@ async function save(): Promise<void> {
       allowIdpInitiated: allowIdpInitiated.value,
       allowedEmailDomains: domainList.value,
       defaultWorkspaceIds: defaultWorkspaceIds.value,
+      rolesFromScim: rolesFromScim.value,
     });
     allowedDomains.value = (config.value.allowedEmailDomains ?? []).join(', ');
     requireSso.value = config.value.requireSso;
@@ -541,6 +545,25 @@ async function test(): Promise<void> {
             are kept as you set them. Owners are never changed, and a workspace's last Admin is never demoted.
           </p>
         </div>
+        <div class="flex items-start gap-2">
+          <input
+            :id="ids.rolesFromScim"
+            v-model="rolesFromScim"
+            type="checkbox"
+            class="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+          >
+          <label
+            :for="ids.rolesFromScim"
+            class="text-sm text-slate-700"
+          >
+            Take roles from SCIM groups
+            <span class="block text-xs text-slate-500">
+              Turn on once your identity provider pushes groups over SCIM (below). Roles then follow SCIM group changes
+              straight away, and the groups in each sign-in are ignored. Mappings match the SCIM group names; note that
+              Microsoft Entra sends group object IDs in sign-ins but names over SCIM.
+            </span>
+          </label>
+        </div>
         <FmInput
           v-model="groupsAttribute"
           label="Groups attribute / claim"
@@ -638,6 +661,8 @@ async function test(): Promise<void> {
           Save SSO settings
         </FmButton>
       </div>
+
+      <ScimProvisioningPanel :org-id="orgId" />
     </template>
   </div>
 </template>
