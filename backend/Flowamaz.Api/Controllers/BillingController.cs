@@ -67,7 +67,7 @@ public sealed class BillingController : ControllerBase
             plans.Add(new PlanResponse(
                 plan.Id, plan.Name, plan.Slug, plan.PriceMonthlyUsd, plan.PriceAnnualUsd,
                 plan.Limits.MaxWorkflowDefinitions, plan.Limits.MaxRunsPerMonth, plan.Limits.MaxMembersPerWorkspace,
-                plan.Limits.MaxWorkspaces, FeatureList(plan.Features), plan.Limits.ApiRateLimitPerMinute));
+                plan.Limits.MaxWorkspaces, FeatureList(plan), plan.Limits.ApiRateLimitPerMinute));
         }
 
         _logger.LogInformation("BillingController.GetPlans exit count={Count}", plans.Count);
@@ -194,12 +194,15 @@ public sealed class BillingController : ControllerBase
             "Sign in to your organisation to view billing. Your session has no organisation context.",
             httpStatusCode: 401);
 
-    private static IReadOnlyList<string> FeatureList(Core.Models.PlanFeatures f)
+    private static IReadOnlyList<string> FeatureList(Core.Entities.Platform.Plan plan)
     {
+        var f = plan.Features;
         var list = new List<string>();
         if (f.ApiAccess) list.Add("API access");
         if (f.CustomConnectors) list.Add("Custom connectors");
-        if (f.AuditLog) list.Add("Audit log");
+        if (f.AuditLog)
+            list.Add(plan.Limits.AuditHistoryDays > 0 ? $"Audit log ({AuditDays(plan.Limits.AuditHistoryDays)} of history)" : "Audit log (full history)");
+        if (f.AuditExport) list.Add("Audit export and organisation-wide audit");
         if (f.ProcessIntelligence) list.Add("Process intelligence");
         if (f.RoiAnalytics) list.Add("ROI analytics");
         if (f.Sso) list.Add("SSO (SAML/OIDC)");
@@ -208,6 +211,13 @@ public sealed class BillingController : ControllerBase
         if (f.DataResidency) list.Add("Data residency");
         return list;
     }
+
+    private static string AuditDays(int days) => days switch
+    {
+        365 => "1 year",
+        1 => "1 day",
+        _ => $"{days} days",
+    };
 }
 
 public sealed record PlanResponse(

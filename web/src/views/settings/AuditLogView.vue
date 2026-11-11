@@ -6,11 +6,12 @@ import FmButton from '@/components/common/FmButton.vue';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmEmptyState from '@/components/common/FmEmptyState.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
+import FmAlert from '@/components/common/FmAlert.vue';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useAuth } from '@/composables/useAuth';
 import { useToast } from '@/composables/useToast';
 import { toUserFacingError } from '@/utils/error.util';
-import { auditService, type AuditRow, type AuditPagination } from '@/services/audit.service';
+import { auditService, type AuditRow, type AuditPagination, type AuditHistory } from '@/services/audit.service';
 
 const ws = useWorkspace();
 const toast = useToast();
@@ -22,6 +23,13 @@ const isOwner = computed(() => auth.user.value?.isOrgOwner === true);
 // Owners can also see the whole organisation: every workspace plus organisation events (SSO, SCIM, billing).
 const scope = ref<'workspace' | 'organisation'>('workspace');
 const orgScope = computed(() => scope.value === 'organisation' && isOwner.value);
+// From the last page loaded: how far back this plan shows, and whether export / the organisation view are included.
+const history = ref<AuditHistory | null>(null);
+const canExport = computed(() => history.value?.canExport ?? true);
+// A plan without the organisation view (e.g. after a downgrade) falls back to this workspace.
+watch(canExport, (allowed) => {
+  if (!allowed && scope.value === 'organisation') scope.value = 'workspace';
+});
 
 // Filters — default to the last 7 days.
 const fromDate = ref(dayjs().subtract(7, 'day').format('YYYY-MM-DD'));
@@ -99,6 +107,7 @@ async function load(): Promise<void> {
       : await auditService.list(workspaceId.value, args);
     rows.value = result.data;
     pagination.value = result.pagination;
+    history.value = result.history ?? null;
     expanded.value = new Set();
   } catch (e) {
     loadError.value = toUserFacingError(e).message;
@@ -193,7 +202,7 @@ function eventText(row: { actor?: string | null; summary: string }): string {
             : 'An immutable record of who did what, when, and from where across this workspace.' }}
         </p>
         <div
-          v-if="isOwner"
+          v-if="isOwner && canExport"
           role="radiogroup"
           aria-label="Audit log scope"
           class="mt-3 inline-flex rounded-lg border border-slate-300 p-0.5 text-sm"
@@ -212,6 +221,7 @@ function eventText(row: { actor?: string | null; summary: string }): string {
         </div>
       </div>
       <FmButton
+        v-if="canExport"
         variant="secondary"
         :loading="exporting"
         @click="exportCsv"
@@ -222,6 +232,30 @@ function eventText(row: { actor?: string | null; summary: string }): string {
         Export CSV
       </FmButton>
     </header>
+
+    <FmAlert
+      v-if="history && history.days > 0 && !canExport"
+      type="info"
+      data-test="audit-plan-notice"
+    >
+      <p class="text-sm">
+        Your {{ history.planName }} plan shows the last {{ history.days }} days of activity. Older activity is kept and
+        appears when you upgrade, along with CSV export and the organisation-wide view.
+        <RouterLink
+          to="/settings/billing"
+          class="font-medium text-primary-700 underline"
+        >
+          See plans
+        </RouterLink>
+      </p>
+    </FmAlert>
+    <p
+      v-else-if="history && history.days > 0"
+      class="text-xs text-slate-500"
+      data-test="audit-plan-notice"
+    >
+      Your {{ history.planName }} plan shows the last {{ history.days === 365 ? 'year' : `${history.days} days` }} of activity.
+    </p>
 
     <!-- Filters -->
     <div class="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-6">
@@ -309,7 +343,7 @@ function eventText(row: { actor?: string | null; summary: string }): string {
       v-else-if="rows.length === 0"
       :icon="ScrollText"
       title="No activity yet"
-      :description="isOwner && !orgScope
+      :description="isOwner && canExport && !orgScope
         ? 'As people create workflows, trigger runs, decide gates, and invite members, every action will appear here. Organisation changes (SSO, SCIM, billing) are under Whole organisation. Try widening the date range or clearing filters to see more.'
         : 'As people create workflows, trigger runs, decide gates, and invite members, every action will appear here. Try widening the date range or clearing filters to see more.'"
       cta-label="Reset to last 7 days"

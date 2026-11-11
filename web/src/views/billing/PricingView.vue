@@ -210,7 +210,11 @@ function ctaLabel(plan: BillingPlan): string {
               class="flex items-start gap-2"
             >
               <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-              {{ plan.apiCallsPerMinute > 0 ? `${plan.apiCallsPerMinute.toLocaleString()} API calls / minute` : 'Custom API rate limit' }}
+              {{ plan.apiCallsPerMinute <= 0
+                ? 'Custom API rate limit'
+                : plan.slug === 'enterprise'
+                  ? `${plan.apiCallsPerMinute.toLocaleString()}+ API calls / minute (higher on request)`
+                  : `${plan.apiCallsPerMinute.toLocaleString()} API calls / minute` }}
             </li>
             <li
               v-for="feature in plan.features"

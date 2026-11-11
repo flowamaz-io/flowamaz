@@ -25,9 +25,18 @@ export interface AuditPagination {
   totalPages: number;
 }
 
+/** What the organisation's plan shows: days of history (0 = all), where it starts, and export/org view. */
+export interface AuditHistory {
+  planName: string;
+  days: number;
+  startsAt: string | null;
+  canExport: boolean;
+}
+
 export interface AuditPage {
   data: AuditRow[];
   pagination: AuditPagination;
+  history?: AuditHistory | null;
 }
 
 export interface AuditQuery {

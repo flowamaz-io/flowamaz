@@ -26,17 +26,46 @@ public sealed class AuditController : ControllerBase
     private readonly IWorkspaceRepository _workspaces;
     private readonly ICurrentUserService _currentUser;
     private readonly ILogger<AuditController> _logger;
+    private readonly IOrganisationRepository? _organisations;
+    private readonly IPlanRepository? _plans;
 
     public AuditController(
         IAuditEventRepository audit,
         IWorkspaceRepository workspaces,
         ICurrentUserService currentUser,
-        ILogger<AuditController> logger)
+        ILogger<AuditController> logger,
+        IOrganisationRepository? organisations = null,
+        IPlanRepository? plans = null)
     {
         _audit = audit;
         _workspaces = workspaces;
         _currentUser = currentUser;
         _logger = logger;
+        _organisations = organisations;
+        _plans = plans;
+    }
+
+    /// <summary>What the organisation's plan allows: how many days back (0 = all) and export/org-wide view.</summary>
+    private sealed record AuditAccess(string PlanName, int HistoryDays, bool CanExport);
+
+    private async Task<AuditAccess> AccessAsync(Guid orgId, CancellationToken ct)
+    {
+        if (_organisations is null || _plans is null) return new("current", 0, true);
+        var org = await _organisations.GetByIdAsync(orgId, ct);
+        var plan = org is null ? null : await _plans.GetByIdAsync(org.PlanId, ct);
+        if (plan is null) return new("current", 0, true);
+        return new(plan.Name, Math.Max(0, plan.Limits.AuditHistoryDays), plan.Features.AuditExport);
+    }
+
+    /// <summary>
+    /// Older events are kept but not shown beyond the plan's history: the range starts no earlier than that, so
+    /// asking for more returns what the plan allows instead of an error. The page says where history starts.
+    /// </summary>
+    private static (DateTime From, DateTime To, DateTime? HistoryStartsAt) WithinHistory(DateTime from, DateTime to, AuditAccess access)
+    {
+        if (access.HistoryDays == 0) return (from, to, null);
+        var earliest = DateTime.UtcNow.AddDays(-access.HistoryDays);
+        return (from < earliest ? earliest : from, to < earliest ? earliest : to, earliest);
     }
 
     /// <summary>Workspace audit feed, newest first. Max range 90 days, max page size 100.</summary>
@@ -48,7 +77,9 @@ public sealed class AuditController : ControllerBase
         _logger.LogInformation("AuditController.ListForWorkspace enter workspace={WorkspaceId}", workspaceId);
 
         var orgId = RequireOrg();
-        var (from, to) = ResolveRange(query, MaxQueryRangeDays);
+        var (requestedFrom, requestedTo) = ResolveRange(query, MaxQueryRangeDays);
+        var access = await AccessAsync(orgId, ct);
+        var (from, to, historyStartsAt) = WithinHistory(requestedFrom, requestedTo, access);
 
         var filter = new AuditQueryFilter
         {
@@ -65,7 +96,10 @@ public sealed class AuditController : ControllerBase
 
         var (items, total) = await _audit.QueryAsync(filter, ct);
         _logger.LogInformation("AuditController.ListForWorkspace exit workspace={WorkspaceId} total={Total}", workspaceId, total);
-        return Ok(BuildPage(items, total, filter));
+        return Ok(BuildPage(items, total, filter) with
+        {
+            History = new AuditHistory(access.PlanName, access.HistoryDays, historyStartsAt, access.CanExport),
+        });
     }
 
     /// <summary>Org-wide audit feed (all workspaces). Org owner only. Max range 90 days.</summary>
@@ -77,7 +111,10 @@ public sealed class AuditController : ControllerBase
         _logger.LogInformation("AuditController.ListForOrg enter org={OrgId}", id);
 
         EnsureOwnOrg(id);
-        var (from, to) = ResolveRange(query, MaxQueryRangeDays);
+        var (requestedFrom, requestedTo) = ResolveRange(query, MaxQueryRangeDays);
+        var access = await AccessAsync(id, ct);
+        if (!access.CanExport) throw AuditException.ExportNotOnPlan(access.PlanName);
+        var (from, to, historyStartsAt) = WithinHistory(requestedFrom, requestedTo, access);
 
         var filter = new AuditQueryFilter
         {
@@ -94,7 +131,10 @@ public sealed class AuditController : ControllerBase
 
         var (items, total) = await _audit.QueryAsync(filter, ct);
         _logger.LogInformation("AuditController.ListForOrg exit org={OrgId} total={Total}", id, total);
-        return Ok(BuildPage(items, total, filter));
+        return Ok(BuildPage(items, total, filter) with
+        {
+            History = new AuditHistory(access.PlanName, access.HistoryDays, historyStartsAt, access.CanExport),
+        });
     }
 
     /// <summary>CSV export of a workspace's audit events. Org owner only. Max range 365 days. Streamed.</summary>
@@ -111,7 +151,10 @@ public sealed class AuditController : ControllerBase
         if (workspace is null || workspace.OrgId != orgId)
             throw new InsufficientRoleException(WorkspaceRole.Admin, null);
 
-        var (from, to) = ResolveRange(query, MaxExportRangeDays);
+        var (requestedFrom, requestedTo) = ResolveRange(query, MaxExportRangeDays);
+        var access = await AccessAsync(orgId, ct);
+        if (!access.CanExport) throw AuditException.ExportNotOnPlan(access.PlanName);
+        var (from, to, _) = WithinHistory(requestedFrom, requestedTo, access);
         var filter = new AuditQueryFilter
         {
             OrgId = orgId,
@@ -137,7 +180,10 @@ public sealed class AuditController : ControllerBase
     {
         _logger.LogInformation("AuditController.ExportForOrg enter org={OrgId}", id);
         EnsureOwnOrg(id);
-        var (from, to) = ResolveRange(query, MaxExportRangeDays);
+        var (requestedFrom, requestedTo) = ResolveRange(query, MaxExportRangeDays);
+        var access = await AccessAsync(id, ct);
+        if (!access.CanExport) throw AuditException.ExportNotOnPlan(access.PlanName);
+        var (from, to, _) = WithinHistory(requestedFrom, requestedTo, access);
         var filter = new AuditQueryFilter
         {
             OrgId = id,
@@ -276,4 +322,10 @@ public sealed record AuditRow(
 
 public sealed record AuditPagination(int Page, int PageSize, int Total, int TotalPages);
 
-public sealed record AuditPageResponse(IReadOnlyList<AuditRow> Data, AuditPagination Pagination);
+public sealed record AuditPageResponse(IReadOnlyList<AuditRow> Data, AuditPagination Pagination)
+{
+    /// <summary>What the plan shows: days of history (0 = all), where it starts, and whether export/org view is on.</summary>
+    public AuditHistory? History { get; init; }
+}
+
+public sealed record AuditHistory(string PlanName, int Days, DateTime? StartsAt, bool CanExport);

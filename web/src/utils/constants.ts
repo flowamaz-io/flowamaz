@@ -70,9 +70,10 @@ export const API_KEY_SCOPES: { value: string; label: string }[] = [
 /** Registration plans (FUNCTIONAL.md §8) shown as cards. */
 export const PLANS: { slug: string; name: string; price: string; blurb: string }[] = [
   // Cloud Community plan (FUNCTIONAL.md §13.2); self-hosting is the separate Community Edition.
-  { slug: 'community', name: 'Community', price: 'Free', blurb: '5 workflows, 500 runs a month, 1 member.' },
-  { slug: 'starter', name: 'Starter', price: '$49/mo', blurb: 'Hosted, 3 workspaces, email support.' },
-  { slug: 'pro', name: 'Pro', price: '$199/mo', blurb: 'Unlimited workspaces, SSO, priority support.' },
+  { slug: 'community', name: 'Community', price: 'Free', blurb: '5 workflows, 500 runs a month, the API and 7 days of audit history.' },
+  { slug: 'starter', name: 'Starter', price: '$49/mo', blurb: '3 workspaces, 90 days of audit history with export, email support.' },
+  // SSO and SCIM are Enterprise (FUNCTIONAL.md §12.6).
+  { slug: 'pro', name: 'Pro', price: '$199/mo', blurb: '10 workspaces, 1 year of history, priority support.' },
 ];
 
 /** The six workflow creation methods. method is the ?method= query param for /workflows/new. */

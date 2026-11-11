@@ -39,16 +39,16 @@ public class PublicApiPlanRateLimitTests : ApiTestBase
     }
 
     [Fact]
-    public async Task Community_plan_allows_10_calls_a_minute_then_429_with_the_plan_named()
+    public async Task Community_plan_allows_30_calls_a_minute_then_429_with_the_plan_named()
     {
         var (_, client) = await KeyClientAsync("plan-community");
 
-        for (var i = 1; i <= 10; i++)
+        for (var i = 1; i <= 30; i++)
         {
             var ok = await client.GetAsync("/api/public/v1/workflows");
-            ok.StatusCode.Should().Be(HttpStatusCode.OK, $"call {i} is within 10/min");
-            ok.Headers.GetValues("X-RateLimit-Minute-Limit").Single().Should().Be("10");
-            ok.Headers.GetValues("X-RateLimit-Limit").Single().Should().Be("10", "the per-minute limit is the one closest to blocking");
+            ok.StatusCode.Should().Be(HttpStatusCode.OK, $"call {i} is within 30/min");
+            ok.Headers.GetValues("X-RateLimit-Minute-Limit").Single().Should().Be("30");
+            ok.Headers.GetValues("X-RateLimit-Limit").Single().Should().Be("30", "the per-minute limit is the one closest to blocking");
         }
 
         var blocked = await client.GetAsync("/api/public/v1/workflows");
@@ -56,7 +56,7 @@ public class PublicApiPlanRateLimitTests : ApiTestBase
         blocked.Headers.Contains("Retry-After").Should().BeTrue();
         using var doc = JsonDocument.Parse(await blocked.Content.ReadAsStringAsync());
         doc.RootElement.GetProperty("error").GetProperty("message").GetString()
-            .Should().Contain("Community plan allows 10 API calls a minute").And.Contain("upgrade");
+            .Should().Contain("Community plan allows 30 API calls a minute").And.Contain("upgrade");
     }
 
     [Fact]

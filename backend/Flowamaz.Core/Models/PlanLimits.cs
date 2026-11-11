@@ -13,6 +13,13 @@ public sealed class PlanLimits
     public long MaxAiCallsPerMonth { get; set; }
     public int MaxStorageGb { get; set; }
     public int RunRetentionDays { get; set; }
+    /// <summary>Public API calls a minute across the organisation (an organisation's own value overrides it).</summary>
     public int ApiRateLimitPerMinute { get; set; }
+
+    /// <summary>
+    /// How far back the audit log can be read, in days (0 = all of it). Older events are kept, not deleted, so
+    /// upgrading shows them again.
+    /// </summary>
+    public int AuditHistoryDays { get; set; }
     public List<string> AllowedAiProviders { get; set; } = [];
 }
