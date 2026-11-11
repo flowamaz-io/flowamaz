@@ -36,10 +36,16 @@ internal static class PlatformSeedData
                 MaxAiCallsPerMonth = 0,
                 MaxStorageGb = 1,
                 RunRetentionDays = 7,
-                ApiRateLimitPerMinute = 10,
+                ApiRateLimitPerMinute = 30,
+                AuditHistoryDays = 7,
                 AllowedAiProviders = [AiProviders.Anthropic],
             },
-            Features = new PlanFeatures(),
+            // The API and a short audit history are on the free plan: integrations can be tried before paying.
+            Features = new PlanFeatures
+            {
+                ApiAccess = true,
+                AuditLog = true,
+            },
             IsActive = true,
             IsPublic = true,
             CreatedAt = SeedTimestamp,
@@ -61,13 +67,16 @@ internal static class PlatformSeedData
                 MaxAiCallsPerMonth = 0,
                 MaxStorageGb = 10,
                 RunRetentionDays = 90,
-                ApiRateLimitPerMinute = 60,
+                ApiRateLimitPerMinute = 120,
+                AuditHistoryDays = 90,
                 AllowedAiProviders = [AiProviders.Anthropic, AiProviders.AzureOpenAi, AiProviders.Google],
             },
             Features = new PlanFeatures
             {
                 ApiAccess = true,
                 CustomConnectors = true,
+                AuditLog = true,
+                AuditExport = true,
             },
             IsActive = true,
             IsPublic = true,
@@ -90,7 +99,8 @@ internal static class PlatformSeedData
                 MaxAiCallsPerMonth = 0,
                 MaxStorageGb = 50,
                 RunRetentionDays = 365,
-                ApiRateLimitPerMinute = 300,
+                ApiRateLimitPerMinute = 600,
+                AuditHistoryDays = 365,
                 AllowedAiProviders =
                     [AiProviders.Anthropic, AiProviders.AzureOpenAi, AiProviders.Google, AiProviders.Kimi, AiProviders.Mistral],
             },
@@ -99,6 +109,7 @@ internal static class PlatformSeedData
                 ApiAccess = true,
                 CustomConnectors = true,
                 AuditLog = true,
+                AuditExport = true,
                 ProcessIntelligence = true,
                 RoiAnalytics = true,
             },
@@ -123,7 +134,9 @@ internal static class PlatformSeedData
                 MaxAiCallsPerMonth = 0,
                 MaxStorageGb = 0,
                 RunRetentionDays = 0,
-                ApiRateLimitPerMinute = 0,
+                // Default for Enterprise; an organisation's own api_rate_limit_per_minute (agreed per customer) overrides it.
+                ApiRateLimitPerMinute = 1200,
+                AuditHistoryDays = 0,
                 AllowedAiProviders =
                     [AiProviders.Anthropic, AiProviders.AzureOpenAi, AiProviders.Google, AiProviders.Kimi, AiProviders.Mistral, AiProviders.Byom],
             },
@@ -133,6 +146,7 @@ internal static class PlatformSeedData
                 Scim = true,
                 CustomConnectors = true,
                 AuditLog = true,
+                AuditExport = true,
                 ApiAccess = true,
                 Byom = true,
                 DataResidency = true,

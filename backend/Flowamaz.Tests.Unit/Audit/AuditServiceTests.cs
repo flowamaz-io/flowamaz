@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Flowamaz.Api.Controllers;
 using Flowamaz.Core.Entities.Audit;
+using Flowamaz.Core.Entities.Platform;
 using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Services;
@@ -273,6 +274,76 @@ public class AuditServiceTests
         var ex = await act.Should().ThrowAsync<AuditException>();
         ex.Which.HttpStatusCode.Should().Be(400);
         ex.Which.ErrorCode.Should().Be("AUDIT_RANGE_TOO_WIDE");
+    }
+
+    // ── 6. Plan: history days and export ─────────────────────────────────────────
+
+    private static (AuditController Controller, List<AuditQueryFilter> Queries) ControllerOnPlan(
+        Guid orgId, int historyDays, bool canExport)
+    {
+        var queries = new List<AuditQueryFilter>();
+        var repo = new Mock<IAuditEventRepository>();
+        repo.Setup(r => r.QueryAsync(It.IsAny<AuditQueryFilter>(), It.IsAny<CancellationToken>()))
+            .Callback<AuditQueryFilter, CancellationToken>((f, _) => queries.Add(f))
+            .ReturnsAsync(((IReadOnlyList<AuditEvent>)Array.Empty<AuditEvent>(), 0));
+        var currentUser = new Mock<ICurrentUserService>();
+        currentUser.SetupGet(c => c.OrgId).Returns(orgId);
+        var planId = Guid.NewGuid();
+        var orgs = new Mock<IOrganisationRepository>();
+        orgs.Setup(o => o.GetByIdAsync(orgId, It.IsAny<CancellationToken>())).ReturnsAsync(new Organisation { Id = orgId, PlanId = planId });
+        var plans = new Mock<IPlanRepository>();
+        plans.Setup(p => p.GetByIdAsync(planId, It.IsAny<CancellationToken>())).ReturnsAsync(new Plan
+        {
+            Id = planId, Name = canExport ? "Starter" : "Community",
+            Limits = new Core.Models.PlanLimits { AuditHistoryDays = historyDays },
+            Features = new Core.Models.PlanFeatures { AuditLog = true, AuditExport = canExport },
+        });
+        var controller = new AuditController(repo.Object, new Mock<IWorkspaceRepository>().Object, currentUser.Object,
+            NullLogger<AuditController>.Instance, orgs.Object, plans.Object);
+        return (controller, queries);
+    }
+
+    [Fact]
+    public async Task The_audit_log_only_reaches_back_as_far_as_the_plan_allows()
+    {
+        var orgId = Guid.NewGuid();
+        var (controller, queries) = ControllerOnPlan(orgId, historyDays: 7, canExport: false);
+
+        var result = await controller.ListForWorkspace(Guid.NewGuid(),
+            new AuditQueryParams { From = DateTime.UtcNow.AddDays(-30), To = DateTime.UtcNow }, CancellationToken.None);
+
+        queries.Single().From.Should().BeCloseTo(DateTime.UtcNow.AddDays(-7), TimeSpan.FromMinutes(1),
+            "older events are kept but not shown on a 7-day plan");
+        var page = (AuditPageResponse)((Microsoft.AspNetCore.Mvc.OkObjectResult)result.Result!).Value!;
+        page.History!.Days.Should().Be(7);
+        page.History.CanExport.Should().BeFalse();
+        page.History.StartsAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Full_history_plans_are_not_cut_off()
+    {
+        var orgId = Guid.NewGuid();
+        var (controller, queries) = ControllerOnPlan(orgId, historyDays: 0, canExport: true);
+        var from = DateTime.UtcNow.AddDays(-60);
+
+        await controller.ListForWorkspace(Guid.NewGuid(), new AuditQueryParams { From = from, To = DateTime.UtcNow }, CancellationToken.None);
+
+        queries.Single().From.Should().Be(from);
+    }
+
+    [Fact]
+    public async Task Organisation_wide_audit_needs_a_plan_with_export()
+    {
+        var orgId = Guid.NewGuid();
+        var (controller, _) = ControllerOnPlan(orgId, historyDays: 7, canExport: false);
+
+        var act = () => controller.ListForOrg(orgId, new AuditQueryParams(), CancellationToken.None);
+
+        var ex = (await act.Should().ThrowAsync<AuditException>()).Which;
+        ex.HttpStatusCode.Should().Be(403);
+        ex.ErrorCode.Should().Be("AUDIT_EXPORT_NOT_ON_PLAN");
+        ex.Message.Should().Contain("Community").And.Contain("Settings → Billing");
     }
 
     private static AuditController BuildController(Guid callerOrgId)

@@ -11,6 +11,12 @@ public sealed class AuditException : AppException
     {
     }
 
+    public static AuditException ExportNotOnPlan(string planName) => new(
+        "AUDIT_EXPORT_NOT_ON_PLAN",
+        $"CSV export and the organisation-wide audit log aren't part of the {planName} plan. " +
+        "Upgrade to Starter or above in Settings → Billing to use them; this workspace's recent activity is still shown here.",
+        httpStatusCode: 403);
+
     public static AuditException RangeTooWide(int maxDays) => new(
         "AUDIT_RANGE_TOO_WIDE",
         $"The requested date range exceeds the maximum of {maxDays} days. " +

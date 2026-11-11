@@ -101,6 +101,16 @@ public class Phase7AuditTests : ApiTestBase
         await CreateWorkflowAsync(owner, ws, "aud-export-flow");
         await PollForEventAsync(owner.Client, ws, "workflow.created");
 
+        // Export is on Starter and above (new organisations start on Community).
+        (await owner.Client.GetAsync($"/api/v1/workspaces/{ws}/audit/export")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        using (var scope = Fixture.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+            await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ExecuteUpdateAsync(
+                db.Organisations.Where(o => o.Id == owner.OrgId),
+                u => u.SetProperty(o => o.PlanId, Flowamaz.Infrastructure.Persistence.Seed.PlatformSeedData.StarterPlanId));
+        }
+
         var resp = await owner.Client.GetAsync($"/api/v1/workspaces/{ws}/audit/export");
 
         resp.StatusCode.Should().Be(HttpStatusCode.OK);

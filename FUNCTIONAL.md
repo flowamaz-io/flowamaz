@@ -677,8 +677,13 @@ Customer Managed Encryption Keys. AWS KMS, GCP KMS, Azure Key Vault, HashiCorp V
 | Members/workspace | 1 | 10 | 50 | Unlimited |
 | Storage | 1 GB | 10 GB | 50 GB | Custom |
 | Run retention | 7 days | 90 days | 365 days | Custom |
-| API rate limit | 10/min | 60/min | 300/min | Custom |
+| API access | Yes | Yes | Yes | Yes |
+| API rate limit (per organisation) | 30/min | 120/min | 600/min | 1,200/min default, custom per organisation |
+| Audit log history | 7 days | 90 days | 1 year | Full |
+| Audit CSV export + organisation-wide audit view | — | Yes | Yes | Yes |
 | AI models | Anthropic only | +Azure+Google | All | All+BYOM |
+
+Decided 11 Nov 2026: the API and the audit log are on every cloud plan, so integrations can be tried before paying. The per-minute API limit guards the platform; runs, AI calls, history and Enterprise features (SSO, SCIM) are what plans sell. Audit events past a plan's history are kept, not deleted, and show again after upgrading. (The self-hosted Community Edition in §14 keeps its own limits.)
 
 ### 13.3 Metering Architecture
 - Async side-channel — NEVER in execution path
