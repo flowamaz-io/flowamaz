@@ -32,6 +32,7 @@ describe('AuditLogView and the plan', () => {
     expect(wrapper.text()).toContain('Older activity is kept');
     expect(wrapper.text()).not.toContain('Export CSV');
     expect(wrapper.find('[aria-label="Audit log scope"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('are under Whole organisation');
   });
 
   it('on a paid plan, offers export and the organisation view', async () => {

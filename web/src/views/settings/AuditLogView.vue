@@ -343,7 +343,7 @@ function eventText(row: { actor?: string | null; summary: string }): string {
       v-else-if="rows.length === 0"
       :icon="ScrollText"
       title="No activity yet"
-      :description="isOwner && !orgScope
+      :description="isOwner && canExport && !orgScope
         ? 'As people create workflows, trigger runs, decide gates, and invite members, every action will appear here. Organisation changes (SSO, SCIM, billing) are under Whole organisation. Try widening the date range or clearing filters to see more.'
         : 'As people create workflows, trigger runs, decide gates, and invite members, every action will appear here. Try widening the date range or clearing filters to see more.'"
       cta-label="Reset to last 7 days"
