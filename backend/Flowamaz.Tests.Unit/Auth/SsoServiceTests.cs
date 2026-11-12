@@ -288,6 +288,21 @@ public class SsoServiceTests
         await Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane", ["Marketing"]));
 
         member.IsActive.Should().BeFalse();
+        // Her other sessions carried the old access: their current tokens end (the one this sign-in issues is newer).
+        _revocation.Verify(r => r.RevokeUserAccessAsync(member.OrgUserId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_sign_in_that_changes_no_role_leaves_other_sessions_alone()
+    {
+        var ws = Guid.NewGuid();
+        Saml(c => c.GroupRoleMappings = [new SsoGroupRoleMapping("Credit", ws, WorkspaceRole.Operator)]);
+        var member = new WorkspaceMember { WorkspaceId = ws, OrgUserId = Guid.NewGuid(), Role = WorkspaceRole.Operator, IsActive = true, ManagedBySso = true };
+        MemberSetup(member);
+
+        await Service().ProvisionUserFromSsoAsync("jane@acme.test", OrgId, new SsoClaims("jane@acme.test", "Jane", ["Credit"]));
+
+        _revocation.Verify(r => r.RevokeUserAccessAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

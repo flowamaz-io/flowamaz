@@ -26,9 +26,13 @@ public sealed class AuthController : ControllerBase
     private readonly IJwtService _jwtService;
     private readonly IHostEnvironment _environment;
 
+    private readonly ITokenRevocationService _revocation;
+
     public AuthController(
-        AuthService authService, IRateLimitService rateLimit, IJwtService jwtService, IHostEnvironment environment)
+        AuthService authService, IRateLimitService rateLimit, IJwtService jwtService, IHostEnvironment environment,
+        ITokenRevocationService revocation)
     {
+        _revocation = revocation;
         _authService = authService;
         _rateLimit = rateLimit;
         _jwtService = jwtService;
@@ -81,6 +85,10 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
         await _authService.LogoutAsync(Request.Cookies[RefreshCookieName], cancellationToken);
+        // The access token this browser holds stops working now too, not when it expires (other sessions keep theirs).
+        if (User.FindFirst("jti")?.Value is { } jti &&
+            long.TryParse(User.FindFirst("exp")?.Value, out var exp))
+            await _revocation.RevokeTokenAsync(jti, DateTimeOffset.FromUnixTimeSeconds(exp), cancellationToken);
         DeleteRefreshCookie();
         return Ok(new { loggedOut = true });
     }

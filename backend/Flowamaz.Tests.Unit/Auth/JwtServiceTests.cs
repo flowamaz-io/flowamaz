@@ -89,4 +89,17 @@ public class JwtServiceTests
         hash.Should().HaveLength(64);
         hash.Should().NotBe(plain);
     }
+
+    [Fact]
+    public void Issue_time_comes_from_the_shared_revocation_clock()
+    {
+        var clock = new Moq.Mock<Flowamaz.Core.Interfaces.Services.ITokenRevocationService>();
+        clock.Setup(c => c.IssueTimeUnixMs()).Returns(1_800_000_000_123);
+        var service = new JwtService(OptionsWrap(Options), NullLogger<JwtService>.Instance, clock.Object);
+        var user = new OrgUser { Id = Guid.NewGuid(), OrgId = Guid.NewGuid(), Email = "a@acme.test", Name = "A" };
+
+        var principal = service.ValidateAccessToken(service.GenerateAccessToken(user, "acme", []));
+
+        principal!.FindFirst(JwtService.IssuedAtMsClaim)!.Value.Should().Be("1800000000123");
+    }
 }

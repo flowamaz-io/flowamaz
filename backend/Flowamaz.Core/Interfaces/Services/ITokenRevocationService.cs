@@ -21,9 +21,18 @@ public interface ITokenRevocationService
     /// <summary>Rejects every access token held now by members of the organisation who are not owners.</summary>
     Task RevokeOrgNonOwnerAccessAsync(Guid orgId, CancellationToken ct = default);
 
+    /// <summary>Rejects one access token (sign-out), until it would have expired anyway.</summary>
+    Task RevokeTokenAsync(string tokenId, DateTimeOffset expiresAt, CancellationToken ct = default);
+
     /// <summary>
-    /// True when a token issued at <paramref name="issuedAtUnixMs"/> was revoked for this user (or, for a
-    /// non-owner, for their organisation).
+    /// True when this token was revoked itself (<paramref name="tokenId"/>, the jti), or was issued at or before a
+    /// marker for this user (or, for a non-owner, for their organisation).
     /// </summary>
-    Task<bool> IsRevokedAsync(Guid orgUserId, Guid orgId, bool isOrgOwner, long issuedAtUnixMs, CancellationToken ct = default);
+    Task<bool> IsRevokedAsync(Guid orgUserId, Guid orgId, bool isOrgOwner, long issuedAtUnixMs, string? tokenId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// The time to stamp on a token being issued (Unix ms), on the same clock the markers use. Markers and issue times
+    /// come from one clock (Redis's) rather than each server's, so servers whose clocks disagree still compare correctly.
+    /// </summary>
+    long IssueTimeUnixMs();
 }

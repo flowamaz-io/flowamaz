@@ -161,6 +161,45 @@ public sealed class SessionAndAccessGapTests : ApiTestBase
         }
     }
 
+    [Fact]
+    public async Task Signing_out_ends_that_access_token_but_not_the_persons_other_sessions()
+    {
+        var owner = await RegisterOwnerAsync(U("gap-logout"));
+        var userId = await AddPersonAsync(owner.OrgId, "ana@gap-logout.test");
+        var laptop = await SignedInAsync(userId);
+        var phone = await SignedInAsync(userId);
+
+        (await laptop.PostAsJsonAsync("/api/v1/auth/logout", new { })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await StatusAsync(laptop, "/api/v1/workspaces")).Should().Be(HttpStatusCode.Unauthorized, "the signed-out token stops at once");
+        (await StatusAsync(phone, "/api/v1/workspaces")).Should().Be(HttpStatusCode.OK, "her other session is untouched");
+    }
+
+    [Fact]
+    public async Task Markers_and_issue_times_share_one_clock_so_servers_with_wrong_clocks_still_agree()
+    {
+        var redis = Fixture.Services.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>();
+        var options = Microsoft.Extensions.Options.Options.Create(new Flowamaz.Core.Configuration.JwtOptions { AccessTokenExpiryMinutes = 15 });
+        long Real() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ahead = new Flowamaz.Infrastructure.Services.RedisTokenRevocationService(redis, options,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Flowamaz.Infrastructure.Services.RedisTokenRevocationService>.Instance, () => Real() + 300_000);
+        var behind = new Flowamaz.Infrastructure.Services.RedisTokenRevocationService(redis, options,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Flowamaz.Infrastructure.Services.RedisTokenRevocationService>.Instance, () => Real() - 300_000);
+        var user = Guid.NewGuid();
+
+        var oldToken = behind.IssueTimeUnixMs();      // issued by the slow server before the change
+        await Task.Delay(5);
+        await ahead.RevokeUserAccessAsync(user);      // the change is recorded by the fast server
+        await Task.Delay(5);
+        var newToken = behind.IssueTimeUnixMs();      // the slow server issues a fresh token afterwards
+
+        (await behind.IsRevokedAsync(user, Guid.NewGuid(), false, oldToken)).Should().BeTrue();
+        (await ahead.IsRevokedAsync(user, Guid.NewGuid(), false, newToken)).Should().BeFalse(
+            "five minutes of clock difference would otherwise make the fresh token look older than the change");
+        (await ahead.IsRevokedAsync(user, Guid.NewGuid(), false, ahead.IssueTimeUnixMs())).Should().BeFalse(
+            "a token the marking server issues right after its own marker is always newer");
+    }
+
     // ── SSO identity unlink ────────────────────────────────────────────────────────────
 
     [Fact]

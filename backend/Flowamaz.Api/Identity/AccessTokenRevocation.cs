@@ -32,7 +32,7 @@ public static class AccessTokenRevocation
             var isOwner = Value("is_org_owner") == "true";
             // Tokens from before this claim existed count as issued at 0, so any marker refuses them.
             _ = long.TryParse(Value(IssuedAtMsClaim), out var issuedAtMs);
-            revoked = await revocation.IsRevokedAsync(userId, orgId, isOwner, issuedAtMs, context.RequestAborted);
+            revoked = await revocation.IsRevokedAsync(userId, orgId, isOwner, issuedAtMs, Value("jti"), context.RequestAborted);
         }
         context.Items[cacheKey] = revoked;
         return revoked;

@@ -35,10 +35,12 @@ public sealed class SsoMembershipSync
     /// <item>Memberships added or edited by hand, or deactivated by an admin, are never touched.</item>
     /// <item>A workspace's last active Admin is kept, checked under a per-workspace lock.</item>
     /// </list>
+    /// Returns true when any membership was added or changed (the person's current access tokens then carry old roles).
     /// </summary>
-    public async Task SyncAsync(OrgUser user, OrgSsoConfig config, IReadOnlyList<string> groups, bool isNew, CancellationToken ct)
+    public async Task<bool> SyncAsync(OrgUser user, OrgSsoConfig config, IReadOnlyList<string> groups, bool isNew, CancellationToken ct)
     {
-        if (config.GroupRoleMappings.Count == 0 && config.DefaultWorkspaceIds.Count == 0) return;
+        if (config.GroupRoleMappings.Count == 0 && config.DefaultWorkspaceIds.Count == 0) return false;
+        var changed = false;
 
         var groupSet = groups.ToHashSet(StringComparer.Ordinal);
         var coversAll = config.GroupRoleMappings.Any(m => m.WorkspaceId is null);
@@ -59,10 +61,13 @@ public sealed class SsoMembershipSync
             if (member is null)
             {
                 if (wanted is { } role)
+                {
                     await _members.AddAsync(new WorkspaceMember
                     {
                         WorkspaceId = workspace.Id, OrgUserId = user.Id, Role = role, IsActive = true, ManagedBySso = true,
                     }, ct);
+                    changed = true;
+                }
                 continue;
             }
             if (!member.ManagedBySso) continue; // added or edited by hand, or deactivated by an admin
@@ -83,6 +88,8 @@ public sealed class SsoMembershipSync
             member.Role = newRole;
             member.IsActive = newActive;
             _members.Update(member);
+            changed = true;
         }
+        return changed;
     }
 }
