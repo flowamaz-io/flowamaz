@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net.Mail;
 using Flowamaz.Core.Configuration;
 using Flowamaz.Core.Interfaces.Services;
 using Microsoft.Extensions.Configuration;
@@ -9,7 +10,8 @@ using Microsoft.Extensions.Options;
 namespace Flowamaz.Infrastructure.Services;
 
 /// <summary>
-/// Transactional email via Resend (POST https://api.resend.com/emails). Never throws —
+/// Transactional email via Resend (POST https://api.resend.com/emails), or via SMTP when <c>Email:SmtpHost</c> is
+/// set (local development sends to Mailpit; see infrastructure/docker-compose.dev.yml). Never throws —
 /// missing API key, network errors, and non-2xx responses all log and return false.
 /// Caller decides whether to retry; e.g. a registration handler may compensate by surfacing
 /// "verification email could not be sent — try resend".
@@ -43,7 +45,11 @@ public sealed class EmailService : IEmailService
             FromName     = opt.FromName,
             SupportEmail = opt.SupportEmail,
             SecurityEmail = opt.SecurityEmail,
+            SmtpHost     = NonEmpty(opt.SmtpHost, configuration["SMTP_HOST"]),
+            SmtpPort     = opt.SmtpPort,
+            SmtpEnableSsl = opt.SmtpEnableSsl,
         };
+        if (string.IsNullOrWhiteSpace(_options.FromAddress)) _options.FromAddress = "noreply@flowamaz.io";
     }
 
     private static string NonEmpty(params string?[] values)
@@ -65,6 +71,9 @@ public sealed class EmailService : IEmailService
         ArgumentException.ThrowIfNullOrEmpty(htmlBody);
 
         _logger.LogDebug("EmailService.SendAsync enter to={To} subject={Subject}", to, subject);
+
+        if (!string.IsNullOrWhiteSpace(_options.SmtpHost))
+            return await SendSmtpAsync(to, subject, htmlBody, textBody, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(_options.ResendApiKey))
         {
@@ -107,6 +116,34 @@ public sealed class EmailService : IEmailService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "EmailService.SendAsync error to={To} subject={Subject}", to, subject);
+            return false;
+        }
+    }
+
+    private async Task<bool> SendSmtpAsync(string to, string subject, string htmlBody, string? textBody, CancellationToken ct)
+    {
+        try
+        {
+            using var message = new MailMessage
+            {
+                From = new MailAddress(_options.FromAddress, _options.FromName),
+                Subject = subject,
+                Body = htmlBody,
+                IsBodyHtml = true,
+            };
+            message.To.Add(to);
+            if (!string.IsNullOrEmpty(textBody))
+                message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(textBody, null, "text/plain"));
+
+            using var client = new SmtpClient(_options.SmtpHost, _options.SmtpPort) { EnableSsl = _options.SmtpEnableSsl };
+            await client.SendMailAsync(message, ct);
+            _logger.LogDebug("EmailService.SendAsync exit to={To} subject={Subject} status=ok via=smtp", to, subject);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "EmailService.SendAsync error via SMTP {Host}:{Port} to={To} subject={Subject}",
+                _options.SmtpHost, _options.SmtpPort, to, subject);
             return false;
         }
     }

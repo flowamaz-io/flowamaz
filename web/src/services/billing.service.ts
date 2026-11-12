@@ -27,6 +27,10 @@ export interface CurrentSubscription {
   currentPeriodEnd: string | null;
   paymentFailed: boolean;
   hasBillingAccount: boolean;
+  /** Public API calls a minute in force for the organisation (0 = no per-minute limit). */
+  apiCallsPerMinute?: number;
+  /** The limit was agreed with Flowamaz rather than coming from the plan. */
+  apiLimitIsCustom?: boolean;
 }
 
 export interface BillingUsage {

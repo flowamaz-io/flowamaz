@@ -1304,6 +1304,53 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.ToTable("scim_group_members");
                 });
 
+            modelBuilder.Entity("Flowamaz.Core.Entities.Auth.ScimRoleResync", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<Guid>("OrgUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_user_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_scim_role_resyncs");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_scim_role_resyncs_created_at");
+
+                    b.HasIndex("OrgUserId")
+                        .HasDatabaseName("ix_scim_role_resyncs_org_user_id");
+
+                    b.HasIndex("OrgId", "OrgUserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_scim_role_resyncs_org_id_org_user_id");
+
+                    b.ToTable("scim_role_resyncs", (string)null);
+                });
+
             modelBuilder.Entity("Flowamaz.Core.Entities.Auth.ScimToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4350,6 +4397,16 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_scim_group_members_org_users_org_user_id");
+                });
+
+            modelBuilder.Entity("Flowamaz.Core.Entities.Auth.ScimRoleResync", b =>
+                {
+                    b.HasOne("Flowamaz.Core.Entities.Platform.OrgUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrgUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scim_role_resyncs_org_users_org_user_id");
                 });
 
             modelBuilder.Entity("Flowamaz.Core.Entities.Connector.WorkspaceConnector", b =>

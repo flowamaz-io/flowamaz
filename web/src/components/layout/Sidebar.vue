@@ -6,7 +6,7 @@ import {
   HelpCircle, HeartPulse, LayoutDashboard, Microscope, Plug, Settings, Sparkles,
   Terminal, Workflow, X, Upload, KeyRound,
   LockKeyhole, Users, Webhook, ShieldCheck, ScrollText, CreditCard,
-  ShoppingBag, Store,
+  ShoppingBag, Store, Gauge,
 } from 'lucide-vue-next';
 import { useUiStore } from '@/stores/ui.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -36,6 +36,8 @@ interface NavItem {
   adminOnly?: boolean;
   /** Organisation owners only (hidden once /me says the user isn't one). */
   ownerOnly?: boolean;
+  /** Only for Flowamaz staff (from /me). */
+  staffOnly?: boolean;
 }
 
 interface NavSection {
@@ -79,6 +81,7 @@ const sections: NavSection[] = [
       { label: 'Publisher', to: '/settings/publisher', icon: Store, adminOnly: true },
       { label: 'Purchases', to: '/settings/purchases', icon: ShoppingBag },
       { label: 'Audit Log', to: '/settings/audit', icon: ScrollText },
+      { label: 'API Limits (staff)', to: '/platform/api-limits', icon: Gauge, staffOnly: true },
     ],
   },
   {
@@ -113,13 +116,16 @@ const isAdmin = computed(() => {
 // Unknown (profile not loaded yet) shows the item; the page itself explains when it isn't for this user.
 const authStore = useAuthStore();
 const isOrgOwner = computed(() => authStore.user?.isOrgOwner !== false);
+const isStaff = computed(() => authStore.user?.isPlatformStaff === true);
 
 const visibleSections = computed(() =>
   sections
     .filter((s) => !s.designerOnly || isDesigner.value)
     .map((s) => ({
       ...s,
-      items: s.items.filter((i) => (!i.adminOnly || isAdmin.value) && (!i.ownerOnly || isOrgOwner.value)),
+      items: s.items.filter(
+        (i) => (!i.adminOnly || isAdmin.value) && (!i.ownerOnly || isOrgOwner.value) && (!i.staffOnly || isStaff.value),
+      ),
     })),
 );
 

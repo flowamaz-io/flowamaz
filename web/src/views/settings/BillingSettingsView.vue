@@ -90,6 +90,11 @@ async function manageBilling(): Promise<void> {
 function upgrade(): void {
   router.push('/pricing');
 }
+
+const apiLimitText = computed(() => {
+  const perMinute = subscription.value?.apiCallsPerMinute ?? 0;
+  return perMinute === 0 ? 'no per-minute limit' : `${perMinute.toLocaleString()} calls a minute`;
+});
 </script>
 
 <template>
@@ -182,6 +187,21 @@ function upgrade(): void {
             </FmButton>
           </div>
         </div>
+        <p
+          v-if="subscription?.apiCallsPerMinute !== undefined"
+          class="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-600"
+          data-test="api-limit"
+        >
+          Public API:
+          <span class="font-medium text-slate-900">{{ apiLimitText }}</span>
+          <span class="text-slate-500">{{ subscription?.apiLimitIsCustom ? ' (agreed with Flowamaz)' : ' (from your plan)' }}.</span>
+          Need a different limit? Email
+          <a
+            class="text-primary-700 underline"
+            href="mailto:team@flowamaz.io?subject=Public%20API%20limit"
+          >team@flowamaz.io</a>
+          with what you're building and the peak calls a minute you expect.
+        </p>
       </section>
 
       <section

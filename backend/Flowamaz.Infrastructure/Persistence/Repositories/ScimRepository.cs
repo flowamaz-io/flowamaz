@@ -114,4 +114,38 @@ public sealed class ScimRepository(FlowAmazDbContext db) : IScimRepository
          join g in db.ScimGroups on m.GroupId equals g.Id
          where g.OrgId == orgId && m.OrgUserId == userId
          select g.DisplayName).ToListAsync(ct);
+
+    // ── Background role re-sync ─────────────────────────────────────────────────────────
+
+    public async Task QueueRoleResyncAsync(Guid orgId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default)
+    {
+        if (userIds.Count == 0) return;
+        var ids = userIds.Distinct().ToArray();
+        var now = DateTime.UtcNow;
+        // Only people of this organisation are queued, whatever ids are passed.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO scim_role_resyncs (id, org_id, org_user_id, created_at, updated_at, is_deleted)
+            SELECT gen_random_uuid(), {orgId}, u.id, {now}, {now}, false
+            FROM org_users u
+            WHERE u.org_id = {orgId} AND u.id = ANY({ids})
+            ON CONFLICT (org_id, org_user_id) DO NOTHING
+            """, ct);
+    }
+
+    public Task<List<ScimRoleResync>> ClaimRoleResyncsAsync(int take, CancellationToken ct = default) =>
+        db.ScimRoleResyncs
+            .FromSqlInterpolated($"SELECT * FROM scim_role_resyncs ORDER BY created_at LIMIT {take} FOR UPDATE SKIP LOCKED")
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+    public async Task DeleteRoleResyncsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0) return;
+        var array = ids.ToArray();
+        await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM scim_role_resyncs WHERE id = ANY({array})", ct);
+    }
+
+    public Task<int> CountQueuedRoleResyncsAsync(Guid orgId, CancellationToken ct = default) =>
+        db.ScimRoleResyncs.CountAsync(r => r.OrgId == orgId, ct);
 }

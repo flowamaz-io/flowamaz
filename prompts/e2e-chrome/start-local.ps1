@@ -34,7 +34,7 @@ if ((Get-PortPids 8307) -or (Get-PortPids 5173)) {
   Stop-App | Out-Null
 }
 
-Write-Host "1/4 Postgres + Redis (Docker)..."
+Write-Host "1/4 Postgres + Redis + Mailpit (Docker)..."
 docker compose -f "$Root\infrastructure\docker-compose.dev.yml" up -d
 for ($i = 0; $i -lt 30; $i++) { docker exec flowamaz-dev-db pg_isready -U flowamaz *> $null; if ($LASTEXITCODE -eq 0) { break }; Start-Sleep 2 }
 
@@ -49,10 +49,14 @@ $env:GIT_REPOS_BASE_PATH = Join-Path $Root "prompts\e2e-chrome\results\git-repos
 $env:CREDENTIAL_MASTER_KEY = "e2e-local-only-credential-master-key-0123456789abcdef"   # dev only
 $env:GATE_SIGNING_KEY = "e2e-local-only-gate-signing-key-0123456789abcdef0123"          # dev only
 $env:Ai__AllowStubWithoutKey = "true"
-# Test orgs are on the Community plan (10 public API calls/minute); set $env:ENFORCE_PLAN_RATE_LIMITS="true" to test the limits.
+# Test orgs are on the Community plan (30 public API calls/minute); set $env:ENFORCE_PLAN_RATE_LIMITS="true" to test the limits.
 $env:PublicApi__EnforcePlanRateLimits = if ($env:ENFORCE_PLAN_RATE_LIMITS) { $env:ENFORCE_PLAN_RATE_LIMITS } else { "false" }
 # The web app's address: SSO builds its SAML ACS / OIDC redirect URLs from it.
 $env:Platform__BaseUrl = "http://localhost:5173"
+# Every email (password resets, gate notifications, invites) goes to Mailpit: inbox at http://localhost:8026.
+$env:Email__SmtpHost = "localhost"
+$env:Email__SmtpPort = "1026"
+$env:Email__FromAddress = "noreply@flowamaz.local"
 if ($env:ANTHROPIC_KEY) {
   try {
     Invoke-WebRequest https://api.anthropic.com/v1/models -UseBasicParsing -TimeoutSec 10 `

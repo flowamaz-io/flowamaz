@@ -12,7 +12,10 @@ namespace Flowamaz.Application.Workspace.Services;
 /// <summary>
 /// Workspace membership management. Three invariants are enforced here (service layer), so they
 /// hold no matter which caller invokes them: no self-role-change, no self-removal, and the
-/// workspace must always retain at least one active Admin.
+/// workspace must always retain at least one active Admin. Changes that could take away an Admin run under the
+/// workspace's admin lock (the same one SSO/SCIM role sync takes), so two admins demoting each other at the same
+/// moment can't leave the workspace with none. A changed or removed member's current access token is ended, so the
+/// new role applies on their next request (their browser refreshes it) rather than when the token expires.
 /// </summary>
 public sealed class WorkspaceMemberService : IWorkspaceMemberService
 {
@@ -21,14 +24,17 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
     private readonly IEditionService _edition;
     private readonly ILogger<WorkspaceMemberService> _logger;
     private readonly IAuditService? _audit;
+    private readonly ITokenRevocationService? _revocation;
 
     public WorkspaceMemberService(
         IWorkspaceMemberRepository memberRepository,
         IUnitOfWork unitOfWork,
         IEditionService edition,
         ILogger<WorkspaceMemberService> logger,
-        IAuditService? audit = null)
+        IAuditService? audit = null,
+        ITokenRevocationService? revocation = null)
     {
+        _revocation = revocation;
         _memberRepository = memberRepository;
         _unitOfWork = unitOfWork;
         _edition = edition;
@@ -104,6 +110,7 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
                 throw new SelfModificationException("change the role of");
             }
 
+            await using var transaction = await BeginAdminLockAsync(workspaceId, cancellationToken);
             var member = await _memberRepository.GetAsync(workspaceId, targetUserId, cancellationToken)
                 ?? throw new InvalidOperationException(
                     $"User '{targetUserId}' is not a member of workspace '{workspaceId}'.");
@@ -120,6 +127,8 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
             member.ManagedBySso = false; // a hand-set role is kept; SSO group sync no longer changes it
             _memberRepository.Update(member);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            await EndAccessTokenAsync(targetUserId, cancellationToken);
 
             _logger.LogInformation(
                 "WorkspaceMemberService.UpdateRoleAsync exit workspaceId={WorkspaceId} target={Target} newRole={NewRole}",
@@ -146,6 +155,7 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
                 throw new SelfModificationException("remove");
             }
 
+            await using var transaction = await BeginAdminLockAsync(workspaceId, cancellationToken);
             var member = await _memberRepository.GetAsync(workspaceId, targetUserId, cancellationToken);
             if (member is null)
             {
@@ -163,6 +173,8 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
 
             _memberRepository.Remove(member);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            await EndAccessTokenAsync(targetUserId, cancellationToken);
 
             _logger.LogInformation(
                 "WorkspaceMemberService.RemoveMemberAsync exit workspaceId={WorkspaceId} target={Target}", workspaceId, targetUserId);
@@ -182,6 +194,7 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
             workspaceId, userId);
         try
         {
+            await using var transaction = await BeginAdminLockAsync(workspaceId, cancellationToken);
             var member = await _memberRepository.GetAsync(workspaceId, userId, cancellationToken);
             if (member is null)
             {
@@ -199,6 +212,8 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
 
             _memberRepository.Remove(member);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+            await EndAccessTokenAsync(userId, cancellationToken);
 
             _logger.LogInformation(
                 "WorkspaceMemberService.LeaveWorkspaceAsync exit workspaceId={WorkspaceId} user={UserId}", workspaceId, userId);
@@ -282,5 +297,21 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
             _logger.LogError(ex, "WorkspaceMemberService.IsMemberAsync error workspaceId={WorkspaceId} orgUserId={OrgUserId}", workspaceId, orgUserId);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Opens a transaction (unless the caller already has one) and takes the workspace's admin lock, which is held until
+    /// that transaction ends. Returns the transaction to commit, or null when the caller's transaction is used.
+    /// </summary>
+    private async Task<IUnitOfWorkTransaction?> BeginAdminLockAsync(Guid workspaceId, CancellationToken ct)
+    {
+        var transaction = _unitOfWork.HasActiveTransaction ? null : await _unitOfWork.BeginTransactionAsync(ct);
+        await _memberRepository.LockAdminsAsync(workspaceId, ct);
+        return transaction;
+    }
+
+    private async Task EndAccessTokenAsync(Guid orgUserId, CancellationToken ct)
+    {
+        if (_revocation is not null) await _revocation.RevokeUserAccessAsync(orgUserId, ct);
     }
 }

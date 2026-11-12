@@ -56,6 +56,13 @@ public sealed class ScimService
     private readonly ILogger<ScimService> _logger;
     private readonly IAuditService? _audit;
     private readonly SsoMembershipSync _sync;
+    private readonly ITokenRevocationService? _revocation;
+
+    /// <summary>
+    /// A group change touching more people than this re-applies their roles in the background (ScimRoleResyncJob)
+    /// instead of inside the IdP's request, which would otherwise time out on very large groups.
+    /// </summary>
+    public const int InlineResyncLimit = 100;
 
     public ScimService(
         IScimRepository scim,
@@ -70,8 +77,10 @@ public sealed class ScimService
         IUnitOfWork unitOfWork,
         IConfiguration configuration,
         ILogger<ScimService> logger,
-        IAuditService? audit = null)
+        IAuditService? audit = null,
+        ITokenRevocationService? revocation = null)
     {
+        _revocation = revocation;
         _scim = scim;
         _orgs = orgs;
         _plans = plans;
@@ -214,6 +223,7 @@ public sealed class ScimService
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
+        if (revived) await CutOffAsync([user.Id], ct); // the old account's sessions end now, not when they expire
         Audit(orgId, null, revived ? "scim.user_restored" : "scim.user_created", "created", user.Id, new { active = user.IsActive }, ct, user.Email);
         _logger.LogInformation("ScimService.CreateUserAsync exit org={OrgId} user={UserId} revived={Revived}", orgId, user.Id, revived);
         return ScimJson.User(user, ScimBaseUrl);
@@ -268,6 +278,7 @@ public sealed class ScimService
         await _resetTokens.InvalidateAllForUserAsync(user.Id, ct);
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        await CutOffAsync([user.Id], ct);
         Audit(orgId, null, "scim.user_deleted", "deleted", user.Id, new { workspacesLeft = memberships.Count }, ct, user.Email);
     }
 
@@ -276,6 +287,7 @@ public sealed class ScimService
         var config = await _configs.GetByOrgIdAsync(orgId, ct) ?? new OrgSsoConfig { OrgId = orgId };
         await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
         var user = await _scim.GetUserAsync(orgId, id, ct: ct) ?? throw ScimException.NotFound("This user");
+        var cutOff = false; // end the current access token too (deactivation, new email, roles re-applied)
 
         if (input.Email is { } email && email != user.Email)
         {
@@ -287,6 +299,7 @@ public sealed class ScimService
             if (await _scim.GetUserByEmailAsync(orgId, email, ct) is not null)
                 throw ScimException.Uniqueness("Another account in this organisation already uses that email.");
             user.Email = email;
+            cutOff = true;
             await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
             await _resetTokens.InvalidateAllForUserAsync(user.Id, ct);
         }
@@ -306,6 +319,7 @@ public sealed class ScimService
         if (user.IsActive && !wasActive) await ResyncAsync(orgId, config, [user.Id], isNew: false, ct, evenWithoutScimRoles: false);
         await _unitOfWork.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+        if (cutOff || wasActive != user.IsActive) await CutOffAsync([user.Id], ct);
 
         if (wasActive != user.IsActive)
             Audit(orgId, null, user.IsActive ? "scim.user_activated" : "scim.user_deactivated", user.IsActive ? "activated" : "deactivated", user.Id, null, ct, user.Email);
@@ -352,8 +366,9 @@ public sealed class ScimService
         if (ScimJson.TryGet(json, "members", out var members))
             await state.SetAsync(await MemberIdsAsync(orgId, members, ct), ct);
         var affected = state.Affected;
-        await FinishGroupChangeAsync(orgId, affected, ct);
+        var resynced = await FinishGroupChangeAsync(orgId, affected, ct);
         await transaction.CommitAsync(ct);
+        await CutOffAsync(resynced, ct);
         Audit(orgId, null, "scim.group_created", "created", group.Id, new { name, members = affected.Count }, ct, name);
         return ScimJson.Group(group, await _scim.GetMembersAsync([group.Id], ct), ScimBaseUrl);
     }
@@ -370,8 +385,9 @@ public sealed class ScimService
         group.ExternalId = ExternalId(ScimJson.String(json, "externalId")); // PUT replaces: absent means none
         var members = ScimJson.TryGet(json, "members", out var m) ? await MemberIdsAsync(orgId, m, ct) : [];
         await state.SetAsync(members, ct);
-        await FinishGroupChangeAsync(orgId, affected, ct, group);
+        var resynced = await FinishGroupChangeAsync(orgId, affected, ct, group);
         await transaction.CommitAsync(ct);
+        await CutOffAsync(resynced, ct);
         Audit(orgId, null, "scim.group_updated", "updated", group.Id, new { name = group.DisplayName, changed = affected.Count }, ct, group.DisplayName);
         return ScimJson.Group(group, await _scim.GetMembersAsync([group.Id], ct), ScimBaseUrl);
     }
@@ -439,8 +455,9 @@ public sealed class ScimService
             else throw ScimException.Path($"Groups can't be patched at '{target}'. Use displayName, externalId or members.");
         }
 
-        await FinishGroupChangeAsync(orgId, affected, ct, group);
+        var resynced = await FinishGroupChangeAsync(orgId, affected, ct, group);
         await transaction.CommitAsync(ct);
+        await CutOffAsync(resynced, ct);
         Audit(orgId, null, "scim.group_updated", "updated", group.Id, new { name = group.DisplayName, changed = affected.Count }, ct, group.DisplayName);
         return null; // 204: Okta and Entra don't need the group back
     }
@@ -452,8 +469,9 @@ public sealed class ScimService
         var group = await _scim.GetGroupAsync(orgId, id, ct) ?? throw ScimException.NotFound("This group");
         var affected = (await _scim.GetMembershipRowsAsync(group.Id, ct)).Select(m => m.OrgUserId).ToHashSet();
         _scim.RemoveGroup(group); // memberships cascade
-        await FinishGroupChangeAsync(orgId, affected, ct);
+        var resynced = await FinishGroupChangeAsync(orgId, affected, ct);
         await transaction.CommitAsync(ct);
+        await CutOffAsync(resynced, ct);
         Audit(orgId, null, "scim.group_deleted", "deleted", group.Id, new { name = group.DisplayName, members = affected.Count }, ct, group.DisplayName);
     }
 
@@ -560,16 +578,67 @@ public sealed class ScimService
 
     /// <summary>
     /// Saves the group change, then (with "roles from SCIM groups" on) updates the SSO-managed workspace roles of
-    /// everyone it touched.
+    /// everyone it touched: right away for up to <see cref="InlineResyncLimit"/> people, otherwise by queueing them for
+    /// the background job in the same transaction. Returns the people whose roles were re-applied here, so the caller
+    /// can end their current access tokens once the change is committed (their browser then picks up the new roles).
     /// </summary>
-    private async Task FinishGroupChangeAsync(Guid orgId, IReadOnlyCollection<Guid> affected, CancellationToken ct, ScimGroup? group = null)
+    private async Task<IReadOnlyCollection<Guid>> FinishGroupChangeAsync(
+        Guid orgId, IReadOnlyCollection<Guid> affected, CancellationToken ct, ScimGroup? group = null)
     {
         if (group is not null && affected.Count > 0) group.UpdatedAt = DateTime.UtcNow; // membership changes count as a change to the group
         await _unitOfWork.SaveChangesAsync(ct);
-        if (affected.Count == 0) return;
+        if (affected.Count == 0) return [];
         var config = await _configs.GetByOrgIdAsync(orgId, ct) ?? new OrgSsoConfig { OrgId = orgId };
+        if (!config.RolesFromScim) return [];
+        if (affected.Count > InlineResyncLimit)
+        {
+            await _scim.QueueRoleResyncAsync(orgId, affected, ct);
+            _logger.LogInformation("ScimService.FinishGroupChangeAsync queued org={OrgId} count={Count}", orgId, affected.Count);
+            return [];
+        }
         await ResyncAsync(orgId, config, affected, isNew: false, ct, evenWithoutScimRoles: false);
         await _unitOfWork.SaveChangesAsync(ct);
+        return affected;
+    }
+
+    /// <summary>
+    /// Re-applies the roles of up to <paramref name="batchSize"/> people queued by large group changes, oldest first,
+    /// then ends their current access tokens. Safe to run on several servers at once (queued rows are locked and
+    /// skipped). Returns how many people were processed; a failure leaves the batch queued for the next run.
+    /// </summary>
+    public async Task<int> ProcessQueuedRoleResyncsAsync(int batchSize = 200, CancellationToken ct = default)
+    {
+        _logger.LogDebug("ScimService.ProcessQueuedRoleResyncsAsync enter batch={Batch}", batchSize);
+        try
+        {
+            await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
+            var queued = await _scim.ClaimRoleResyncsAsync(batchSize, ct);
+            if (queued.Count == 0) return 0;
+            foreach (var org in queued.GroupBy(q => q.OrgId))
+            {
+                // Settings may have changed since the people were queued: with roles from SCIM now off, sign-ins decide.
+                var config = await _configs.GetByOrgIdAsync(org.Key, ct) ?? new OrgSsoConfig { OrgId = org.Key };
+                await ResyncAsync(org.Key, config, org.Select(q => q.OrgUserId).ToList(), isNew: false, ct, evenWithoutScimRoles: false);
+                await _unitOfWork.SaveChangesAsync(ct);
+            }
+            await _scim.DeleteRoleResyncsAsync(queued.Select(q => q.Id).ToList(), ct);
+            await transaction.CommitAsync(ct);
+            await CutOffAsync(queued.Select(q => q.OrgUserId).ToList(), ct);
+            _logger.LogInformation("ScimService.ProcessQueuedRoleResyncsAsync exit processed={Count}", queued.Count);
+            return queued.Count;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "ScimService.ProcessQueuedRoleResyncsAsync error");
+            throw;
+        }
+    }
+
+    /// <summary>Ends these people's current access tokens (after the change is committed). Best effort.</summary>
+    private async Task CutOffAsync(IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+    {
+        if (_revocation is null || userIds.Count == 0) return;
+        await _revocation.RevokeUsersAccessAsync(userIds, ct);
     }
 
     /// <summary>

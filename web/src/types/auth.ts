@@ -8,6 +8,8 @@ export interface UserSummary {
   orgSlug: string;
   /** From /me; undefined until the profile has loaded. */
   isOrgOwner?: boolean;
+  /** From /me: signed in to a Flowamaz staff organisation, so platform screens are shown. */
+  isPlatformStaff?: boolean;
 }
 
 export interface WorkspaceSummary {
@@ -26,6 +28,7 @@ export interface MeResponse {
   orgSlug: string;
   workspaces: WorkspaceSummary[];
   isOrgOwner?: boolean;
+  isPlatformStaff?: boolean;
 }
 
 /** POST /login and /register response body. */

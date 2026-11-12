@@ -48,4 +48,16 @@ public interface IScimRepository
     Task AddMemberAsync(ScimGroupMember member, CancellationToken ct = default);
     void RemoveMember(ScimGroupMember member);
     Task<List<string>> GetGroupNamesForUserAsync(Guid orgId, Guid userId, CancellationToken ct = default);
+
+    // Background role re-sync (large group changes)
+    /// <summary>Queues these people for a role re-sync; people already queued stay queued once. Runs at once, in the caller's transaction.</summary>
+    Task QueueRoleResyncAsync(Guid orgId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+    /// <summary>
+    /// The oldest queued people (at most <paramref name="take"/>), locked for the caller's transaction and skipped by
+    /// other workers. Call inside a transaction and remove them with <see cref="DeleteRoleResyncsAsync"/> before committing.
+    /// </summary>
+    Task<List<ScimRoleResync>> ClaimRoleResyncsAsync(int take, CancellationToken ct = default);
+    Task DeleteRoleResyncsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+    /// <summary>How many people of this organisation are waiting for a role re-sync.</summary>
+    Task<int> CountQueuedRoleResyncsAsync(Guid orgId, CancellationToken ct = default);
 }

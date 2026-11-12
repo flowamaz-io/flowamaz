@@ -34,3 +34,15 @@ public class ScimGroupMember : BaseEntity
     public Guid GroupId { get; set; }
     public Guid OrgUserId { get; set; }
 }
+
+/// <summary>
+/// A person whose workspace roles must be re-applied from their SCIM groups, waiting for the background job
+/// (ScimRoleResyncJob). A group change that touches many people saves the membership and queues them here in the
+/// same transaction, so the IdP's request returns quickly and no change is lost if the server restarts.
+/// One row per person and organisation.
+/// </summary>
+public class ScimRoleResync : BaseEntity
+{
+    public Guid OrgId { get; set; }
+    public Guid OrgUserId { get; set; }
+}

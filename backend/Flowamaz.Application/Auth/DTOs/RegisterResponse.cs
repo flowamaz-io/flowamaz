@@ -14,4 +14,6 @@ public sealed record MeResponse(
     Guid OrgId,
     string OrgSlug,
     IReadOnlyList<WorkspaceSummary> Workspaces,
-    bool IsOrgOwner = false);
+    bool IsOrgOwner = false,
+    /// <summary>Signed in to a Flowamaz staff organisation (see PlatformStaff): platform screens are shown.</summary>
+    bool IsPlatformStaff = false);

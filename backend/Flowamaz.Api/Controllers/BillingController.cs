@@ -102,7 +102,9 @@ public sealed class BillingController : ControllerBase
             TrialDaysRemaining: daysRemaining,
             CurrentPeriodEnd: sub?.CurrentPeriodEnd,
             PaymentFailed: sub?.PaymentFailed ?? false,
-            HasBillingAccount: !string.IsNullOrWhiteSpace(org.StripeCustomerId)));
+            HasBillingAccount: !string.IsNullOrWhiteSpace(org.StripeCustomerId),
+            ApiCallsPerMinute: org.ApiRateLimitPerMinute ?? plan?.Limits.ApiRateLimitPerMinute ?? 0,
+            ApiLimitIsCustom: org.ApiRateLimitPerMinute is not null));
     }
 
     /// <summary>Create a Stripe Checkout session for an upgrade. Returns the redirect URL.</summary>
@@ -244,7 +246,11 @@ public sealed record CurrentSubscriptionResponse(
     int? TrialDaysRemaining,
     DateTime? CurrentPeriodEnd,
     bool PaymentFailed,
-    bool HasBillingAccount);
+    bool HasBillingAccount,
+    /// <summary>Public API calls a minute in force for the organisation (0 = no per-minute limit).</summary>
+    int ApiCallsPerMinute = 0,
+    /// <summary>The limit was agreed with Flowamaz rather than coming from the plan.</summary>
+    bool ApiLimitIsCustom = false);
 
 public sealed record CheckoutRequest(Guid PlanId, bool Annual, string SuccessUrl, string CancelUrl);
 

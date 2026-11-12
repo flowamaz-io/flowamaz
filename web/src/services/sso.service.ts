@@ -97,6 +97,22 @@ export interface ScimTokenCreated {
   scimBaseUrl: string;
 }
 
+/** A person whose account is linked to an identity at the identity provider. */
+export interface SsoLinkedIdentity {
+  orgUserId: string;
+  email: string;
+  name: string;
+  isOrgOwner: boolean;
+  lastLoginAt: string | null;
+}
+
+export interface SsoLinkedIdentityPage {
+  /** At most 25, by email. */
+  items: SsoLinkedIdentity[];
+  /** How many match the search in all. */
+  total: number;
+}
+
 export const ssoService = {
   async getStatus(orgSlug: string): Promise<SsoStatus> {
     const res = await http.get<ApiEnvelope<SsoStatus>>(`/api/v1/auth/sso/${encodeURIComponent(orgSlug)}`);
@@ -130,6 +146,17 @@ export const ssoService = {
 
   async revokeScimToken(orgId: string, tokenId: string): Promise<void> {
     await http.delete(`/api/v1/organisations/${orgId}/scim/tokens/${tokenId}`);
+  },
+
+  async getLinkedIdentities(orgId: string, search?: string): Promise<SsoLinkedIdentityPage> {
+    const res = await http.get<ApiEnvelope<SsoLinkedIdentityPage>>(`/api/v1/organisations/${orgId}/sso/identities`, {
+      params: search ? { search } : undefined,
+    });
+    return unwrap(res);
+  },
+
+  async unlinkIdentity(orgId: string, orgUserId: string): Promise<void> {
+    await http.delete(`/api/v1/organisations/${orgId}/sso/identities/${orgUserId}`);
   },
 
   async disable(orgId: string): Promise<void> {

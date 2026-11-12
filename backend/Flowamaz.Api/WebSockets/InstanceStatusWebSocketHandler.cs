@@ -53,6 +53,11 @@ public sealed class InstanceStatusWebSocketHandler
 
         var token = context.Request.Query["token"].ToString();
         var principal = string.IsNullOrEmpty(token) ? null : _jwt.ValidateAccessToken(token);
+        if (principal is not null && context.RequestServices.GetService<Core.Interfaces.Services.ITokenRevocationService>() is { } revocation &&
+            await Identity.AccessTokenRevocation.IsRevokedAsync(context, principal.Claims, revocation))
+        {
+            principal = null; // issued before a deactivation or role change: the live view needs a fresh token
+        }
         if (principal is null)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;

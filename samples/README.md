@@ -1,10 +1,13 @@
 # Samples
 
-## Loan Approval (`loan-approval/`) and the mock loan application (`loan-app-mock/`)
+## Loan Approval (`loan-approval/`)
 
 A worked example of an external application running its business process on Flowamaz through the
-**public API**. Today the "application" is a mock with no UI. The real loan application will make
-the same API calls.
+**public API**. The application itself is [flowamaz-io/loan-app-sample](https://github.com/flowamaz-io/loan-app-sample):
+a .NET + Vue loan application with its own copy of this workflow (which also sends a callback key), a
+setup script that creates it in your workspace, and an end-to-end check (`node e2e/run-scenarios.mjs`).
+The definition here is the reference the Chrome E2E run builds in the UI (J17); its two URLs point at
+`http://localhost:4010`, where the loan application listens locally.
 
 ### The process
 
@@ -44,20 +47,8 @@ with the scopes **workflows:read, workflows:trigger, instances:read, instances:w
 Form fields (the trigger payload): `application_id`, `applicant_name`, `applicant_email`,
 `loan_amount` (number), `tenure_months` (number), `purpose`, `monthly_income`.
 
-### Run the mock
+### Run it
 
-Node 20+ is needed; there are no dependencies to install.
-
-```bash
-# 1. Flowamaz running locally (prompts/e2e-chrome/start-local.sh), with Loan Approval published.
-# 2. Put the API key in samples/loan-app-mock/.env.local:
-#      FLOWAMAZ_URL=http://localhost:8307
-#      FLOWAMAZ_API_KEY=fmz_...
-node samples/loan-app-mock/server.mjs          # terminal 1: receives LO creation + events on :4010
-node samples/loan-app-mock/run-scenarios.mjs   # terminal 2: 8 scenarios, prints PASS/FAIL per scenario
-node samples/loan-app-mock/run-scenarios.mjs C F   # only some scenarios
-```
-
-The workflow calls `http://localhost:4010`, which works for local development, where connector
-egress to private addresses is allowed. On a Cloud deployment, point the two URLs at the real loan
-application.
+Follow the loan application's README ("Run it locally"): start Flowamaz with
+`prompts/e2e-chrome/start-local.sh`, then the loan application's setup script creates the callback
+credential, publishes its workflow and creates the API key, without printing either key.

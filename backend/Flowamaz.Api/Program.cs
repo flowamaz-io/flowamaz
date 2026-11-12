@@ -160,6 +160,20 @@ builder.Services
             IssuerSigningKey = signingKey,
             ClockSkew = TimeSpan.FromMinutes(1),
         };
+        // A signed, unexpired token issued before a deactivation, password reset or role change is refused here as well
+        // as in JwtAuthMiddleware (see ITokenRevocationService), so [Authorize] never lets it through.
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var revocation = context.HttpContext.RequestServices.GetRequiredService<Flowamaz.Core.Interfaces.Services.ITokenRevocationService>();
+                if (context.Principal is { } principal &&
+                    await Flowamaz.Api.Identity.AccessTokenRevocation.IsRevokedAsync(context.HttpContext, principal.Claims, revocation))
+                {
+                    context.Fail("This session has ended. Sign in again.");
+                }
+            },
+        };
     });
 builder.Services.AddAuthorization();
 
@@ -244,6 +258,12 @@ if (backgroundWorkersEnabled)
         q.AddJob<AuditRetentionJob>(auditRetentionKey);
         q.AddTrigger(t => t.ForJob(auditRetentionKey)
             .WithCronSchedule("0 30 3 * * ?"));
+
+        // Roles for people in very large SCIM group changes, applied in the background (see ScimService).
+        var scimResyncKey = new JobKey(nameof(ScimRoleResyncJob));
+        q.AddJob<ScimRoleResyncJob>(scimResyncKey);
+        q.AddTrigger(t => t.ForJob(scimResyncKey)
+            .WithSimpleSchedule(s => s.WithIntervalInSeconds(10).RepeatForever()));
     });
     builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 }

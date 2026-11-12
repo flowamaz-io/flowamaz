@@ -13,6 +13,9 @@ public interface IOrganisationRepository
     /// <summary>Find a tracked org by its Stripe customer id (cus_...). Null if unknown.</summary>
     Task<Organisation?> GetByStripeCustomerIdAsync(string stripeCustomerId, CancellationToken cancellationToken = default);
 
+    /// <summary>Organisations whose name or slug contains <paramref name="search"/> (all when empty), by name; platform screens only.</summary>
+    Task<List<Organisation>> SearchAsync(string? search, int take, CancellationToken cancellationToken = default);
+
     Task<bool> SlugExistsAsync(string slug, CancellationToken cancellationToken = default);
 
     /// <summary>Stage a new organisation for insertion (persisted on SaveChanges).</summary>

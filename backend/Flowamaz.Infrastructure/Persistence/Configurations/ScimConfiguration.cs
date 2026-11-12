@@ -39,3 +39,15 @@ public sealed class ScimGroupMemberConfiguration : IEntityTypeConfiguration<Scim
         builder.HasOne<Flowamaz.Core.Entities.Platform.OrgUser>().WithMany().HasForeignKey(m => m.OrgUserId).OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+public sealed class ScimRoleResyncConfiguration : IEntityTypeConfiguration<ScimRoleResync>
+{
+    public void Configure(EntityTypeBuilder<ScimRoleResync> builder)
+    {
+        builder.ToTable("scim_role_resyncs");
+        builder.HasKey(r => r.Id);
+        builder.HasIndex(r => new { r.OrgId, r.OrgUserId }).IsUnique();
+        builder.HasIndex(r => r.CreatedAt);
+        builder.HasOne<Flowamaz.Core.Entities.Platform.OrgUser>().WithMany().HasForeignKey(r => r.OrgUserId).OnDelete(DeleteBehavior.Cascade);
+    }
+}

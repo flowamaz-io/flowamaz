@@ -122,6 +122,39 @@ public sealed class SsoController : ControllerBase
     }
 
     /// <summary>
+    /// People whose account is linked to an identity at the identity provider (at most 25, by email), optionally
+    /// filtered by part of their email or name. Org-owner only.
+    /// </summary>
+    [HttpGet("/api/v1/organisations/{id:guid}/sso/identities")]
+    [RequireOrgOwner]
+    public async Task<ActionResult<SsoLinkedIdentityPage>> LinkedIdentities(Guid id, [FromQuery] string? search, CancellationToken ct)
+    {
+        if (OtherOrg(id) is { } notFound) return notFound;
+        if (search is { Length: > 200 }) search = search[..200];
+        return Ok(await _sso.GetLinkedIdentitiesAsync(id, search, ct));
+    }
+
+    /// <summary>
+    /// Unlinks a person's account from its identity at the identity provider, so their next SSO sign-in links the
+    /// identity the IdP sends then. Ends their sessions (unless it's your own account). Org-owner only.
+    /// </summary>
+    [HttpDelete("/api/v1/organisations/{id:guid}/sso/identities/{userId:guid}")]
+    [RequireOrgOwner]
+    public async Task<IActionResult> UnlinkIdentity(Guid id, Guid userId, CancellationToken ct)
+    {
+        if (OtherOrg(id) is { } notFound) return notFound;
+        if (!await _sso.UnlinkIdentityAsync(id, userId, _currentUser.UserId ?? Guid.Empty, ct))
+            return NotFound(new
+            {
+                success = false,
+                statusCode = 404,
+                code = "USER_NOT_FOUND",
+                message = "That person isn't in your organisation any more. Refresh the list of linked sign-ins and try again.",
+            });
+        return NoContent();
+    }
+
+    /// <summary>
     /// The organisation in the route must be the caller's own. Without this, the owner of any organisation could read
     /// or replace another organisation's SSO configuration (pointing it at their own IdP) and sign in as its users.
     /// 404, not 403, so organisation ids can't be probed.

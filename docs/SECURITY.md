@@ -44,7 +44,8 @@ remediate before any disclosure.
   usage metering. Workflow node outputs are stored to power monitoring and replay.
 - **Encryption** — credentials are encrypted at rest with AES via `CREDENTIAL_MASTER_KEY`; data in
   transit is protected by TLS. Sensitive workflow variables are stripped from debugger snapshots.
-- **Retention** — audit events follow a configured retention window enforced by a background job;
+- **Retention** — audit events are kept for `Audit:RetentionDays` (default 7 years, at least 1 year, on every plan;
+  plans only limit how far back the log shows), enforced by a background job;
   test-run instances expire automatically after 24 hours.
 - **AI metering** — every AI call records tokens in/out, model id, function id, workspace id, and
   cost. No AI feature ships without metering.

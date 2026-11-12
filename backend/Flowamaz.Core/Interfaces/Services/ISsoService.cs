@@ -65,6 +65,12 @@ public sealed record SsoStatus(bool Enabled, string? Provider, bool Required = f
 public sealed record SsoLoginResult(OrgUser User, string OrgSlug, string ReturnPath);
 
 /// <summary>Maps an IdP group to a role in one workspace, or in every workspace when <see cref="WorkspaceId"/> is null.</summary>
+/// <summary>A person whose Flowamaz account is linked to an identity (subject) at the organisation's IdP.</summary>
+public sealed record SsoLinkedIdentityDto(Guid OrgUserId, string Email, string Name, bool IsOrgOwner, DateTime? LastLoginAt);
+
+/// <summary>Up to a page of linked people matching a search, and how many match in all.</summary>
+public sealed record SsoLinkedIdentityPage(List<SsoLinkedIdentityDto> Items, int Total);
+
 public sealed record SsoGroupRoleMapping(string Group, Guid? WorkspaceId, WorkspaceRole Role);
 
 /// <summary>Admin-facing SSO configuration (never carries secrets/certificates).</summary>
@@ -127,6 +133,16 @@ public interface ISsoService
     Task<SsoConfigDto?> GetConfigAsync(Guid orgId, CancellationToken ct = default);
     Task<SsoConfigDto> ConfigureAsync(Guid orgId, string orgSlug, ConfigureSsoRequest request, Guid configuredBy, CancellationToken ct = default);
     Task DisableAsync(Guid orgId, CancellationToken ct = default);
+
+    /// <summary>People whose account is linked to an IdP identity, matching part of their email or name. Org-owner screens.</summary>
+    Task<SsoLinkedIdentityPage> GetLinkedIdentitiesAsync(Guid orgId, string? search, CancellationToken ct = default);
+
+    /// <summary>
+    /// Unlinks a person's account from its IdP identity, so their next SSO sign-in links whichever identity the IdP sends
+    /// for that email (for example after the person was re-created in the IdP). Their sessions end, unless they are the
+    /// one unlinking. Returns false when there is no such person in the organisation.
+    /// </summary>
+    Task<bool> UnlinkIdentityAsync(Guid orgId, Guid orgUserId, Guid requestedBy, CancellationToken ct = default);
 
     /// <summary>
     /// Finds the user by email in the org (or creates one when JIT provisioning is on), applies group → role

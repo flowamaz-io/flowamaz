@@ -1,4 +1,4 @@
-# Dev-only Postgres + Redis. The app itself runs locally on the host via `dotnet run` —
+# Dev-only Postgres + Redis + Mailpit (catches every email the API sends; inbox at http://localhost:8026). The app itself runs locally on the host via `dotnet run` —
 # the full app/proxy/web stack lands in prompt 07.
 #
 # Usage:
@@ -34,6 +34,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Local email: the API sends over SMTP to Mailpit when Email__SmtpHost is set (start-local does).
+  # Ports 1026/8026, not Mailpit's usual 1025/8025, so it runs next to the loan application's own Mailpit.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: flowamaz-dev-mailpit
+    ports:
+      - "1026:1025"   # SMTP
+      - "8026:8025"   # inbox UI and API
 
 volumes:
   pgdata:
