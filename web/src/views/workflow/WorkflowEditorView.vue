@@ -8,6 +8,7 @@ import SfgCanvas from '../../components/canvas/SfgCanvas.vue';
 import FmYamlEditor from '../../components/editor/FmYamlEditor.vue';
 import CopilotPanel from '../../components/editor/CopilotPanel.vue';
 import EmpathyPanel from '../../components/editor/EmpathyPanel.vue';
+import InheritancePanel from '../../components/editor/InheritancePanel.vue';
 import { useWorkflowEditor } from '../../composables/useWorkflowEditor';
 import { useHelp } from '../../composables/useHelp';
 import { useWorkspace } from '../../composables/useWorkspace';
@@ -30,6 +31,8 @@ const {
 } = useWorkflowEditor(workspaceId, workflowId);
 
 const toast = useToast();
+// Designers and Admins edit workflows; the server checks it again.
+const canEdit = computed(() => ['Admin', 'Designer'].includes(ws.current?.value?.role ?? 'Admin'));
 
 /** Save, telling the user what to do when it fails (the composable only reports success). */
 async function save(): Promise<boolean> {
@@ -418,7 +421,16 @@ onUnmounted(() => {
             :workflow-id="workflowId"
             :visible="empathyMode"
             :yaml-content="yaml"
-          />
+          >
+            <template #after>
+              <InheritancePanel
+                :workspace-id="workspaceId"
+                :workflow-id="workflowId"
+                :can-edit="canEdit"
+                @applied="loadWorkflow"
+              />
+            </template>
+          </EmpathyPanel>
           <FmYamlEditor
             v-else
             ref="yamlEditorRef"

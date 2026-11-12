@@ -76,6 +76,10 @@ function issueTypeLabel(type: EmpathyIssue['type']): string {
   };
   return map[type] ?? type;
 }
+
+function hoursText(hours: number): string {
+  return hours >= 48 ? `${Math.round((hours / 24) * 10) / 10} days` : `${hours} hours`;
+}
 </script>
 
 <template>
@@ -168,6 +172,59 @@ function issueTypeLabel(type: EmpathyIssue['type']): string {
         </div>
       </div>
 
+      <!-- What real runs showed -->
+      <div
+        v-if="analysis.runs"
+        class="space-y-2 rounded-lg border border-gray-200 px-3 py-3"
+        data-test="empathy-runs"
+      >
+        <div class="text-xs font-medium tracking-wider text-gray-500 uppercase">
+          From {{ analysis.runs.runsAnalysed }} real {{ analysis.runs.runsAnalysed === 1 ? 'run' : 'runs' }} (last 30 days)
+        </div>
+        <dl class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+          <div>
+            <dt class="text-gray-500">
+              Messages per run
+            </dt>
+            <dd class="text-sm font-semibold text-gray-900">
+              {{ analysis.runs.avgMessagesPerRun }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-gray-500">
+              Longest silence (typical)
+            </dt>
+            <dd class="text-sm font-semibold text-gray-900">
+              {{ hoursText(analysis.runs.medianLongestSilenceHours) }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-gray-500">
+              Time waiting on approvals
+            </dt>
+            <dd class="text-sm font-semibold text-gray-900">
+              {{ analysis.runs.percentTimeWaitingOnApprovals }}%
+            </dd>
+          </div>
+          <div>
+            <dt class="text-gray-500">
+              Runs that announced the outcome
+            </dt>
+            <dd class="text-sm font-semibold text-gray-900">
+              {{ analysis.runs.percentRunsOutcomeNotified }}%
+            </dd>
+          </div>
+        </dl>
+      </div>
+      <p
+        v-else
+        class="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600"
+        data-test="empathy-no-runs"
+      >
+        These findings come from the workflow's design. Once it has finished runs (test runs don't count), this panel
+        also shows what requesters actually experienced: messages sent, silences and waiting time.
+      </p>
+
       <!-- Empty state -->
       <div
         v-if="analysis.issues.length === 0"
@@ -230,6 +287,9 @@ function issueTypeLabel(type: EmpathyIssue['type']): string {
           </div>
         </div>
       </div>
+
+      <!-- Further suggestions from the editor (e.g. patterns from similar workflows) -->
+      <slot name="after" />
     </div>
 
     <!-- Not yet loaded -->

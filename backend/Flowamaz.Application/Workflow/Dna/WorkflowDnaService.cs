@@ -51,7 +51,7 @@ public sealed class WorkflowDnaService : IWorkflowDnaService
 
         var connectorIds = graph.Nodes
             .Where(n => n.Type == NodeType.Action)
-            .Select(n => n.Config.RootElement.TryGetProperty("connector_id", out var c) ? c.GetString() : null)
+            .Select(n => ConnectorOf(n))
             .OfType<string>()
             .Distinct()
             .OrderBy(id => id)
@@ -109,7 +109,7 @@ public sealed class WorkflowDnaService : IWorkflowDnaService
                 .ToHashSet();
             var otherConnectors = otherGraph.Nodes
                 .Where(n => n.Type == NodeType.Action)
-                .Select(n => n.Config.RootElement.TryGetProperty("connector_id", out var c) ? c.GetString() : null)
+                .Select(n => ConnectorOf(n))
                 .OfType<string>()
                 .Distinct()
                 .ToList();
@@ -172,6 +172,16 @@ public sealed class WorkflowDnaService : IWorkflowDnaService
 
         _log.LogInformation("WorkflowDnaService.SuggestCloneAsync exit suggestion={Name} score={Score}", best.Name, best.SimilarityScore);
         return new CloneSuggestion(best.WorkflowDefinitionId, best.Name, best.SimilarityScore);
+    }
+
+    /// <summary>The node's connector: <c>connector_id</c> (YAML) or <c>connector</c> (canvas), as the executor reads it.</summary>
+    private static string? ConnectorOf(SfgNode n)
+    {
+        var root = n.Config.RootElement;
+        if (root.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+        foreach (var key in new[] { "connector_id", "connector" })
+            if (root.TryGetProperty(key, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String) return v.GetString();
+        return null;
     }
 
     private static string ComputeHash(

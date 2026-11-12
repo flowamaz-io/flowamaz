@@ -71,6 +71,7 @@ public static class DependencyInjection
 
         // Workflow API services (prompt 02-04).
         services.AddScoped<WorkflowService>();
+        services.AddScoped<Workflow.Dna.WorkflowInheritanceService>();
         services.AddScoped<InstanceService>();
         services.AddScoped<GateService>();
 

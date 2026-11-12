@@ -42,7 +42,7 @@ public sealed class CopilotServiceTests
 
     private static Mock<IRateLimitService> AllowedRateLimit()
     {
-        var m = new Mock<IRateLimitService>();
+        var m = new Mock<IRateLimitService> { CallBase = true }; // CheckAndIncrementAllAsync → CheckAndIncrementAsync
         m.Setup(r => r.CheckAndIncrementAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
         return m;
@@ -50,7 +50,7 @@ public sealed class CopilotServiceTests
 
     private static Mock<IRateLimitService> BlockedRateLimit()
     {
-        var m = new Mock<IRateLimitService>();
+        var m = new Mock<IRateLimitService> { CallBase = true }; // CheckAndIncrementAllAsync → CheckAndIncrementAsync
         m.Setup(r => r.CheckAndIncrementAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
         return m;
@@ -134,7 +134,7 @@ public sealed class CopilotServiceTests
     public async Task WorkspaceRateLimited_Returns_Failure_When_Over_20_Per_Hour()
     {
         // Per-user cap passes, but the per-workspace AI-cost guard (copilot-ws:*, 20/hour) blocks.
-        var rateLimit = new Mock<IRateLimitService>();
+        var rateLimit = new Mock<IRateLimitService> { CallBase = true }; // CheckAndIncrementAllAsync → CheckAndIncrementAsync
         rateLimit.Setup(r => r.CheckAndIncrementAsync(
                 It.Is<string>(k => k.StartsWith("copilot-ws:")), 20, 3600, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
@@ -145,7 +145,24 @@ public sealed class CopilotServiceTests
         var result = await Build(rateLimit: rateLimit).ProcessCommandAsync("add step", null, WorkspaceId, UserId);
 
         result.Success.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("workspace has reached its hourly Co-pilot limit");
+        result.ErrorMessage.Should().Contain("This workspace has used its 20 Co-pilot commands for this hour");
+    }
+
+    [Fact]
+    public async Task Both_limits_are_checked_together_so_a_refusal_uses_up_nothing()
+    {
+        var rateLimit = new Mock<IRateLimitService>();
+        IReadOnlyList<RateLimitCheck>? checkedLimits = null;
+        rateLimit.Setup(r => r.CheckAndIncrementAllAsync(It.IsAny<IReadOnlyList<RateLimitCheck>>(), It.IsAny<CancellationToken>()))
+            .Callback<IReadOnlyList<RateLimitCheck>, CancellationToken>((l, _) => checkedLimits = l)
+            .ReturnsAsync(1); // the workspace limit is full
+
+        var result = await Build(rateLimit: rateLimit).ProcessCommandAsync("add step", null, WorkspaceId, UserId);
+
+        result.Success.Should().BeFalse();
+        checkedLimits!.Select(l => (l.MaxCount, l.WindowSeconds)).Should().Equal((60, 3600), (20, 3600));
+        rateLimit.Verify(r => r.CheckAndIncrementAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never, "no separate counter is touched");
     }
 
     [Fact]

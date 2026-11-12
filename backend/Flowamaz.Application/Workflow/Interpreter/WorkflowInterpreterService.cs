@@ -27,6 +27,9 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
     private readonly IAiCompletionService _completion;
     private readonly IAiTokenMeteringService _metering;
     private readonly ILogger<WorkflowInterpreterService> _logger;
+    private readonly IGateDecisionRepository? _gates;
+    private readonly IWorkflowDefinitionRepository? _definitions;
+    private readonly IOrgUserRepository? _users;
 
     public WorkflowInterpreterService(
         IWorkflowInstanceRepository instances,
@@ -36,8 +39,14 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
         IModelResolutionService modelResolution,
         IAiCompletionService completion,
         IAiTokenMeteringService metering,
-        ILogger<WorkflowInterpreterService> logger)
+        ILogger<WorkflowInterpreterService> logger,
+        IGateDecisionRepository? gates = null,
+        IWorkflowDefinitionRepository? definitions = null,
+        IOrgUserRepository? users = null)
     {
+        _gates = gates;
+        _definitions = definitions;
+        _users = users;
         _instances = instances;
         _nodeStates = nodeStates;
         _variables = variables;
@@ -94,12 +103,40 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
         var events = await _events.GetForInstanceAsync(instance.Id, ct);
         var variables = await _variables.GetForInstanceAsync(instance.Id, ct);
 
+        var definition = _definitions is null ? null
+            : await _definitions.GetByIdForWorkspaceAsync(instance.WorkflowDefinitionId, instance.WorkspaceId, ct);
+
         var sb = new StringBuilder();
         sb.AppendLine($"# Compliance Record — Instance {instance.Id}");
         sb.AppendLine();
+        if (definition is not null) sb.AppendLine($"Workflow: **{definition.Name}** (version {instance.WorkflowVersionId})  ");
         sb.AppendLine($"Status: **{instance.Status}**  ");
-        sb.AppendLine($"Started: {Format(instance.StartedAt)}  Completed: {Format(instance.CompletedAt)}");
+        sb.AppendLine($"Started: {Format(instance.StartedAt)}  Completed: {Format(instance.CompletedAt ?? instance.FailedAt)}");
+        sb.AppendLine("All times are UTC.");
         sb.AppendLine();
+
+        // Who approved what, and when: the part an auditor asks for first.
+        if (_gates is not null)
+        {
+            var gates = (await _gates.GetForInstanceAsync(instance.Id, instance.WorkspaceId, ct)).OrderBy(g => g.CreatedAt).ToList();
+            if (gates.Count > 0)
+            {
+                sb.AppendLine("## Approvals");
+                foreach (var g in gates)
+                {
+                    var who = g.DecidedByLabel
+                        ?? (g.DecidedBy is { } uid && _users is not null ? (await _users.GetByIdAsync(uid, ct))?.Email : null)
+                        ?? (g.Decision == GateDecisionStatus.Pending ? null : "the public API or a signed link");
+                    var line = g.Decision == GateDecisionStatus.Pending
+                        ? $"- Step `{g.NodeId}`: requested {Format(g.CreatedAt)}, not decided"
+                        : $"- Step `{g.NodeId}`: {g.Decision.ToString().ToLowerInvariant()} by {who} at {Format(g.DecidedAt)} (requested {Format(g.CreatedAt)})";
+                    if (!string.IsNullOrWhiteSpace(g.DecisionNote)) line += $". Note: {g.DecisionNote.Trim()}";
+                    sb.AppendLine(line);
+                }
+                sb.AppendLine();
+            }
+        }
+
         sb.AppendLine("## Event log");
         foreach (var e in events)
         {

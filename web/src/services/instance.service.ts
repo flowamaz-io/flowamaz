@@ -91,9 +91,10 @@ export const instanceService = {
     return unwrap(res);
   },
 
-  async downloadNarrative(workspaceId: string, id: string, audience: NarrativeAudience): Promise<Blob> {
+  /** The narrative as an audit-ready PDF (or its Markdown source with format 'md'). */
+  async downloadNarrative(workspaceId: string, id: string, audience: NarrativeAudience, format: 'pdf' | 'md' = 'pdf'): Promise<Blob> {
     const res = await http.post(`${instances(workspaceId)}/${id}/narrative/download`, {}, {
-      params: { audience },
+      params: { audience, format },
       responseType: 'blob',
     });
     return res.data as Blob;

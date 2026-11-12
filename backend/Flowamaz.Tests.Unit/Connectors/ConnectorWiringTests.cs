@@ -498,7 +498,7 @@ public class ConnectorWiringTests
         var email = new Mock<IEmailService>();
         email.Setup(e => e.SendAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
-        var limits = new Mock<IRateLimitService>();
+        var limits = new Mock<IRateLimitService> { CallBase = true }; // CheckAndIncrementAllAsync → CheckAndIncrementAsync
         var ws = Guid.NewGuid();
         var handler = new EmailSendHandler(email.Object, NullLogger<EmailSendHandler>.Instance, limits.Object,
             new ConnectorCallContext { WorkspaceId = ws }, Config(("Connectors:Email:MaxPerHour", "2")));
