@@ -51,3 +51,15 @@ public sealed class PortalRequestValidator : AbstractValidator<PortalRequest>
             .WithMessage("The return URL must point back to this application. Use a URL on the platform domain.");
     }
 }
+
+/// <summary>An agreed public API limit: 0 (no per-minute limit) up to 100,000 calls a minute, or null for the plan's.</summary>
+public sealed class SetApiLimitRequestValidator : AbstractValidator<SetApiLimitRequest>
+{
+    public SetApiLimitRequestValidator()
+    {
+        RuleFor(x => x.PerMinute)
+            .InclusiveBetween(0, Flowamaz.Application.Platform.Services.PlatformApiLimitService.MaxPerMinute)
+            .When(x => x.PerMinute is not null)
+            .WithMessage("The limit must be between 0 and 100,000 calls a minute (0 means no per-minute limit). Enter a number in that range, or clear it to use the plan's limit.");
+    }
+}

@@ -79,6 +79,7 @@ public class FlowAmazDbContext : DbContext
     public DbSet<ScimToken> ScimTokens => Set<ScimToken>();
     public DbSet<ScimGroup> ScimGroups => Set<ScimGroup>();
     public DbSet<ScimGroupMember> ScimGroupMembers => Set<ScimGroupMember>();
+    public DbSet<ScimRoleResync> ScimRoleResyncs => Set<ScimRoleResync>();
 
     public DbSet<ConnectorRating> ConnectorRatings => Set<ConnectorRating>();
     public DbSet<ConnectorSubmission> ConnectorSubmissions => Set<ConnectorSubmission>();

@@ -98,7 +98,7 @@ public class WorkspaceServicesCoverageTests
 
     private (WorkspaceMemberService svc, Mock<IWorkspaceMemberRepository> repo) NewMemberService()
     {
-        var repo = new Mock<IWorkspaceMemberRepository>();
+        var repo = new Mock<IWorkspaceMemberRepository> { CallBase = true }; // GetFreshAsync → GetAsync
         var edition = new Mock<IEditionService>();
         return (new WorkspaceMemberService(repo.Object, _uow.Object, edition.Object, NullLogger<WorkspaceMemberService>.Instance), repo);
     }

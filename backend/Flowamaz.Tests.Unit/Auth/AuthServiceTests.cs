@@ -30,6 +30,7 @@ public class AuthServiceTests
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
     private readonly Mock<ISsoService> _sso = new();
+    private readonly Mock<ITokenRevocationService> _revocation = new();
 
     private const string GoodPassword = "Sup3rSecret!";
 
@@ -58,7 +59,8 @@ public class AuthServiceTests
             Options.Create(new JwtOptions { AccessTokenExpiryMinutes = 15, RefreshTokenExpiryDays = 7 }),
             config,
             NullLogger<AuthService>.Instance,
-            _sso.Object);
+            _sso.Object,
+            _revocation.Object);
     }
 
     private static OrgUser UserWithPassword(string password) => new()
@@ -327,6 +329,19 @@ public class AuthServiceTests
         BCrypt.Net.BCrypt.Verify("NewPass1!", user.PasswordHash).Should().BeTrue();
         token.UsedAt.Should().NotBeNull();
         _refreshRepo.Verify(r => r.RevokeAllForUserAsync(user.Id, It.IsAny<CancellationToken>()), Times.Once);
+        // …and the current access token stops working too, not only when it expires.
+        _revocation.Verify(r => r.RevokeUserAccessAsync(user.Id, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetMeAsync_says_whether_the_user_is_flowamaz_staff()
+    {
+        var user = UserWithPassword(GoodPassword);
+        _orgUserRepo.Setup(r => r.GetByIdAsync(user.Id, It.IsAny<CancellationToken>())).ReturnsAsync(user);
+        _orgService.Setup(o => o.GetByIdAsync(user.OrgId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Organisation { Id = user.OrgId, Slug = "acme" });
+
+        (await CreateService().GetMeAsync(user.Id)).IsPlatformStaff.Should().BeFalse("no staff organisations are configured");
     }
 
     [Fact]

@@ -38,6 +38,7 @@ public class SsoServiceTests
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<IUnitOfWorkTransaction> _tx = new();
     private readonly Mock<IRefreshTokenRepository> _refreshTokens = new();
+    private readonly Mock<ITokenRevocationService> _revocation = new();
     private readonly Mock<IScimRepository> _scim = new();
     private static readonly string Binding = SsoBrowserBinding.For("relay");
 
@@ -68,7 +69,7 @@ public class SsoServiceTests
         _configs.Object, _orgs.Object, _plans.Object, _orgUsers.Object, _workspaces.Object, _members.Object, _refreshTokens.Object,
         _protector.Object, _saml.Object, _oidc.Object, _states.Object, _replay.Object, _uow.Object,
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Platform:BaseUrl"] = "https://app.flowamaz.io" }).Build(),
-        NullLogger<SsoService>.Instance, scim: _scim.Object);
+        NullLogger<SsoService>.Instance, scim: _scim.Object, revocation: _revocation.Object);
 
     private void Saml(Action<OrgSsoConfig>? change = null)
     {
@@ -611,6 +612,45 @@ public class SsoServiceTests
         await Service().ConfigureAsync(OrgId, OrgSlug, on, Guid.NewGuid()); // already on: nothing more to revoke
 
         _refreshTokens.Verify(r => r.RevokeAllForOrgNonOwnersAsync(OrgId, It.IsAny<CancellationToken>()), Times.Once);
+        _revocation.Verify(r => r.RevokeOrgNonOwnerAccessAsync(OrgId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ── Linked sign-ins ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Unlinking_an_identity_clears_it_and_ends_that_persons_sessions()
+    {
+        var ana = new OrgUser { Id = Guid.NewGuid(), OrgId = OrgId, Email = "ana@acme.test", SsoSubject = "idp|1" };
+        _orgUsers.Setup(r => r.GetByIdAsync(ana.Id, It.IsAny<CancellationToken>())).ReturnsAsync(ana);
+
+        (await Service().UnlinkIdentityAsync(OrgId, ana.Id, requestedBy: Guid.NewGuid())).Should().BeTrue();
+
+        ana.SsoSubject.Should().BeNull();
+        _refreshTokens.Verify(r => r.RevokeAllForUserAsync(ana.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _revocation.Verify(r => r.RevokeUserAccessAsync(ana.Id, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Unlinking_your_own_identity_keeps_you_signed_in()
+    {
+        var owner = new OrgUser { Id = Guid.NewGuid(), OrgId = OrgId, IsOrgOwner = true, SsoSubject = "idp|me" };
+        _orgUsers.Setup(r => r.GetByIdAsync(owner.Id, It.IsAny<CancellationToken>())).ReturnsAsync(owner);
+
+        (await Service().UnlinkIdentityAsync(OrgId, owner.Id, requestedBy: owner.Id)).Should().BeTrue();
+
+        owner.SsoSubject.Should().BeNull();
+        _refreshTokens.Verify(r => r.RevokeAllForUserAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _revocation.Verify(r => r.RevokeUserAccessAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Unlinking_someone_from_another_organisation_finds_nobody()
+    {
+        var stranger = new OrgUser { Id = Guid.NewGuid(), OrgId = Guid.NewGuid(), SsoSubject = "idp|x" };
+        _orgUsers.Setup(r => r.GetByIdAsync(stranger.Id, It.IsAny<CancellationToken>())).ReturnsAsync(stranger);
+
+        (await Service().UnlinkIdentityAsync(OrgId, stranger.Id, Guid.NewGuid())).Should().BeFalse();
+        stranger.SsoSubject.Should().Be("idp|x");
     }
 
     [Fact]

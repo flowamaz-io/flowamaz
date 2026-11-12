@@ -12,15 +12,19 @@ namespace Flowamaz.Tests.Unit.Workspaces;
 
 public class WorkspaceMemberServiceTests
 {
-    private readonly Mock<IWorkspaceMemberRepository> _memberRepo = new();
+    private readonly Mock<IWorkspaceMemberRepository> _memberRepo = new() { CallBase = true }; // GetFreshAsync → GetAsync
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<Flowamaz.Core.Interfaces.Services.IEditionService> _edition = new();
     private readonly Guid _workspaceId = Guid.NewGuid();
+    private readonly Mock<Flowamaz.Core.Interfaces.Services.ITokenRevocationService> _revocation = new();
+    private readonly Mock<IUnitOfWorkTransaction> _tx = new();
 
     private WorkspaceMemberService CreateService()
     {
         _uow.Setup(u => u.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        return new WorkspaceMemberService(_memberRepo.Object, _uow.Object, _edition.Object, NullLogger<WorkspaceMemberService>.Instance);
+        _uow.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(_tx.Object);
+        return new WorkspaceMemberService(_memberRepo.Object, _uow.Object, _edition.Object, NullLogger<WorkspaceMemberService>.Instance,
+            revocation: _revocation.Object);
     }
 
     [Fact]
@@ -82,6 +86,26 @@ public class WorkspaceMemberServiceTests
 
         member.Role.Should().Be(WorkspaceRole.Operator);
         _memberRepo.Verify(r => r.Update(member), Times.Once);
+        // Counted under the workspace's admin lock, committed, then the member's current token ends.
+        _memberRepo.Verify(r => r.LockAdminsAsync(_workspaceId, It.IsAny<CancellationToken>()), Times.Once);
+        _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _revocation.Verify(r => r.RevokeUserAccessAsync(target, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateRoleAsync_refused_as_last_admin_commits_nothing_and_keeps_the_token()
+    {
+        var target = Guid.NewGuid();
+        _memberRepo.Setup(r => r.GetAsync(_workspaceId, target, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkspaceMember { WorkspaceId = _workspaceId, OrgUserId = target, Role = WorkspaceRole.Admin, IsActive = true });
+        _memberRepo.Setup(r => r.CountActiveAdminsAsync(_workspaceId, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        var act = () => CreateService().UpdateRoleAsync(_workspaceId, target, WorkspaceRole.Viewer, Guid.NewGuid());
+
+        await act.Should().ThrowAsync<LastAdminException>();
+        _memberRepo.Verify(r => r.LockAdminsAsync(_workspaceId, It.IsAny<CancellationToken>()), Times.Once);
+        _tx.Verify(t => t.CommitAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _revocation.Verify(r => r.RevokeUserAccessAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

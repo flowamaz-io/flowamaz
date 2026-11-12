@@ -75,6 +75,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'settings/publisher', name: 'publisher', component: () => import('@/views/settings/PublisherSettingsView.vue') },
       { path: 'settings/purchases', name: 'purchases', component: () => import('@/views/settings/PurchasesView.vue') },
       { path: 'settings/audit', name: 'audit', component: () => import('@/views/settings/AuditLogView.vue') },
+      // Flowamaz staff only; the page and the API both check (the API is what enforces it).
+      { path: 'platform/api-limits', name: 'platform-api-limits', component: () => import('@/views/platform/PlatformApiLimitsView.vue') },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

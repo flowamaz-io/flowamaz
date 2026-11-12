@@ -56,6 +56,9 @@ public sealed class SsoService : ISsoService
     private readonly IScimRepository? _scim;
     private readonly SsoMembershipSync _sync;
 
+    private const int LinkedIdentityPageSize = 25;
+    private readonly ITokenRevocationService? _revocation;
+
     public SsoService(
         IOrgSsoConfigRepository configs,
         IOrganisationRepository orgs,
@@ -73,8 +76,10 @@ public sealed class SsoService : ISsoService
         IConfiguration configuration,
         ILogger<SsoService> logger,
         IAuditService? audit = null,
-        IScimRepository? scim = null)
+        IScimRepository? scim = null,
+        ITokenRevocationService? revocation = null)
     {
+        _revocation = revocation;
         _configs = configs;
         _orgs = orgs;
         _plans = plans;
@@ -188,7 +193,11 @@ public sealed class SsoService : ISsoService
         // Turning on "require SSO" ends existing password sessions, so members re-authenticate through the IdP.
         var revoked = 0;
         if (config is { IsActive: true, RequireSso: true } && !wasRequired)
+        {
             revoked = await _refreshTokens.RevokeAllForOrgNonOwnersAsync(orgId, ct);
+            // …and their current access tokens, so nobody keeps a password session for another quarter of an hour.
+            if (_revocation is not null) await _revocation.RevokeOrgNonOwnerAccessAsync(orgId, ct);
+        }
 
         Audit(orgId, configuredBy, "sso.configured", "updated", new
         {
@@ -210,6 +219,62 @@ public sealed class SsoService : ISsoService
         _configs.Update(config);
         await _unitOfWork.SaveChangesAsync(ct);
         Audit(orgId, null, "sso.disabled", "updated", null, ct);
+    }
+
+    public async Task<SsoLinkedIdentityPage> GetLinkedIdentitiesAsync(Guid orgId, string? search, CancellationToken ct = default)
+    {
+        _logger.LogDebug("SsoService.GetLinkedIdentitiesAsync enter org={OrgId}", orgId);
+        try
+        {
+            var (users, total) = await _orgUsers.GetSsoLinkedAsync(orgId, search, LinkedIdentityPageSize, ct);
+            var page = new SsoLinkedIdentityPage(
+                users.Select(u => new SsoLinkedIdentityDto(u.Id, u.Email, u.Name, u.IsOrgOwner, u.LastLoginAt)).ToList(), total);
+            _logger.LogDebug("SsoService.GetLinkedIdentitiesAsync exit org={OrgId} total={Total}", orgId, total);
+            return page;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "SsoService.GetLinkedIdentitiesAsync error org={OrgId}", orgId);
+            throw;
+        }
+    }
+
+    public async Task<bool> UnlinkIdentityAsync(Guid orgId, Guid orgUserId, Guid requestedBy, CancellationToken ct = default)
+    {
+        _logger.LogInformation("SsoService.UnlinkIdentityAsync enter org={OrgId} user={UserId}", orgId, orgUserId);
+        try
+        {
+            var user = await _orgUsers.GetByIdAsync(orgUserId, ct);
+            if (user is null || user.OrgId != orgId) return false;
+            if (user.SsoSubject is null) return true; // already unlinked: nothing to do
+
+            user.SsoSubject = null;
+            // The old identity may belong to someone else now, so whatever it signed in stops working too.
+            var endSessions = orgUserId != requestedBy;
+            if (endSessions) await _refreshTokens.RevokeAllForUserAsync(user.Id, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+            if (endSessions && _revocation is not null) await _revocation.RevokeUserAccessAsync(user.Id, ct);
+
+            _audit?.RecordAsync(new Core.Models.AuditEventRequest
+            {
+                OrgId = orgId,
+                ActorUserId = requestedBy,
+                ActorType = "user",
+                EventType = "sso.identity_unlinked",
+                ResourceType = "user",
+                ResourceId = user.Id,
+                ResourceLabel = user.Email,
+                Action = "updated",
+                Metadata = new { sessionsEnded = endSessions },
+            }, ct);
+            _logger.LogInformation("SsoService.UnlinkIdentityAsync exit org={OrgId} user={UserId} sessionsEnded={Ended}", orgId, orgUserId, endSessions);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "SsoService.UnlinkIdentityAsync error org={OrgId} user={UserId}", orgId, orgUserId);
+            throw;
+        }
     }
 
     public async Task<bool> IsPasswordLoginBlockedAsync(Guid orgId, OrgUser user, CancellationToken ct = default)

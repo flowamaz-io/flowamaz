@@ -87,6 +87,18 @@ http.interceptors.response.use(
   },
 );
 
+/**
+ * Gets a fresh access token with the refresh cookie (shared with the 401 interceptor, so concurrent callers make one
+ * call). For connections that can't use the interceptor, such as the live-run WebSocket after a role change.
+ * Resolves to null when the session has ended.
+ */
+export function refreshAccessToken(): Promise<string | null> {
+  refreshInFlight ??= performRefresh().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
 /** Unwraps the `{ success, data, ... }` envelope and returns the payload. */
 export function unwrap<T>(response: AxiosResponse<ApiEnvelope<T>>): T {
   return response.data.data;

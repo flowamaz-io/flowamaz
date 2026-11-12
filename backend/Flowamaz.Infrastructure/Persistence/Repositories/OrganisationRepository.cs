@@ -22,6 +22,17 @@ public sealed class OrganisationRepository(FlowAmazDbContext db) : IOrganisation
     public Task<Organisation?> GetByStripeCustomerIdAsync(string stripeCustomerId, CancellationToken cancellationToken = default) =>
         db.Organisations.FirstOrDefaultAsync(o => o.StripeCustomerId == stripeCustomerId, cancellationToken);
 
+    public Task<List<Organisation>> SearchAsync(string? search, int take, CancellationToken cancellationToken = default)
+    {
+        var query = db.Organisations.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = $"%{search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
+            query = query.Where(o => EF.Functions.ILike(o.Name, pattern, "\\") || EF.Functions.ILike(o.Slug, pattern, "\\"));
+        }
+        return query.OrderBy(o => o.Name).Take(take).ToListAsync(cancellationToken);
+    }
+
     public Task<bool> SlugExistsAsync(string slug, CancellationToken cancellationToken = default) =>
         db.Organisations.AnyAsync(o => o.Slug == slug, cancellationToken);
 

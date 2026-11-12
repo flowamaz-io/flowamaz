@@ -2,13 +2,14 @@
 
 A guided, human-like test of Flowamaz in your real Chrome browser: 19 journeys covering sign-up,
 onboarding, workspaces, templates, the canvas, approvals, webhooks, credentials, publishing and
-settings. It ends by **building the Loan Approval workflow in the UI (J17)** and driving it through
-the public API with a mock loan application, without any UI (J18). **Stripe payments are skipped.** The
+settings. It ends by **building the Loan Approval workflow in the UI (J17)** and checking the public API's
+access rules (J18). The loan application that uses that workflow is `flowamaz-io/loan-app-sample`, with
+its own end-to-end check. **Stripe payments are skipped.** The
 paid-template lock is still checked without paying.
 
 ## What you need
-- Docker, the .NET 10 SDK and Node 22 on this machine (the same as for development). Port 4010 must be free
-  for the mock loan application in J18.
+- Docker, the .NET 10 SDK and Node 22 on this machine (the same as for development). The start script also
+  runs Mailpit, which catches every email the app sends: inbox at http://localhost:8026 (SMTP on 1026).
 - Chrome with the **Claude in Chrome** extension installed and signed in.
 - Claude Code.
 - *Optional:* an Anthropic API key. Without one, the AI creation journeys (J11–J13) are recorded as

@@ -43,6 +43,8 @@ public sealed class InstanceStatusWebSocketHandler
         _maxPerWorkspace = Math.Max(1, configuration.GetValue<int?>("WebSocket:MaxConnectionsPerWorkspace") ?? 100);
     }
 
+    private static readonly TimeSpan RevocationCheckInterval = TimeSpan.FromSeconds(15);
+
     public async Task HandleAsync(HttpContext context, Guid workspaceId, Guid instanceId)
     {
         if (!context.WebSockets.IsWebSocketRequest)
@@ -53,6 +55,11 @@ public sealed class InstanceStatusWebSocketHandler
 
         var token = context.Request.Query["token"].ToString();
         var principal = string.IsNullOrEmpty(token) ? null : _jwt.ValidateAccessToken(token);
+        var revocation = context.RequestServices.GetRequiredService<Core.Interfaces.Services.ITokenRevocationService>();
+        if (principal is not null && await Identity.AccessTokenRevocation.IsRevokedAsync(context, principal.Claims, revocation, useCache: false))
+        {
+            principal = null; // issued before a deactivation or role change: the live view needs a fresh token
+        }
         if (principal is null)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -81,9 +88,21 @@ public sealed class InstanceStatusWebSocketHandler
         {
             string? lastStatus = null;
             string? lastNode = null;
+            var nextRevocationCheck = DateTime.UtcNow.Add(RevocationCheckInterval);
 
             while (socket.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
+                // A deactivation or role change after connecting ends the stream too (the client reconnects with a fresh token).
+                if (DateTime.UtcNow >= nextRevocationCheck)
+                {
+                    nextRevocationCheck = DateTime.UtcNow.Add(RevocationCheckInterval);
+                    if (await Identity.AccessTokenRevocation.IsRevokedAsync(context, principal.Claims, revocation, useCache: false))
+                    {
+                        await socket.CloseAsync((WebSocketCloseStatus)4401, "session ended", CancellationToken.None);
+                        return;
+                    }
+                }
+
                 var snapshot = await ReadInstanceAsync(workspaceId, instanceId, ct);
                 if (snapshot is null)
                 {

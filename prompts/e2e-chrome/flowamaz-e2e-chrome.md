@@ -107,8 +107,11 @@ never enter card details and never complete a Stripe page.
    **Expect:** an error message that says what to do, not "Something went wrong". Quote it.
 4. Sign in correctly. **Expect:** you land on `/workflows` (the redirect target), not onboarding.
 5. Open `/forgot-password`, enter the email and organisation URL, and click **"Send reset link"**.
-   **Expect:** "If that email exists, a reset link has been sent. Check your inbox." No email is
-   sent locally. In the API log, confirm a line containing `NOT sent` for the reset email.
+   **Expect:** "If that email exists, a reset link has been sent. Check your inbox."
+6. Open the local inbox, http://localhost:8026, in a new tab. **Expect:** a password reset email to the
+   owner email. Open its link. **Expect:** the reset page opens for your organisation. Set a new password
+   (keep the old one in your notes as well: you need the new one from here on), then sign in with it.
+   **Expect:** you land in the app. Don't copy the link or its token into the results file.
 
 ## J3 — Workspaces
 
@@ -404,69 +407,24 @@ with the Read tool.
 9. Go back to the workflow page and click **"Publish"**. **Expect:** toast "Workflow published."
    (Its slug gets a random suffix, e.g. `loan-approval-2d29bd`. You'll read it from the public
    API in J18.)
-10. **API key for the loan application:** open `/settings/api-keys` and click **"Create key"**.
-    - Name: `Loan app (mock)`
-    - Environment: **Dev**
-    - Scopes: tick **Read workflows**, **Trigger workflows**, **Read instances** and **Write
-      instances**. Leave the others unticked.
-    - Click **"Create key"**. **Expect:** "Copy your new API key now — it won't be shown again."
-    - Copy the key and write it with the shell, **not** into the results file:
-      ```bash
-      printf 'FLOWAMAZ_URL=http://localhost:8307\nFLOWAMAZ_API_KEY=%s\n' '<KEY>' > samples/loan-app-mock/.env.local
-      ```
-      (The file is git-ignored.)
-11. Create a second key, `Read only (scope check)`, with only **Read workflows** and **Read
-    instances** ticked. Keep it in memory for J18.
+10. Create an API key, `Read only (scope check)`, in `/settings/api-keys` with only **Read workflows**
+    and **Read instances** ticked. Keep it in memory for J18; don't write it to any file.
 
-## J18 — Mock loan application through the API (no UI)
+## J18 — Public API checks (no UI)
 
-The loan application doesn't exist yet. `samples/loan-app-mock` stands in for it:
-- `server.mjs` receives the workflow's calls: it issues Letter of Offer numbers and records the
-  outcome events.
-- `run-scenarios.mjs` plays the applicants, credit officer, approvers and customer through the
-  Flowamaz **public API**.
+The full loan application (UI, callbacks, scenarios A–I) lives in its own repository,
+`flowamaz-io/loan-app-sample`, with its own end-to-end check (`node e2e/run-scenarios.mjs`, see its
+README). It is not part of this run. Here, check the public API's access rules with the read-only key.
 
-1. In a separate shell, start the callback server and leave it running:
-   `node samples/loan-app-mock/server.mjs`. **Expect:**
-   "Mock loan application listening on http://localhost:4010".
-2. Check the key works:
-   `curl -s -H "Authorization: Bearer <KEY>" http://localhost:8307/api/public/v1/workflows`.
-   **Expect:** JSON listing **Loan Approval** with status Published. Note its `slug` for step 4.
-3. Run the scenarios: `node samples/loan-app-mock/run-scenarios.mjs`. If more than one published
-   workflow is called "Loan Approval", set `WORKFLOW_SLUG=<slug>` first.
-   **Expect:** `8/8 scenarios passed`:
-
-   | Scenario | Path | Outcome |
-   |---|---|---|
-   | A 30K | review, L1, customer accepts | Loan accepted |
-   | B 120K | review, L1, L2, customer accepts | Loan accepted |
-   | C 400K | review, L1, L2, L3, customer accepts | Loan accepted |
-   | D 90K | review rejects | Application rejected, no LO |
-   | E 180K | review, L1, L2 rejects | Application rejected, no LO |
-   | F 75K | review, L1, L2, customer declines | Offer declined |
-   | G 50K exactly | review, L1 only | Loan accepted |
-   | H 250K exactly | review, L1, L2 only | Loan accepted |
-
-   Paste the script's summary lines into the results file, with one row per scenario. For a FAIL,
-   include the `✗` lines it prints and the scenario's entry from
-   `samples/loan-app-mock/data/results-*.json`.
-4. **Scope check** with the read-only key from J17:
-   - `curl -s -X POST -H "Authorization: Bearer <READ_ONLY_KEY>" -H "Content-Type: application/json" -d '{}' http://localhost:8307/api/public/v1/workflows/<slug>/trigger`
-     **Expect:** HTTP 403, code `insufficient_scope`, naming `workflows:trigger`.
-   - The same key on `GET /api/public/v1/workflows`. **Expect:** 200.
-   - Any 2xx on the trigger call is a **Critical** FAIL: a read-only key could start loans.
-5. Check the runs in the UI:
-   - `/instances`: 8 new runs of Loan Approval, all **Completed**.
-   - Open scenario C (the 400K run, with application id ending `-C` in its variables). **Expect:**
-     the timeline passes Credit review, all three approval levels, Create Letter of Offer and
-     Customer accepts, then ends at "Loan accepted". The **variables** tab shows `loan_amount`
-     400000 and the `create-lo.output` with an `lo_number`.
-   - Open scenario D. **Expect:** it goes straight from Credit review to "Notify: application
-     rejected" and **no** approval levels ran.
-   - `/gates` Pending tab: **Expect:** no leftover Loan Approval approvals.
-   - `/settings/audit`: **Expect:** the gate approvals and rejections from these runs are listed.
-     Record which actor is shown for them (observation, not FAIL).
-6. Stop the callback server (Ctrl+C in its shell).
+1. `curl -s -H "Authorization: Bearer <READ_ONLY_KEY>" http://localhost:8307/api/public/v1/workflows`.
+   **Expect:** 200, JSON listing **Loan Approval** with status Published. Note its `slug`.
+2. `curl -s -X POST -H "Authorization: Bearer <READ_ONLY_KEY>" -H "Content-Type: application/json" -d '{}' http://localhost:8307/api/public/v1/workflows/<slug>/trigger`
+   **Expect:** HTTP 403, code `insufficient_scope`, naming `workflows:trigger`.
+   Any 2xx is a **Critical** FAIL: a read-only key could start loans.
+3. `curl -s -X POST -H "Authorization: Bearer <READ_ONLY_KEY>" -H "Content-Type: application/json" -d '{}' http://localhost:8307/api/public/v1/instances/00000000-0000-0000-0000-000000000000/cancel`
+   **Expect:** HTTP 403 naming `instances:write` (not 404: the scope is checked first).
+4. In `/settings/api-keys`, revoke `Read only (scope check)`, then repeat step 1.
+   **Expect:** HTTP 401.
 
 ## J19 — Wrap-up
 
@@ -489,8 +447,8 @@ The loan application doesn't exist yet. `samples/loan-app-mock` stands in for it
 - No toast after saving in the editor or approving/rejecting a gate. The status text or row
   updates instead.
 - Inviting someone who is not yet an organisation member is not built yet (J15 records the message). Log it as a known gap, not a new bug.
-- Emails (password reset, gate notifications, invites) are not sent locally. The API log shows
-  `NOT sent`.
+- Emails (password reset, gate notifications, invites) arrive in the local Mailpit inbox,
+  http://localhost:8026, not in a real mailbox.
 - A 401 in the console on `/register` or `/login` is the background session check.
 - In stub AI mode, plain English, photo and conversation generation can't produce a workflow.
   Clarifying questions still work.

@@ -28,6 +28,8 @@ public sealed class BillingController : ControllerBase
     private readonly IValidator<PortalRequest> _portalValidator;
     private readonly ILogger<BillingController> _logger;
 
+    private readonly IWorkspaceMemberRepository? _members;
+
     public BillingController(
         IStripeService stripe,
         IPlanRepository plans,
@@ -37,8 +39,10 @@ public sealed class BillingController : ControllerBase
         ICurrentUserService currentUser,
         IValidator<CheckoutRequest> checkoutValidator,
         IValidator<PortalRequest> portalValidator,
-        ILogger<BillingController> logger)
+        ILogger<BillingController> logger,
+        IWorkspaceMemberRepository? members = null)
     {
+        _members = members;
         _stripe = stripe;
         _plans = plans;
         _organisations = organisations;
@@ -102,7 +106,9 @@ public sealed class BillingController : ControllerBase
             TrialDaysRemaining: daysRemaining,
             CurrentPeriodEnd: sub?.CurrentPeriodEnd,
             PaymentFailed: sub?.PaymentFailed ?? false,
-            HasBillingAccount: !string.IsNullOrWhiteSpace(org.StripeCustomerId)));
+            HasBillingAccount: !string.IsNullOrWhiteSpace(org.StripeCustomerId),
+            ApiCallsPerMinute: org.ApiRateLimitPerMinute ?? plan?.Limits.ApiRateLimitPerMinute ?? 0,
+            ApiLimitIsCustom: org.ApiRateLimitPerMinute is not null));
     }
 
     /// <summary>Create a Stripe Checkout session for an upgrade. Returns the redirect URL.</summary>
@@ -175,6 +181,8 @@ public sealed class BillingController : ControllerBase
         var plan = await _plans.GetByIdAsync(org.PlanId, cancellationToken);
         var period = DateTime.UtcNow.ToString("yyyy-MM");
         var usage = await _usage.GetForPeriodAsync(orgId, period, cancellationToken);
+        // Nothing records a member peak yet, so show today's largest workspace (the limit is per workspace).
+        var largestWorkspace = _members is null ? 0 : await _members.GetLargestWorkspaceSizeAsync(orgId, cancellationToken);
 
         _logger.LogInformation("BillingController.Usage exit org={OrgId}", orgId);
         return Ok(new BillingUsageResponse(
@@ -183,7 +191,7 @@ public sealed class BillingController : ControllerBase
             RunsLimit: plan?.Limits.MaxRunsPerMonth ?? 0,
             AiCallsUsed: usage?.AiCallsCount ?? 0,
             AiCostUsd: usage?.AiCostUsd ?? 0m,
-            MembersUsed: usage?.MemberPeak ?? 0,
+            MembersUsed: Math.Max(usage?.MemberPeak ?? 0, largestWorkspace),
             MembersLimit: plan?.Limits.MaxMembersPerWorkspace ?? 0,
             WorkflowsLimit: plan?.Limits.MaxWorkflowDefinitions ?? 0));
     }
@@ -244,7 +252,11 @@ public sealed record CurrentSubscriptionResponse(
     int? TrialDaysRemaining,
     DateTime? CurrentPeriodEnd,
     bool PaymentFailed,
-    bool HasBillingAccount);
+    bool HasBillingAccount,
+    /// <summary>Public API calls a minute in force for the organisation (0 = no per-minute limit).</summary>
+    int ApiCallsPerMinute = 0,
+    /// <summary>The limit was agreed with Flowamaz rather than coming from the plan.</summary>
+    bool ApiLimitIsCustom = false);
 
 public sealed record CheckoutRequest(Guid PlanId, bool Annual, string SuccessUrl, string CancelUrl);
 

@@ -10,6 +10,12 @@ namespace Flowamaz.Api.Middleware;
 /// a Bearer JWT (human) or a token with the <c>fmz_</c> prefix (workspace API key). Requests with
 /// neither proceed unauthenticated — controllers decide what to require. Exempt: /api/v1/auth/*,
 /// /scalar, /health, /openapi.
+/// <para>
+/// A signed, unexpired JWT is still refused (the request stays unauthenticated, so it gets a 401) when it was
+/// issued before a revocation marker for its user or organisation — set on deactivation, password reset, require-SSO
+/// and role changes (<see cref="ITokenRevocationService"/>). The browser then refreshes: with the refresh token still
+/// valid it gets a token with the current roles; with it revoked, the person is signed out.
+/// </para>
 /// </summary>
 public sealed class JwtAuthMiddleware
 {
@@ -28,7 +34,8 @@ public sealed class JwtAuthMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context, IJwtService jwtService, IWorkspaceApiKeyService apiKeyService)
+    public async Task InvokeAsync(
+        HttpContext context, IJwtService jwtService, IWorkspaceApiKeyService apiKeyService, ITokenRevocationService revocation)
     {
         var path = context.Request.Path.Value ?? string.Empty;
         if (IsExempt(path))
@@ -47,26 +54,35 @@ public sealed class JwtAuthMiddleware
             }
             else
             {
-                ResolveJwt(context, jwtService, token);
+                await ResolveJwtAsync(context, jwtService, revocation, token);
             }
         }
 
         await _next(context);
     }
 
-    private void ResolveJwt(HttpContext context, IJwtService jwtService, string token)
+    private async Task ResolveJwtAsync(HttpContext context, IJwtService jwtService, ITokenRevocationService revocation, string token)
     {
         var principal = jwtService.ValidateAccessToken(token);
         if (principal is null) return;
 
+        var orgUserId = jwtService.ExtractOrgUserId(principal);
+        var orgId = jwtService.ExtractOrgId(principal);
+        var isOrgOwner = principal.FindFirst("is_org_owner")?.Value == "true";
+        if (await Identity.AccessTokenRevocation.IsRevokedAsync(context, principal.Claims, revocation))
+        {
+            _logger.LogInformation("JwtAuthMiddleware.ResolveJwt revoked token orgUserId={UserId}", orgUserId);
+            return;
+        }
+
         context.Items[CurrentUserContext.HttpContextItemKey] = new CurrentUserContext
         {
-            OrgUserId = jwtService.ExtractOrgUserId(principal),
-            OrgId = jwtService.ExtractOrgId(principal),
+            OrgUserId = orgUserId,
+            OrgId = orgId,
             OrgSlug = principal.FindFirst("org_slug")?.Value,
             Email = principal.FindFirst(JwtRegisteredClaimNames.Email)?.Value,
             Name = principal.FindFirst("name")?.Value,
-            IsOrgOwner = principal.FindFirst("is_org_owner")?.Value == "true",
+            IsOrgOwner = isOrgOwner,
             IsApiKey = false,
             WorkspaceMemberships = jwtService.ExtractWorkspaceMemberships(principal),
         };

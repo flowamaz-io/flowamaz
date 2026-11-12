@@ -29,7 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function applyMe(me: MeResponse): void {
-    user.value = { id: me.id, email: me.email, name: me.name, orgId: me.orgId, orgSlug: me.orgSlug, isOrgOwner: me.isOrgOwner };
+    user.value = { id: me.id, email: me.email, name: me.name, orgId: me.orgId, orgSlug: me.orgSlug, isOrgOwner: me.isOrgOwner, isPlatformStaff: me.isPlatformStaff === true };
     workspaces.value = me.workspaces;
     // Don't carry the previous account's workspace into this session.
     useWorkspaceStore().adoptMemberships(me.workspaces.map((w) => w.id));

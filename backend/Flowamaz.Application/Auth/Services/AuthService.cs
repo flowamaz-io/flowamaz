@@ -48,6 +48,9 @@ public sealed class AuthService
     private readonly string _platformBaseUrl;
     private readonly ILogger<AuthService> _logger;
 
+    private readonly ITokenRevocationService? _revocation;
+    private readonly IConfiguration _configuration;
+
     public AuthService(
         IValidator<RegisterRequest> registerValidator,
         IValidator<LoginRequest> loginValidator,
@@ -63,8 +66,10 @@ public sealed class AuthService
         IOptions<JwtOptions> jwtOptions,
         IConfiguration configuration,
         ILogger<AuthService> logger,
-        Core.Interfaces.Services.ISsoService? sso = null)
+        Core.Interfaces.Services.ISsoService? sso = null,
+        ITokenRevocationService? revocation = null)
     {
+        _revocation = revocation;
         _sso = sso;
         _registerValidator = registerValidator;
         _loginValidator = loginValidator;
@@ -78,6 +83,7 @@ public sealed class AuthService
         _emailService = emailService;
         _unitOfWork = unitOfWork;
         _jwtOptions = jwtOptions.Value;
+        _configuration = configuration;
         _platformBaseUrl = configuration["PLATFORM_BASE_URL"] ?? configuration["Platform:BaseUrl"] ?? "https://flowamaz.io";
         _logger = logger;
     }
@@ -249,7 +255,8 @@ public sealed class AuthService
                 .ToList();
 
             _logger.LogDebug("AuthService.GetMeAsync exit userId={UserId} workspaceCount={Count}", orgUserId, workspaces.Count);
-            return new MeResponse(user.Id, user.Email, user.Name, user.OrgId, org.Slug, workspaces, user.IsOrgOwner);
+            return new MeResponse(user.Id, user.Email, user.Name, user.OrgId, org.Slug, workspaces, user.IsOrgOwner,
+                Platform.PlatformStaff.IsStaff(_configuration, user.OrgId, user.IsOrgOwner));
         }
         catch (Exception ex)
         {
@@ -345,6 +352,8 @@ public sealed class AuthService
 
             await _refreshTokenRepository.RevokeAllForUserAsync(user.Id, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            // Whoever knew the old password may hold a current access token too: it stops working now.
+            if (_revocation is not null) await _revocation.RevokeUserAccessAsync(user.Id, cancellationToken);
 
             _logger.LogInformation("AuthService.ResetPasswordAsync exit userId={UserId} passwordReset=true", user.Id);
         }

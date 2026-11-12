@@ -51,7 +51,7 @@ if [[ -n "$(port_pids 8307)$(port_pids 5173)" ]]; then
   stop_app
 fi
 
-echo "1/4 Postgres + Redis (Docker)…"
+echo "1/4 Postgres + Redis + Mailpit (Docker)…"
 docker compose -f "$ROOT/infrastructure/docker-compose.dev.yml" up -d
 for i in {1..30}; do docker exec flowamaz-dev-db pg_isready -U flowamaz >/dev/null 2>&1 && break; sleep 2; done
 
@@ -66,11 +66,15 @@ export GIT_REPOS_BASE_PATH="$ROOT/prompts/e2e-chrome/results/git-repos"
 export CREDENTIAL_MASTER_KEY="e2e-local-only-credential-master-key-0123456789abcdef"   # dev only
 export GATE_SIGNING_KEY="e2e-local-only-gate-signing-key-0123456789abcdef0123"          # dev only
 export Ai__AllowStubWithoutKey=true                 # non-generation AI features answer with canned text
-# Test orgs register on the Community plan (10 public API calls/minute, FUNCTIONAL.md §13.2), which an app syncing
+# Test orgs register on the Community plan (30 public API calls/minute, FUNCTIONAL.md §13.2), which an app syncing
 # with Flowamaz (e.g. the loan application) uses up on its own. Set ENFORCE_PLAN_RATE_LIMITS=true to test the limits.
 export PublicApi__EnforcePlanRateLimits="${ENFORCE_PLAN_RATE_LIMITS:-false}"
 # The web app's address: SSO builds its SAML ACS / OIDC redirect URLs from it (the web dev server proxies /api).
 export Platform__BaseUrl="http://localhost:5173"
+# Every email (password resets, gate notifications, invites) goes to Mailpit: inbox at http://localhost:8026.
+export Email__SmtpHost=localhost
+export Email__SmtpPort=1026
+export Email__FromAddress="noreply@flowamaz.local"
 if [[ -n "${ANTHROPIC_KEY:-}" ]]; then
   code=$(curl -s -o /dev/null -w "%{http_code}" https://api.anthropic.com/v1/models \
     -H "x-api-key: $ANTHROPIC_KEY" -H "anthropic-version: 2023-06-01" || echo 000)
@@ -93,6 +97,7 @@ for i in {1..30}; do curl -sf http://localhost:5173/api/v1/templates >/dev/null 
 echo "4/4 Checks"
 curl -sf -o /dev/null http://localhost:8307/health && echo "    API health ............ OK"
 curl -sf -o /dev/null http://localhost:5173/api/v1/templates && echo "    Web → API proxy ....... OK"
+curl -sf -o /dev/null http://localhost:8026/api/v1/info && echo "    Mailpit inbox ......... OK (http://localhost:8026)"
 echo
 echo "Ready. Logs: $LOGS/api.log, $LOGS/web.log"
 echo "Next: in the repo root run  claude --chrome  and paste the prompt from prompts/e2e-chrome/README.md"

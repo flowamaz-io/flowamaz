@@ -28,7 +28,7 @@ public sealed class SsoLoginException : AppException
         "Your Flowamaz account in this organisation is deactivated. Ask your administrator to reactivate it.", 403);
 
     public static SsoLoginException SubjectMismatch() => new("SSO_SUBJECT_MISMATCH",
-        "This Flowamaz account is linked to a different person at your identity provider, so this sign-in was refused. Ask your organisation owner to check the account's email address in your IdP.", 403);
+        "This Flowamaz account is linked to a different person at your identity provider, so this sign-in was refused. If you were re-created in your IdP, ask your organisation owner to unlink the old sign-in (Settings → Single sign-on → Linked sign-ins), then sign in again. Otherwise ask them to check the account's email address in your IdP.", 403);
 
     public static SsoLoginException EmailUnverified() => new("SSO_EMAIL_UNVERIFIED",
         "Your identity provider doesn't confirm that your email address is verified. Verify it with your IdP (or ask your IT team), then sign in again.", 403);

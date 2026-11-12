@@ -24,6 +24,8 @@ public sealed class JwtService : IJwtService
     private const string WorkspacesClaim = "workspaces";
     private const string OrgIdClaim = "org_id";
     private const string OrgSlugClaim = "org_slug";
+    /// <summary>Issue time in Unix milliseconds, checked against revocation markers.</summary>
+    public const string IssuedAtMsClaim = "iat_ms";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -65,6 +67,9 @@ public sealed class JwtService : IJwtService
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Email, user.Email),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            // Millisecond issue time: JwtAuthMiddleware compares it with revocation markers (ITokenRevocationService),
+            // so a token issued right after a revocation (e.g. a fresh sign-in) is never caught by it.
+            new(IssuedAtMsClaim, new DateTimeOffset(now).ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer64),
             new("name", user.Name),
             new("is_org_owner", user.IsOrgOwner.ToString().ToLowerInvariant()),
             new(OrgIdClaim, user.OrgId.ToString()),

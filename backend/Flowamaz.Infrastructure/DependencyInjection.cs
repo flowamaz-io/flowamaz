@@ -163,6 +163,9 @@ public static class DependencyInjection
 
         // CLI device-flow auth (prompt 05-02) — device/user codes stored in Redis with TTL.
         services.AddSingleton<ICliAuthService, Services.CliAuthService>();
+
+        // Cuts off access tokens issued before a deactivation, password reset or role change (see JwtAuthMiddleware).
+        services.AddSingleton<ITokenRevocationService, Services.RedisTokenRevocationService>();
     }
 
     private static void AddAiServices(IServiceCollection services)

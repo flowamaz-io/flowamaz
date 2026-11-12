@@ -1,5 +1,5 @@
 import { getCurrentInstance, onUnmounted, ref, type Ref } from 'vue';
-import { BASE_URL } from '@/services/api.service';
+import { BASE_URL, refreshAccessToken } from '@/services/api.service';
 
 export type WsConnectionState = 'connecting' | 'live' | 'reconnecting' | 'lost' | 'closed';
 
@@ -53,8 +53,10 @@ export function useInstanceWebSocket(
     manualClose = false;
     connectionState.value = retries === 0 ? 'connecting' : 'reconnecting';
     socket = new WebSocket(buildUrl());
+    let opened = false;
 
     socket.onopen = (): void => {
+      opened = true;
       retries = 0;
       connectionState.value = 'live';
     };
@@ -81,8 +83,11 @@ export function useInstanceWebSocket(
       }
     };
 
-    socket.onclose = (): void => {
-      if (!manualClose) scheduleReconnect();
+    socket.onclose = (event?: CloseEvent): void => {
+      if (manualClose) return;
+      // 4401: the session changed (e.g. a new role); a refused handshake may be an out-of-date token too.
+      // Get a fresh token before trying again, so the retry doesn't fail the same way.
+      scheduleReconnect(event?.code === 4401 || !opened);
     };
 
     socket.onerror = (): void => {
@@ -90,7 +95,7 @@ export function useInstanceWebSocket(
     };
   }
 
-  function scheduleReconnect(): void {
+  function scheduleReconnect(refreshFirst = false): void {
     if (retries >= MAX_RETRIES) {
       connectionState.value = 'lost';
       return;
@@ -98,7 +103,13 @@ export function useInstanceWebSocket(
     retries += 1;
     connectionState.value = 'reconnecting';
     const delay = Math.min(2 ** retries * 1000, MAX_BACKOFF_MS);
-    reconnectTimer = setTimeout(connect, delay);
+    // The backoff runs while the token is refreshed, so the retry still happens after `delay`.
+    const tokenReady = refreshFirst ? refreshAccessToken().catch(() => null) : Promise.resolve(null);
+    reconnectTimer = setTimeout(() => {
+      void tokenReady.then(() => {
+        if (!manualClose) connect();
+      });
+    }, delay);
   }
 
   function disconnect(): void {

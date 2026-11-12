@@ -7,7 +7,7 @@ namespace Flowamaz.Application.Platform.Services;
 
 /// <summary>
 /// Resolves workspace → organisation → plan to the per-minute public API limit (FUNCTIONAL.md §13.2:
-/// Community 10, Starter 60, Pro 300, Enterprise custom). An organisation's own
+/// Community 30, Starter 120, Pro 600, Enterprise 1,200 by default or as agreed). An organisation's own
 /// <c>ApiRateLimitPerMinute</c> overrides its plan. Results are cached for a minute (see
 /// <see cref="PublicApiPlanLimitCache"/>) so the public API doesn't read three tables per call; a plan change
 /// takes effect within that minute.
@@ -77,6 +77,13 @@ public sealed class PublicApiPlanLimitCache
         }
         limit = null;
         return false;
+    }
+
+    /// <summary>Forgets every cached limit of this organisation, so a changed limit applies on this server at once.</summary>
+    public void InvalidateOrg(Guid orgId)
+    {
+        foreach (var (workspaceId, entry) in _entries)
+            if (entry.Limit.OrgId == orgId) _entries.TryRemove(workspaceId, out _);
     }
 
     public void Set(Guid workspaceId, PlanApiLimit limit) =>
