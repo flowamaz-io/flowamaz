@@ -23,6 +23,12 @@ const toast = useToast();
 const loading = ref(true);
 const loadError = ref('');
 
+// Inviting is Admin-only on the server; an unknown role (profile still loading) shows the button and the API decides.
+const canInvite = computed(() => {
+  const role = ws.current?.value?.role;
+  return !role || role === 'Admin';
+});
+
 const inviteOpen = ref(false);
 const inviteEmail = ref('');
 const inviteRole = ref<WorkspaceRole>('Designer');
@@ -113,7 +119,10 @@ function isSelf(member: MemberResponse): boolean {
           Manage who can access this workspace and what they can do.
         </p>
       </div>
-      <FmButton @click="inviteOpen = true">
+      <FmButton
+        v-if="canInvite"
+        @click="inviteOpen = true"
+      >
         <template #icon-left>
           <UserPlus class="h-4 w-4" />
         </template>

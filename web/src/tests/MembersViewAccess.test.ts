@@ -11,10 +11,12 @@ const members = ref<MemberResponse[]>([
   { orgUserId: 'u-ana', email: 'ana@acme.test', name: 'Ana Lyst', role: 'Operator', joinedAt: '2026-10-27T00:00:00Z', isActive: false },
   { orgUserId: 'u-ben', email: 'ben@acme.test', name: 'Ben Ops', role: 'Designer', joinedAt: '2026-10-27T00:00:00Z', isActive: true },
 ]);
+const current = ref({ role: 'Admin' });
 vi.mock('@/composables/useWorkspace', () => ({
   useWorkspace: () => ({
     members,
     currentWorkspaceId: ref('ws-1'),
+    current,
     loadMembers: async () => undefined,
     inviteMember: vi.fn(),
     updateMemberRole: vi.fn(),
@@ -36,5 +38,18 @@ describe('MembersView access', () => {
     expect(rows[1]!.find('[data-test="member-no-access"]').exists()).toBe(true);
     expect(rows[1]!.find('select').exists()).toBe(false);
     expect(rows[0]!.find('select').exists()).toBe(true);
+  });
+
+  it('offers Invite member only to Admins', async () => {
+    setActivePinia(createPinia());
+    const mountIt = async () => {
+      const w = mount(MembersView, { global: { stubs: { FmModal: true, RouterLink: { template: '<a><slot /></a>' } } } });
+      await flushPromises();
+      return w;
+    };
+    expect((await mountIt()).text()).toContain('Invite member');
+    current.value = { role: 'Viewer' };
+    expect((await mountIt()).text()).not.toContain('Invite member');
+    current.value = { role: 'Admin' };
   });
 });

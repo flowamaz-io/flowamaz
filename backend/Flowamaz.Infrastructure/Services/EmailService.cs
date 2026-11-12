@@ -133,12 +133,13 @@ public sealed class EmailService : IEmailService
             {
                 From = new MailAddress(_options.FromAddress, _options.FromName),
                 Subject = subject,
-                Body = htmlBody,
-                IsBodyHtml = true,
             };
             message.To.Add(to);
-            if (!string.IsNullOrEmpty(textBody))
-                message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(textBody, null, "text/plain"));
+            // multipart/alternative: plain text first, HTML last (mail clients show the last part they can render).
+            // With the HTML in Body plus an alternate view, the HTML part went out labelled text/plain.
+            message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
+                string.IsNullOrEmpty(textBody) ? subject : textBody, System.Text.Encoding.UTF8, "text/plain"));
+            message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(htmlBody, System.Text.Encoding.UTF8, "text/html"));
 
             using var client = new SmtpClient(_options.SmtpHost, _options.SmtpPort) { EnableSsl = _options.SmtpEnableSsl };
             await client.SendMailAsync(message, ct);

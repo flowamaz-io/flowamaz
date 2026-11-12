@@ -216,6 +216,13 @@ const limitText = (perMinute: number) => (perMinute === 0 ? 'no per-minute limit
           </form>
         </li>
       </ul>
+      <p
+        v-if="!loading && !loadError && orgs.length >= 50"
+        class="text-xs text-slate-500"
+        data-test="platform-orgs-more"
+      >
+        Showing the first 50 organisations by name. Search by name or slug to find the one you need.
+      </p>
     </template>
   </div>
 </template>

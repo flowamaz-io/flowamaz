@@ -121,6 +121,8 @@ public sealed class SessionAndAccessGapTests : ApiTestBase
         var benId = await AddPersonAsync(owner.OrgId, "ben@gap-role-cut.test", ws, WorkspaceRole.Admin);
         var ben = await SignedInAsync(benId);
         (await StatusAsync(ben, $"/api/v1/workspaces/{ws}/members")).Should().Be(HttpStatusCode.OK);
+        (await DataAsync(await owner.Client.GetAsync("/api/v1/billing/usage"))).GetProperty("membersUsed").GetInt32()
+            .Should().Be(2, "billing usage counts the largest workspace's active members (the owner and Ben)");
 
         var demote = await owner.Client.PatchAsJsonAsync($"/api/v1/workspaces/{ws}/members/{benId}/role", new { role = "Viewer" });
         demote.StatusCode.Should().Be(HttpStatusCode.NoContent, await demote.Content.ReadAsStringAsync());

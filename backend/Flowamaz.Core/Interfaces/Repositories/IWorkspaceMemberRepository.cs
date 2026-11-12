@@ -31,6 +31,9 @@ public interface IWorkspaceMemberRepository
     /// </summary>
     Task LockAdminsAsync(Guid workspaceId, CancellationToken cancellationToken = default);
 
+    /// <summary>Active members of the organisation's largest workspace (the plan's member limit is per workspace).</summary>
+    Task<int> GetLargestWorkspaceSizeAsync(Guid orgId, CancellationToken cancellationToken = default) => Task.FromResult(0);
+
     /// <summary>
     /// The membership as committed now, re-read even if this unit of work already loaded it (e.g. while authorising the
     /// request). Use after <see cref="LockAdminsAsync"/> so decisions don't rest on a copy read before the lock.
