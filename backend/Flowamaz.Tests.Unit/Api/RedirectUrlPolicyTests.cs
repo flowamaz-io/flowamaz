@@ -33,6 +33,10 @@ public sealed class RedirectUrlPolicyTests
         RedirectUrlPolicy.IsAllowed(url, Base, isDevelopment: true).Should().Be(allowed);
 
     [Fact]
+    public void A_platform_configured_on_http_accepts_its_own_http_urls() =>
+        RedirectUrlPolicy.IsAllowed("http://intranet.acme.local/x", "http://intranet.acme.local", false).Should().BeTrue();
+
+    [Fact]
     public void A_base_url_with_an_explicit_port_needs_that_port() =>
         RedirectUrlPolicy.IsAllowed("https://staging.flowamaz.io/x", "https://staging.flowamaz.io:8443", false).Should().BeFalse();
 }

@@ -17,14 +17,14 @@ public sealed class WorkflowDnaController : ControllerBase
     private readonly IWorkflowDefinitionRepository _definitions;
     private readonly IUnitOfWork _uow;
     private readonly ILogger<WorkflowDnaController> _log;
-    private readonly Application.Workflow.Dna.WorkflowInheritanceService? _inheritance;
+    private readonly Application.Workflow.Dna.WorkflowInheritanceService _inheritance;
 
     public WorkflowDnaController(
         IWorkflowDnaService dna,
         IWorkflowDefinitionRepository definitions,
         IUnitOfWork uow,
         ILogger<WorkflowDnaController> log,
-        Application.Workflow.Dna.WorkflowInheritanceService? inheritance = null)
+        Application.Workflow.Dna.WorkflowInheritanceService inheritance)
     {
         _inheritance = inheritance;
         _dna = dna;
@@ -65,7 +65,7 @@ public sealed class WorkflowDnaController : ControllerBase
     public async Task<ActionResult<Application.Workflow.Dna.InheritanceReport>> GetInheritance(Guid workspaceId, Guid id, CancellationToken cancellationToken)
     {
         _log.LogInformation("WorkflowDnaController.GetInheritance entry workspaceId={WorkspaceId} id={Id}", workspaceId, id);
-        var report = await _inheritance!.GetReportAsync(workspaceId, id, cancellationToken);
+        var report = await _inheritance.GetReportAsync(workspaceId, id, cancellationToken);
         if (report is null) return NotFound(new { error = "This workflow isn't in this workspace any more. Go back to the workflow list and open it again." });
         _log.LogInformation("WorkflowDnaController.GetInheritance exit suggestions={Count}", report.Suggestions.Count);
         return Ok(report);
@@ -84,7 +84,7 @@ public sealed class WorkflowDnaController : ControllerBase
                 success = false, statusCode = 400, code = "VALIDATION_ERROR",
                 message = "Choose a suggestion that can be applied (gate-timeout or action-retry) and the workflow it comes from.",
             });
-        var yaml = await _inheritance!.ApplyAsync(workspaceId, id, request.Kind, request.FromWorkflowId, cancellationToken);
+        var yaml = await _inheritance.ApplyAsync(workspaceId, id, request.Kind, request.FromWorkflowId, cancellationToken);
         if (yaml is null) return NotFound(new { error = "One of the two workflows isn't in this workspace any more. Refresh the suggestions." });
         _log.LogInformation("WorkflowDnaController.ApplyInheritance exit id={Id}", id);
         return Ok(new ApplyInheritanceResponse(yaml));

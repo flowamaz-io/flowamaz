@@ -90,6 +90,11 @@ return 0
     {
         ArgumentNullException.ThrowIfNull(limits);
         if (limits.Count == 0) return -1;
+        foreach (var l in limits)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(l.Key);
+            if (l.MaxCount <= 0 || l.WindowSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(limits), "Each limit needs a positive count and window.");
+        }
         cancellationToken.ThrowIfCancellationRequested();
         _logger.LogDebug("RateLimitService.CheckAndIncrementAllAsync enter count={Count}", limits.Count);
         try

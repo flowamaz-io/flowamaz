@@ -20,31 +20,36 @@ public sealed class DevItemsTests : ApiTestBase
 {
     public DevItemsTests(IntegrationApiFixture fixture) : base(fixture) { }
 
+    // The v1 envelope (spec.nodes): how NL generation and the canvas save workflows.
     private const string Weak = """
-        workflow:
+        apiVersion: flowamaz/v1
+        kind: Workflow
+        metadata:
           id: po-west
-          version: v1
           name: "PO approval (West)"
-        nodes:
-          - id: start
-            type: Trigger
-            label: "Start"
-          - id: finance
-            type: HumanGate
-            label: "Finance approval"
-          - id: create-po
-            type: Action
-            label: "Create PO"
-            config:
-              connector: "http-rest"
-              operation: "request"
-          - id: end
-            type: End
-            label: "End"
-        edges:
-          - { id: e1, from: start, to: finance }
-          - { id: e2, from: finance, to: create-po }
-          - { id: e3, from: create-po, to: end }
+        spec:
+          trigger:
+            type: manual
+          nodes:
+            - id: start
+              type: Trigger
+              label: "Start"
+            - id: finance
+              type: HumanGate
+              label: "Finance approval"
+            - id: create-po
+              type: Action
+              label: "Create PO"
+              config:
+                connector: "http-rest"
+                operation: "request"
+            - id: end
+              type: End
+              label: "End"
+          edges:
+            - { id: e1, from: start, to: finance }
+            - { id: e2, from: finance, to: create-po }
+            - { id: e3, from: create-po, to: end }
         """;
 
     private const string Strong = """
@@ -135,7 +140,13 @@ public sealed class DevItemsTests : ApiTestBase
             new { kind = "gate-timeout", fromWorkflowId = strong });
         apply.StatusCode.Should().Be(HttpStatusCode.OK, await apply.Content.ReadAsStringAsync());
         var saved = await DataAsync(await owner.Client.GetAsync($"/api/v1/workspaces/{ws}/workflows/{weak}"));
-        saved.GetProperty("yamlContent").GetString().Should().Contain("timeout_hours: 24").And.Contain("on_timeout: escalate");
+        saved.GetProperty("yamlContent").GetString().Should().Contain("timeout_hours: 24").And.Contain("on_timeout: escalate")
+            .And.Contain("spec:", "the v1 envelope is kept");
+
+        var retry = await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/workflows/{weak}/inheritance/apply",
+            new { kind = "action-retry", fromWorkflowId = strong });
+        retry.StatusCode.Should().Be(HttpStatusCode.OK, await retry.Content.ReadAsStringAsync());
+        (await DataAsync(retry)).GetProperty("yamlContent").GetString().Should().Contain("maxAttempts: 3");
 
         var after = await DataAsync(await owner.Client.GetAsync($"/api/v1/workspaces/{ws}/workflows/{weak}/inheritance"));
         after.GetProperty("suggestions").EnumerateArray().Select(s => s.GetProperty("kind").GetString()).Should().NotContain("gate-timeout");

@@ -15,8 +15,11 @@ public interface IWorkflowEventRepository
     /// Finished, non-test runs of a workflow in this workspace since <paramref name="since"/> (newest first, at most
     /// <paramref name="maxRuns"/>), with their completed nodes and approval steps, for the empathy analysis.
     /// </summary>
+    /// <param name="nodeIds">Only completions of these nodes are loaded (e.g. the steps that send messages), so a run
+    /// with loops can't return thousands of rows.</param>
     Task<List<Models.EmpathyRunTimeline>> GetRunTimelinesAsync(
-        Guid workspaceId, Guid workflowDefinitionId, DateTime since, int maxRuns, CancellationToken cancellationToken = default) =>
+        Guid workspaceId, Guid workflowDefinitionId, DateTime since, int maxRuns, IReadOnlyCollection<string> nodeIds,
+        CancellationToken cancellationToken = default) =>
         Task.FromResult(new List<Models.EmpathyRunTimeline>());
     Task<List<WorkflowEvent>> GetForInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default);
 

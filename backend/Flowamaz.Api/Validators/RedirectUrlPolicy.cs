@@ -16,7 +16,7 @@ internal static class RedirectUrlPolicy
         if (string.IsNullOrWhiteSpace(url)) return false;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
         var secure = uri.Scheme == Uri.UriSchemeHttps;
-        if (!secure && !(isDevelopment && uri.Scheme == Uri.UriSchemeHttp)) return false;
+        if (!secure && uri.Scheme != Uri.UriSchemeHttp) return false;
         if (!string.IsNullOrEmpty(uri.UserInfo)) return false; // https://user@host — never a legitimate return URL
 
         if (isDevelopment &&
@@ -29,8 +29,9 @@ internal static class RedirectUrlPolicy
         if (string.IsNullOrWhiteSpace(platformBaseUrl)) return false;
         if (!Uri.TryCreate(platformBaseUrl, UriKind.Absolute, out var baseUri)) return false;
 
+        // http only when the platform itself is configured on http (or in Development): never a downgrade from https.
         return string.Equals(uri.Host, baseUri.Host, StringComparison.OrdinalIgnoreCase)
             && uri.Port == baseUri.Port // Uri.Port fills in the scheme's default port
-            && (secure || isDevelopment);
+            && (secure || isDevelopment || baseUri.Scheme == Uri.UriSchemeHttp);
     }
 }

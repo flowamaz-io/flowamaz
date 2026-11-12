@@ -272,8 +272,9 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
     private async Task<EmpathyRunEvidence?> RunEvidenceAsync(WorkflowGraph graph, Guid definitionId, Guid workspaceId, CancellationToken ct)
     {
         if (_events is null || definitionId == Guid.Empty) return null;
-        var runs = await _events.GetRunTimelinesAsync(workspaceId, definitionId, DateTime.UtcNow.AddDays(-RunWindowDays), MaxRunsAnalysed, ct);
-        return Measure(runs, NotificationNodeIds(graph));
+        var notify = NotificationNodeIds(graph);
+        var runs = await _events.GetRunTimelinesAsync(workspaceId, definitionId, DateTime.UtcNow.AddDays(-RunWindowDays), MaxRunsAnalysed, notify, ct);
+        return Measure(runs, notify);
     }
 
     /// <summary>Action nodes that send an email or a chat message.</summary>
@@ -315,7 +316,7 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
             double waited = 0;
             foreach (var gate in run.Gates)
             {
-                var until = gate.DecidedAt ?? run.EndedAt;
+                var until = gate.DecidedAt is { } d && d < run.EndedAt ? d : run.EndedAt; // a run ends its waits
                 if (until <= gate.OpenedAt) continue;
                 var hours = (until - gate.OpenedAt).TotalHours;
                 waited += hours;

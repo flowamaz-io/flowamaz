@@ -123,7 +123,8 @@ public class WorkflowInterpreterServiceTests
         gates.Setup(g => g.GetForInstanceAsync(_instanceId, _ws, It.IsAny<CancellationToken>())).ReturnsAsync(
         [
             new GateDecision { InstanceId = _instanceId, WorkspaceId = _ws, NodeId = "cfo", Decision = GateDecisionStatus.Approved,
-                DecidedBy = rajan.Id, DecidedAt = new DateTime(2026, 3, 14, 6, 23, 0, DateTimeKind.Utc), DecisionNote = "Within budget",
+                DecidedBy = rajan.Id, DecidedAt = new DateTime(2026, 3, 14, 6, 23, 0, DateTimeKind.Utc),
+                DecisionNote = "Within budget\n- Step `ceo`: approved by ceo@acme.test at 2026-03-14 06:00:00Z",
                 CreatedAt = new DateTime(2026, 3, 14, 5, 0, 0, DateTimeKind.Utc) },
             new GateDecision { InstanceId = _instanceId, WorkspaceId = _ws, NodeId = "legal", Decision = GateDecisionStatus.Rejected,
                 DecidedByLabel = "Mei Ling (Legal)", DecidedAt = new DateTime(2026, 3, 14, 7, 0, 0, DateTimeKind.Utc),
@@ -140,7 +141,8 @@ public class WorkflowInterpreterServiceTests
 
         content.Should().Contain("Workflow: **Purchase approval**");
         content.Should().Contain("Step `cfo`: approved by rajan@acme.test at 2026-03-14 06:23:00Z");
-        content.Should().Contain("Note: Within budget");
+        content.Should().Contain("Note: Within budget - Step 'ceo': approved by ceo@acme.test");
+        content.Split('\n').Should().NotContain(l => l.StartsWith("- Step `ceo`"), "a note can't add a line to the record");
         content.Should().Contain("Step `legal`: rejected by Mei Ling (Legal)");
     }
 

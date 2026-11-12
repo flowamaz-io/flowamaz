@@ -82,12 +82,12 @@ public sealed class HumanGateNodeWorker : INodeWorker
             var deliveryChannelRaw = GetString(config, "delivery_channel") ?? ChannelFromCanvas(config) ?? "Portal";
             var gateLabel = GetString(config, "gate_label") ?? (string.IsNullOrWhiteSpace(context.Node.Label) ? "Approval Required" : context.Node.Label);
             var gateSummary = GetString(config, "gate_summary") ?? string.Empty;
-            var timeoutHours = GetInt(config, "timeout_hours") ?? TimeoutFromCanvas(config) ?? DefaultTimeoutHours;
+            var timeoutHours = GateTimeoutActions.ReadTimeoutHours(config) ?? DefaultTimeoutHours;
             var slackChannel = GetString(config, "slack_channel") ?? GetString(config, "slackChannel");
             var slackCredentialRef = GetString(config, "slack_credential") ?? GetString(config, "slackCredential");
             var teamsWebhookUrl = GetString(config, "teams_webhook_url") ?? GetString(config, "teamsWebhookUrl");
-            var onTimeout = GateTimeoutActions.Normalize(GetString(config, "on_timeout") ?? GetString(config, "onTimeout"));
-            var escalateTo = GetString(config, "escalate_to") ?? GetString(config, "escalateTo");
+            var onTimeout = GateTimeoutActions.Normalize(GateTimeoutActions.ReadOnTimeout(config));
+            var escalateTo = GateTimeoutActions.ReadEscalateTo(config);
             var workflowName = GetString(config, "workflow_name") ?? "Workflow";
 
             // ── Resolve assignee email ────────────────────────────────────────
@@ -359,13 +359,6 @@ public sealed class HumanGateNodeWorker : INodeWorker
         if (!config.TryGetProperty("channels", out var channels) || channels.ValueKind != JsonValueKind.Object) return null;
         bool On(string key) => channels.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True;
         return On("slack") ? "Slack" : On("teams") ? "Teams" : On("email") ? "Email" : null;
-    }
-
-    private static int? TimeoutFromCanvas(JsonElement config)
-    {
-        var value = GetInt(config, "timeoutValue");
-        if (value is null or <= 0) return null;
-        return string.Equals(GetString(config, "timeoutUnit"), "days", StringComparison.OrdinalIgnoreCase) ? value * 24 : value;
     }
 
     private static string? GetString(JsonElement element, string property) =>

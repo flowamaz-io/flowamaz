@@ -10,7 +10,8 @@ import { inheritanceService, type InheritanceReport, type InheritanceSuggestion 
 
 // Workflow DNA inheritance (§8.8): patterns from similar workflows in this workspace that do better.
 
-const props = defineProps<{ workspaceId: string; workflowId: string; canEdit: boolean }>();
+// dirty: the editor has unsaved changes. Applying saves the stored version, so it waits until they're saved.
+const props = defineProps<{ workspaceId: string; workflowId: string; canEdit: boolean; dirty?: boolean }>();
 const emit = defineEmits<{ applied: [] }>();
 const toast = useToast();
 
@@ -119,15 +120,24 @@ async function apply(s: InheritanceSuggestion): Promise<void> {
           <p class="text-xs text-gray-500">
             From {{ s.fromWorkflowName }} ({{ s.similarity }}% similar). {{ s.evidence }}
           </p>
-          <FmButton
-            v-if="s.canApply && canEdit"
-            size="sm"
-            :loading="applying === key(s)"
-            :disabled="applying !== null"
-            @click="apply(s)"
-          >
-            Add to this workflow
-          </FmButton>
+          <template v-if="s.canApply && canEdit">
+            <FmButton
+              size="sm"
+              :loading="applying === key(s)"
+              :disabled="applying !== null || dirty"
+              @click="apply(s)"
+            >
+              Add to this workflow
+            </FmButton>
+            <p class="text-xs text-gray-500">
+              <template v-if="dirty">
+                Save your changes first: this adds the pattern to the saved workflow.
+              </template>
+              <template v-else>
+                Saves the workflow straight away. The YAML is rewritten in a standard layout, so its comments are removed.
+              </template>
+            </p>
+          </template>
           <p
             v-else-if="s.canApply"
             class="text-xs text-gray-500"

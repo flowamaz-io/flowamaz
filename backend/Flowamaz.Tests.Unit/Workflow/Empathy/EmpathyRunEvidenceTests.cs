@@ -111,7 +111,7 @@ public sealed class EmpathyRunEvidenceTests
         var metrics = new Mock<IWorkflowMetricRepository>();
         metrics.Setup(r => r.GetForDefinitionSinceAsync(id, WorkspaceId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var events = new Mock<IWorkflowEventRepository>();
-        events.Setup(r => r.GetRunTimelinesAsync(WorkspaceId, id, It.IsAny<DateTime>(), 200, It.IsAny<CancellationToken>()))
+        events.Setup(r => r.GetRunTimelinesAsync(WorkspaceId, id, It.IsAny<DateTime>(), 200, It.Is<IReadOnlyCollection<string>>(n => n.Contains("notify") && n.Contains("done") && n.Count == 2), It.IsAny<CancellationToken>()))
             .ReturnsAsync([Run(96, [1], [(2, 94)])]);
         var service = new WorkflowEmpathyService(defs.Object, metrics.Object, new SfgParser(), NullLogger<WorkflowEmpathyService>.Instance, events.Object);
 

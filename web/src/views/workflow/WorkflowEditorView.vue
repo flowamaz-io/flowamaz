@@ -31,8 +31,18 @@ const {
 } = useWorkflowEditor(workspaceId, workflowId);
 
 const toast = useToast();
-// Designers and Admins edit workflows; the server checks it again.
-const canEdit = computed(() => ['Admin', 'Designer'].includes(ws.current?.value?.role ?? 'Admin'));
+// Designers and Admins edit workflows. Only trusted when the store's workspace is this page's; the server checks anyway.
+const canEdit = computed(() => {
+  const current = ws.current?.value;
+  return current?.id !== workspaceId || !current.role || ['Admin', 'Designer'].includes(current.role);
+});
+
+// After a pattern from a similar workflow is added: reload the saved YAML and re-run the empathy analysis.
+const empathyKey = ref(0);
+async function onPatternApplied(): Promise<void> {
+  await loadWorkflow();
+  empathyKey.value += 1;
+}
 
 /** Save, telling the user what to do when it fails (the composable only reports success). */
 async function save(): Promise<boolean> {
@@ -417,6 +427,7 @@ onUnmounted(() => {
         <div class="flex-1 overflow-hidden bg-white">
           <EmpathyPanel
             v-if="empathyMode"
+            :key="empathyKey"
             :workspace-id="workspaceId"
             :workflow-id="workflowId"
             :visible="empathyMode"
@@ -427,7 +438,8 @@ onUnmounted(() => {
                 :workspace-id="workspaceId"
                 :workflow-id="workflowId"
                 :can-edit="canEdit"
-                @applied="loadWorkflow"
+                :dirty="isDirty"
+                @applied="onPatternApplied"
               />
             </template>
           </EmpathyPanel>

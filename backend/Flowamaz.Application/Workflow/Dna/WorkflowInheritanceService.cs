@@ -1,5 +1,6 @@
 using Flowamaz.Application.Workflow.Services;
 using Flowamaz.Core.Entities.Analytics;
+using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Repositories;
@@ -40,8 +41,10 @@ public sealed record InheritanceReport(
 /// least <see cref="MinRuns"/> runs that does clearly better: 10+ points more runs succeed, 10+ points better SLA
 /// compliance, or it finishes in 70% of the time or less. The patterns compared:
 /// <list type="bullet">
-/// <item><c>gate-timeout</c> — its approval steps have a timeout / timeout action; this one's don't (can apply).</item>
-/// <item><c>action-retry</c> — its actions retry; this one's don't (can apply).</item>
+/// <item><c>gate-timeout</c> — its approval steps have a deadline; some of this one's don't (can apply: adds the
+/// deadline, and the timeout action / escalation contact only where the step sets none).</item>
+/// <item><c>action-retry</c> — it retries actions of a connector that this one's steps use without retries (can apply,
+/// per connector; never to messaging steps, which would send twice).</item>
 /// <item><c>outcome-notification</c> — it messages someone after an approval; this one doesn't (suggestion only:
 /// the recipient and wording are this workflow's own).</item>
 /// <item><c>compensation</c> — it undoes completed steps on failure; this one doesn't (suggestion only).</item>
@@ -115,13 +118,20 @@ public sealed class WorkflowInheritanceService
                 }
 
                 if (their.GateTimeout is { } t && myPatterns.GatesWithoutTimeout.Count > 0)
-                    Add("gate-timeout", "Add a timeout to approval steps",
-                        $"'{def.Name}' gives its approvers {t.Hours} hours{(t.OnTimeout is null ? "" : $", then {t.OnTimeout.Replace('_', ' ')}")}. " +
-                        $"Here, {Steps(myPatterns.GatesWithoutTimeout.Count)} can wait forever.", canApply: true);
-                if (their.ActionRetry is { } r && myPatterns.ActionsWithoutRetry.Count > 0)
+                    Add("gate-timeout", "Set a deadline on approval steps",
+                        $"'{def.Name}' gives its approvers {t.Hours} hours, then {TimeoutText(t)}. " +
+                        $"Here, {Steps(myPatterns.GatesWithoutTimeout.Count)} set no deadline, so the default " +
+                        $"{GateTimeoutActions.DefaultTimeoutHours} hours applies and the run then fails. Steps that already have a deadline are left alone.",
+                        canApply: true);
+                if (RetryTargets(their, myPatterns) is { Count: > 0 } targets)
+                {
+                    var r = targets[0].Policy;
                     Add("action-retry", "Retry failed actions",
-                        $"'{def.Name}' retries its actions up to {r.MaxAttempts} times ({r.BackoffSeconds}s apart, growing ×{r.BackoffMultiplier:0.#}). " +
-                        $"Here, {Steps(myPatterns.ActionsWithoutRetry.Count, "action")} fail on the first error.", canApply: true);
+                        $"'{def.Name}' retries its {string.Join(", ", targets.Select(x => x.Connector).Distinct())} steps up to {r.MaxAttempts} times " +
+                        $"({r.BackoffSeconds}s apart, growing ×{r.BackoffMultiplier:0.#}). Here, {string.Join(", ", targets.Select(x => $"'{x.Label}'"))} " +
+                        "fail on the first error. Messages (email, Slack, Teams) are never given retries, so nobody is told twice.",
+                        canApply: true);
+                }
                 if (their.NotifiesAfterApproval && !myPatterns.NotifiesAfterApproval)
                     Add("outcome-notification", "Tell people the outcome",
                         $"'{def.Name}' sends a message after its approval step; this workflow doesn't, so requesters must check for themselves. " +
@@ -163,15 +173,18 @@ public sealed class WorkflowInheritanceService
             string yaml = kind switch
             {
                 "gate-timeout" when their.GateTimeout is { } t && mine.GatesWithoutTimeout.Count > 0 =>
-                    YamlNodes.Edit(me.YamlContent, mine.GatesWithoutTimeout, node =>
+                    YamlNodes.Edit(me.YamlContent, mine.GatesWithoutTimeout.ToHashSet(), (_, node) =>
                     {
                         var config = YamlNodes.Child(node, "config");
-                        config.Children[new YamlScalarNode("timeout_hours")] = new YamlScalarNode(t.Hours.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                        if (t.OnTimeout is not null) config.Children[new YamlScalarNode("on_timeout")] = new YamlScalarNode(t.OnTimeout);
+                        Set(config, "timeout_hours", t.Hours.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        // Only what the gate doesn't decide itself: its own timeout action and escalation contact win.
+                        if (t.OnTimeout is not null && !Has(config, "on_timeout", "onTimeout")) Set(config, "on_timeout", t.OnTimeout);
+                        if (t.EscalateTo is not null && !Has(config, "escalate_to", "escalateTo")) Set(config, "escalate_to", t.EscalateTo);
                     }),
-                "action-retry" when their.ActionRetry is { } r && mine.ActionsWithoutRetry.Count > 0 =>
-                    YamlNodes.Edit(me.YamlContent, mine.ActionsWithoutRetry, node =>
+                "action-retry" when RetryTargets(their, mine) is { Count: > 0 } targets =>
+                    YamlNodes.Edit(me.YamlContent, targets.Select(x => x.NodeId).ToHashSet(), (id, node) =>
                     {
+                        var r = targets.First(x => x.NodeId == id).Policy;
                         var inv = System.Globalization.CultureInfo.InvariantCulture;
                         node.Children[new YamlScalarNode("retry")] = new YamlMappingNode(
                             new YamlScalarNode("maxAttempts"), new YamlScalarNode(r.MaxAttempts.ToString(inv)),
@@ -197,6 +210,28 @@ public sealed class WorkflowInheritanceService
     }
 
     private static string Steps(int n, string noun = "approval step") => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
+
+    private static string TimeoutText(GateDeadline t) => GateTimeoutActions.Normalize(t.OnTimeout) switch
+    {
+        GateTimeoutActions.Escalate => t.EscalateTo is null ? "escalates" : $"escalates to {t.EscalateTo}",
+        GateTimeoutActions.AutoApprove => "approves automatically",
+        GateTimeoutActions.AutoReject => "rejects automatically",
+        _ => "fails the run",
+    };
+
+    /// <summary>
+    /// This workflow's actions without retries that use a connector the sibling retries (never a messaging connector,
+    /// which would send the same message twice), each with the sibling's policy for that connector.
+    /// </summary>
+    internal static List<(string NodeId, string Label, string Connector, RetryPolicy Policy)> RetryTargets(Patterns theirs, Patterns mine) =>
+        mine.ActionsWithoutRetry
+            .Where(a => a.Connector is { } c && !NotifyConnectors.Contains(c) && theirs.RetryByConnector.ContainsKey(c))
+            .Select(a => (a.NodeId, a.Label, a.Connector!, theirs.RetryByConnector[a.Connector!]))
+            .ToList();
+
+    private static bool Has(YamlMappingNode map, params string[] keys) => keys.Any(k => map.Children.ContainsKey(new YamlScalarNode(k)));
+
+    private static void Set(YamlMappingNode map, string key, string value) => map.Children[new YamlScalarNode(key)] = new YamlScalarNode(value);
 
     private async Task<WorkflowPerformance> PerformanceAsync(Guid workspaceId, Guid workflowId, CancellationToken ct) =>
         Performance(await _metrics.GetForDefinitionSinceAsync(workflowId, workspaceId, DateTime.UtcNow.AddDays(-30), ct));
@@ -228,39 +263,53 @@ public sealed class WorkflowInheritanceService
         return null;
     }
 
+    /// <summary>A gate deadline: hours, then the timeout action and escalation contact (if set).</summary>
+    internal sealed record GateDeadline(int Hours, string? OnTimeout, string? EscalateTo);
+
     /// <summary>The patterns compared between workflows.</summary>
     internal sealed record Patterns(
-        (int Hours, string? OnTimeout)? GateTimeout,
+        GateDeadline? GateTimeout,
         IReadOnlyList<string> GatesWithoutTimeout,
-        RetryPolicy? ActionRetry,
-        IReadOnlyList<string> ActionsWithoutRetry,
+        IReadOnlyDictionary<string, RetryPolicy> RetryByConnector,
+        IReadOnlyList<(string NodeId, string Label, string? Connector)> ActionsWithoutRetry,
         bool NotifiesAfterApproval,
         bool UsesCompensation)
     {
         public static Patterns Of(WorkflowGraph g)
         {
             var gates = g.Nodes.Where(n => n.Type == NodeType.HumanGate).ToList();
-            (int, string?)? timeout = null;
+            GateDeadline? deadline = null;
             var withoutTimeout = new List<string>();
             foreach (var gate in gates)
             {
-                var hours = Int(gate, "timeout_hours") ?? (gate.TimeoutPolicy is { TimeoutSeconds: > 0 } tp ? tp.TimeoutSeconds / 3600 : null);
-                var on = Str(gate, "on_timeout") ?? Str(gate, "onTimeout");
-                if (hours is > 0) timeout ??= (hours.Value, on);
+                // The same reading the engine uses (timeout_hours, timeoutHours, canvas timeoutValue + timeoutUnit).
+                var hours = GateTimeoutActions.ReadTimeoutHours(gate.Config.RootElement)
+                    ?? (gate.TimeoutPolicy is { TimeoutSeconds: > 0 } tp ? Math.Max(1, tp.TimeoutSeconds / 3600) : null);
+                if (hours is > 0)
+                    deadline ??= new GateDeadline(hours.Value,
+                        GateTimeoutActions.ReadOnTimeout(gate.Config.RootElement), GateTimeoutActions.ReadEscalateTo(gate.Config.RootElement));
                 else withoutTimeout.Add(gate.Id);
             }
 
             var actions = g.Nodes.Where(n => n.Type == NodeType.Action).ToList();
-            var retry = actions.Select(a => a.RetryPolicy).FirstOrDefault(r => r is { MaxAttempts: > 1 });
-            var withoutRetry = actions.Where(a => a.RetryPolicy is not { MaxAttempts: > 1 }).Select(a => a.Id).ToList();
+            var retryByConnector = new Dictionary<string, RetryPolicy>(StringComparer.OrdinalIgnoreCase);
+            foreach (var a in actions)
+                if (a.RetryPolicy is { MaxAttempts: > 1 } r && ConnectorOf(a) is { } c) retryByConnector.TryAdd(c, r);
+            var withoutRetry = actions.Where(a => a.RetryPolicy is not { MaxAttempts: > 1 })
+                .Select(a => (a.Id, string.IsNullOrWhiteSpace(a.Label) ? a.Id : a.Label, ConnectorOf(a))).ToList();
 
             var gateIds = gates.Select(x => x.Id).ToHashSet();
-            var notifies = g.Nodes.Where(n => n.Type == NodeType.Action &&
-                    (Str(n, "connector_id") ?? Str(n, "connector")) is { } c && NotifyConnectors.Contains(c))
+            var notifies = g.Nodes.Where(n => n.Type == NodeType.Action && ConnectorOf(n) is { } c && NotifyConnectors.Contains(c))
                 .Any(n => Upstream(g, n.Id).Overlaps(gateIds));
 
-            return new Patterns(timeout, withoutTimeout, retry, withoutRetry, notifies, g.Nodes.Any(n => n.Compensation is not null));
+            return new Patterns(deadline, withoutTimeout, retryByConnector, withoutRetry, notifies, g.Nodes.Any(n => n.Compensation is not null));
         }
+
+        private static string? ConnectorOf(SfgNode n) =>
+            n.Config.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object ? null
+            : new[] { "connector_id", "connector" }
+                .Select(k => n.Config.RootElement.TryGetProperty(k, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null)
+                .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
         private static HashSet<string> Upstream(WorkflowGraph g, string nodeId)
         {
@@ -271,41 +320,51 @@ public sealed class WorkflowInheritanceService
                     if (seen.Add(e.FromNodeId)) stack.Push(e.FromNodeId);
             return seen;
         }
-
-        private static string? Str(SfgNode n, string key) =>
-            n.Config.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object && n.Config.RootElement.TryGetProperty(key, out var v)
-                && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
-
-        private static int? Int(SfgNode n, string key) =>
-            n.Config.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object && n.Config.RootElement.TryGetProperty(key, out var v)
-                ? v.ValueKind switch
-                {
-                    System.Text.Json.JsonValueKind.Number when v.TryGetInt32(out var i) => i,
-                    System.Text.Json.JsonValueKind.String when int.TryParse(v.GetString(), out var i) => i,
-                    _ => null,
-                }
-                : null;
     }
 
     /// <summary>Edits node mappings in workflow YAML through YamlDotNet (never string manipulation).</summary>
     internal static class YamlNodes
     {
-        public static string Edit(string yaml, IReadOnlyCollection<string> nodeIds, Action<YamlMappingNode> change)
+        /// <summary>
+        /// Applies <paramref name="change"/> to each node whose id is listed, wherever the parser finds the nodes
+        /// (<c>spec.nodes</c> in the v1 envelope, else top-level <c>nodes</c>). YAML comments and custom formatting are
+        /// not kept (YamlDotNet's representation model drops them); the UI says so before applying.
+        /// </summary>
+        public static string Edit(string yaml, IReadOnlySet<string> nodeIds, Action<string, YamlMappingNode> change)
         {
             var stream = new YamlStream();
             using (var reader = new StringReader(yaml)) stream.Load(reader);
+            // With anchors/aliases one edit would change every place that shares the node: leave that to the editor.
+            if (stream.Documents.Count > 0 && stream.Documents[0].AllNodes.Any(n => !n.Anchor.IsEmpty))
+                throw new InheritanceNotApplicableException(
+                    "This workflow's YAML reuses parts with anchors (&) and aliases (*), so a change here could land in several steps. " +
+                    "Make the change in the YAML editor instead.");
             if (stream.Documents.Count == 0 || stream.Documents[0].RootNode is not YamlMappingNode root ||
-                !root.Children.TryGetValue(new YamlScalarNode("nodes"), out var nodesNode) || nodesNode is not YamlSequenceNode nodes)
+                NodesOf(root) is not { } nodes)
                 throw new InheritanceNotApplicableException("This workflow's YAML has no 'nodes' list to change. Fix it in the YAML editor first.");
 
+            var changed = 0;
             foreach (var item in nodes.Children.OfType<YamlMappingNode>())
                 if (item.Children.TryGetValue(new YamlScalarNode("id"), out var id) && id is YamlScalarNode s && s.Value is { } v && nodeIds.Contains(v))
-                    change(item);
+                {
+                    change(v, item);
+                    changed++;
+                }
+            if (changed == 0)
+                throw new InheritanceNotApplicableException("The steps this change is for aren't in the workflow any more. Refresh the suggestions.");
 
             using var writer = new StringWriter();
             stream.Save(writer, assignAnchors: false);
             var text = writer.ToString().TrimEnd();
             return text.EndsWith("...", StringComparison.Ordinal) ? text[..^3].TrimEnd() + "\n" : text + "\n";
+        }
+
+        private static YamlSequenceNode? NodesOf(YamlMappingNode root)
+        {
+            if (root.Children.TryGetValue(new YamlScalarNode("spec"), out var spec) && spec is YamlMappingNode specMap &&
+                specMap.Children.TryGetValue(new YamlScalarNode("nodes"), out var inSpec) && inSpec is YamlSequenceNode specNodes)
+                return specNodes;
+            return root.Children.TryGetValue(new YamlScalarNode("nodes"), out var top) && top as YamlSequenceNode is { } topNodes ? topNodes : null;
         }
 
         public static YamlMappingNode Child(YamlMappingNode node, string key)

@@ -124,13 +124,13 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
                 sb.AppendLine("## Approvals");
                 foreach (var g in gates)
                 {
-                    var who = g.DecidedByLabel
+                    var who = OneLine(g.DecidedByLabel)
                         ?? (g.DecidedBy is { } uid && _users is not null ? (await _users.GetByIdAsync(uid, ct))?.Email : null)
                         ?? (g.Decision == GateDecisionStatus.Pending ? null : "the public API or a signed link");
                     var line = g.Decision == GateDecisionStatus.Pending
                         ? $"- Step `{g.NodeId}`: requested {Format(g.CreatedAt)}, not decided"
                         : $"- Step `{g.NodeId}`: {g.Decision.ToString().ToLowerInvariant()} by {who} at {Format(g.DecidedAt)} (requested {Format(g.CreatedAt)})";
-                    if (!string.IsNullOrWhiteSpace(g.DecisionNote)) line += $". Note: {g.DecisionNote.Trim()}";
+                    if (OneLine(g.DecisionNote) is { } note) line += $". Note: {note}";
                     sb.AppendLine(line);
                 }
                 sb.AppendLine();
@@ -180,6 +180,18 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
         }
 
         return new InterpreterNarrative("developer", sb.ToString(), DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// Caller-supplied text (a decision note, a decider named by an external app) as one plain line: newlines and runs
+    /// of whitespace collapsed and Markdown markers removed, so it can't add or fake lines in the compliance record.
+    /// </summary>
+    internal static string? OneLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var flat = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        flat = flat.Replace("`", "'").Replace("**", "").Replace("__", "");
+        return flat.TrimStart('#', '-', '*', '>', '+', ' ', '|');
     }
 
     private static string Format(DateTime? value) =>

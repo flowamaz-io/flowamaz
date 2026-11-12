@@ -8,32 +8,52 @@ namespace Flowamaz.Tests.Unit.Workflow.Dna;
 /// <summary>DNA inheritance (§8.8): who counts as better, which patterns differ, and the YAML edit.</summary>
 public sealed class WorkflowInheritanceTests
 {
+    // The v1 envelope (spec.nodes), as NL generation and the canvas write it.
     internal const string Weak = """
-        workflow:
+        apiVersion: flowamaz/v1
+        kind: Workflow
+        metadata:
           id: po-west
-          version: v1
           name: "PO approval (West)"
-        nodes:
-          - id: start
-            type: Trigger
-            label: "Start"
-          # the request goes to finance
-          - id: finance
-            type: HumanGate
-            label: "Finance approval"
-          - id: create-po
-            type: Action
-            label: "Create PO"
-            config:
-              connector: "http-rest"
-              operation: "request"
-          - id: end
-            type: End
-            label: "End"
-        edges:
-          - { id: e1, from: start, to: finance }
-          - { id: e2, from: finance, to: create-po }
-          - { id: e3, from: create-po, to: end }
+        spec:
+          trigger:
+            type: manual
+          nodes:
+            - id: start
+              type: Trigger
+              label: "Start"
+            # the request goes to finance
+            - id: finance
+              type: HumanGate
+              label: "Finance approval"
+            - id: legal
+              type: HumanGate
+              label: "Legal review"
+              config:
+                timeoutValue: 3
+                timeoutUnit: days
+                onTimeout: auto-reject
+            - id: create-po
+              type: Action
+              label: "Create PO"
+              config:
+                connector: "http-rest"
+                operation: "request"
+            - id: ping
+              type: Action
+              label: "Ping requester"
+              config:
+                connector: "slack"
+                operation: "send-message"
+            - id: end
+              type: End
+              label: "End"
+          edges:
+            - { id: e1, from: start, to: finance }
+            - { id: e2, from: finance, to: legal }
+            - { id: e3, from: legal, to: create-po }
+            - { id: e4, from: create-po, to: ping }
+            - { id: e5, from: ping, to: end }
         """;
 
     internal const string Strong = """
@@ -51,6 +71,7 @@ public sealed class WorkflowInheritanceTests
             config:
               timeout_hours: 24
               on_timeout: escalate
+              escalate_to: cfo@acme.test
           - id: create-po
             type: Action
             label: "Create PO"
@@ -106,19 +127,20 @@ public sealed class WorkflowInheritanceTests
         var weak = WorkflowInheritanceService.Patterns.Of(new SfgParser().Parse(Weak));
         var strong = WorkflowInheritanceService.Patterns.Of(new SfgParser().Parse(Strong));
 
-        weak.GatesWithoutTimeout.Should().Equal("finance");
-        weak.ActionsWithoutRetry.Should().Equal("create-po");
-        weak.NotifiesAfterApproval.Should().BeFalse();
-        strong.GateTimeout.Should().Be((24, "escalate"));
-        strong.ActionRetry!.MaxAttempts.Should().Be(3);
-        strong.NotifiesAfterApproval.Should().BeTrue();
+        weak.GatesWithoutTimeout.Should().Equal(["finance"], "the canvas deadline on 'legal' (3 days) counts, as it does in the engine");
+        weak.NotifiesAfterApproval.Should().BeTrue("'ping' follows the approvals");
+        strong.GateTimeout.Should().Be(new WorkflowInheritanceService.GateDeadline(24, "escalate", "cfo@acme.test"));
+        strong.RetryByConnector["http-rest"].MaxAttempts.Should().Be(3);
         strong.GatesWithoutTimeout.Should().BeEmpty();
+
+        var targets = WorkflowInheritanceService.RetryTargets(strong, weak);
+        targets.Select(t => t.NodeId).Should().Equal(["create-po"], "the Slack step never gets a retry: it would message twice");
     }
 
     [Fact]
-    public void Applying_edits_only_the_named_nodes_and_keeps_the_workflow_readable()
+    public void Applying_edits_only_the_named_nodes_in_the_v1_envelope()
     {
-        var yaml = WorkflowInheritanceService.YamlNodes.Edit(Weak, ["finance"], node =>
+        var yaml = WorkflowInheritanceService.YamlNodes.Edit(Weak, new HashSet<string> { "finance" }, (_, node) =>
         {
             var config = WorkflowInheritanceService.YamlNodes.Child(node, "config");
             config.Children[new YamlDotNet.RepresentationModel.YamlScalarNode("timeout_hours")] = new YamlDotNet.RepresentationModel.YamlScalarNode("24");
@@ -126,8 +148,26 @@ public sealed class WorkflowInheritanceTests
 
         var graph = new SfgParser().Parse(yaml);
         graph.FindNode("finance")!.Config.RootElement.GetProperty("timeout_hours").GetInt32().Should().Be(24);
-        graph.FindNode("create-po")!.Config.RootElement.GetProperty("connector").GetString().Should().Be("http-rest");
-        graph.Edges.Should().HaveCount(3);
+        graph.FindNode("legal")!.Config.RootElement.GetProperty("timeoutValue").GetInt32().Should().Be(3, "other steps are untouched");
+        graph.Edges.Should().HaveCount(5);
         WorkflowInheritanceService.Patterns.Of(graph).GatesWithoutTimeout.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Yaml_with_anchors_is_left_to_the_editor()
+    {
+        const string withAlias = """
+            nodes:
+              - id: a
+                type: HumanGate
+                label: A
+                config: &shared { assignee: x }
+              - id: b
+                type: HumanGate
+                label: B
+                config: *shared
+            """;
+        var act = () => WorkflowInheritanceService.YamlNodes.Edit(withAlias, new HashSet<string> { "a" }, (_, _) => { });
+        act.Should().Throw<InheritanceNotApplicableException>().WithMessage("*anchors*");
     }
 }

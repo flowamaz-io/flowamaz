@@ -15,8 +15,10 @@ public sealed class WorkflowEventRepository(FlowAmazDbContext db) : IWorkflowEve
         await db.WorkflowEvents.AddAsync(workflowEvent, cancellationToken);
 
     public async Task<List<Core.Models.EmpathyRunTimeline>> GetRunTimelinesAsync(
-        Guid workspaceId, Guid workflowDefinitionId, DateTime since, int maxRuns, CancellationToken cancellationToken = default)
+        Guid workspaceId, Guid workflowDefinitionId, DateTime since, int maxRuns, IReadOnlyCollection<string> nodeIds,
+        CancellationToken cancellationToken = default)
     {
+        const int MaxEventsPerRun = 50;
         var runs = await db.WorkflowInstances.AsNoTracking()
             .Where(i => i.WorkspaceId == workspaceId && i.WorkflowDefinitionId == workflowDefinitionId && !i.IsTest
                 && i.StartedAt != null && i.StartedAt >= since
@@ -28,8 +30,12 @@ public sealed class WorkflowEventRepository(FlowAmazDbContext db) : IWorkflowEve
         if (runs.Count == 0) return [];
 
         var ids = runs.Select(r => r.Id).ToList();
-        var completed = await db.WorkflowEvents.AsNoTracking()
-            .Where(e => e.WorkspaceId == workspaceId && ids.Contains(e.InstanceId) && e.EventType == "NodeCompleted" && e.NodeId != null)
+        var wanted = nodeIds.ToList();
+        var completed = wanted.Count == 0 ? [] : await db.WorkflowEvents.AsNoTracking()
+            .Where(e => e.WorkspaceId == workspaceId && ids.Contains(e.InstanceId) && e.EventType == "NodeCompleted"
+                && e.NodeId != null && wanted.Contains(e.NodeId))
+            .OrderBy(e => e.OccurredAt)
+            .Take(maxRuns * MaxEventsPerRun)
             .Select(e => new { e.InstanceId, NodeId = e.NodeId!, e.OccurredAt })
             .ToListAsync(cancellationToken);
         var gates = await db.GateDecisions.AsNoTracking()

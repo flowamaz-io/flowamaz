@@ -26,8 +26,8 @@ const timeout = {
 };
 const notify = { ...timeout, kind: 'outcome-notification' as const, title: 'Tell people the outcome', canApply: false };
 
-const mountIt = async (canEdit = true) => {
-  const w = mount(InheritancePanel, { props: { workspaceId: 'ws', workflowId: 'west', canEdit } });
+const mountIt = async (canEdit = true, dirty = false) => {
+  const w = mount(InheritancePanel, { props: { workspaceId: 'ws', workflowId: 'west', canEdit, dirty } });
   await flushPromises();
   return w;
 };
@@ -53,6 +53,13 @@ describe('InheritancePanel', () => {
     await flushPromises();
     expect(apply).toHaveBeenCalledWith('ws', 'west', 'gate-timeout', 'east');
     expect(w.emitted('applied')).toHaveLength(1);
+  });
+
+  it('waits for unsaved editor changes before applying', async () => {
+    const w = await mountIt(true, true);
+    const button = w.findAll('button').find((b) => b.text() === 'Add to this workflow')!;
+    expect(button.attributes('disabled')).toBeDefined();
+    expect(w.text()).toContain('Save your changes first');
   });
 
   it('offers nothing to apply to people who cannot edit', async () => {
