@@ -45,6 +45,9 @@ services:
       Connectors__Sandbox__Url: "http://connector-runner:8080"
       CONNECTOR_RUNNER_SECRET: ${CONNECTOR_RUNNER_SECRET:?set CONNECTOR_RUNNER_SECRET (32+ chars)}
     networks: [default, sandbox]
+    # Workspace Git history (Git:ReposBasePath). Without a volume, recreating the container loses it.
+    volumes:
+      - flowamaz-git-repos:/app/data/repos
     depends_on:
       db:
         condition: service_healthy
@@ -192,3 +195,4 @@ networks:
 volumes:
   pgdata:
   redisdata:
+  flowamaz-git-repos:

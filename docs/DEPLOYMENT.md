@@ -33,7 +33,7 @@ In any non-`Development` environment the API validates the following variables a
 | `Ai__AnthropicPlatformKey` | Yes | Platform-managed Anthropic API key (the only platform-managed AI provider). Powers F1–F7 platform AI functions. Use the double-underscore form to bind `Ai:AnthropicPlatformKey`. | Anthropic console → API Keys (value starts `sk-ant-`). |
 | `REDIS_CONNECTION_STRING` | Yes (resolved) | Redis endpoint for task queue, session/semantic cache, and rate limiting. In Compose overridden to `redis:6379`. | `<host>:6379` (add `,password=<pwd>` if your Redis requires auth). |
 | `CORS_ALLOWED_ORIGINS` | Recommended | Comma-separated SPA origins. If unset in Production all cross-origin requests are blocked (a warning is logged). | e.g. `https://app.flowamaz.io` |
-| `GIT_REPOS_BASE_PATH` | Recommended | Writable directory for workflow Git versioning. Startup probes it for write access and fails if not writable. Defaults to `bin/git-repos`. | Any persistent, writable volume path. |
+| `GIT_REPOS_BASE_PATH` | Recommended | Writable directory for workflow Git versioning. Startup probes it for write access and fails if not writable. Defaults to `bin/git-repos` (`/app/data/repos` in the Docker image, where the compose files mount the `flowamaz-git-repos` volume; back it up with the database). | Any persistent, writable volume path. |
 | `CONNECTOR_RUNNER_SECRET` | Yes, with the sandbox | HMAC key shared by the API and the connector-runner (32+ chars). Enforced when `Connectors__Sandbox__Url` is set; the runner itself refuses to start without it. | `openssl rand -hex 32` |
 
 > The six variables marked Required in the first six rows are the exact set enforced by the startup

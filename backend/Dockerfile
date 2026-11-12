@@ -25,6 +25,10 @@ COPY --from=build /app/publish .
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080
 
+# Create the Git repos data dir and hand ownership to the app user while still root,
+# so the non-root process can write workflow Git history (mounted volume in compose).
+RUN mkdir -p /app/data/repos && chown -R $APP_UID:$APP_UID /app/data
+
 # Run as the non-root user the .NET base image ships (APP_UID=1654).
 USER $APP_UID
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
