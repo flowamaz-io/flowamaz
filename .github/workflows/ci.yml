@@ -103,3 +103,22 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: '1'
           ignore-unfixed: true
+
+  compose:
+    # The compose files must stay loadable by current Docker Compose (it refuses e.g. pids_limit next to deploy limits).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose files
+        env:
+          DB_USER: ci
+          DB_NAME: ci
+          DB_PASSWORD: ci
+        run: |
+          docker compose version
+          export CONNECTOR_RUNNER_SECRET="$(openssl rand -hex 32)"
+          touch .env
+          printf 'CONNECTOR_RUNNER_SECRET=%s\n' "$CONNECTOR_RUNNER_SECRET" > infrastructure/staging.env
+          docker compose -f infrastructure/docker-compose.yml config -q
+          docker compose -f infrastructure/docker-compose.dev.yml config -q
+          docker compose -f infrastructure/docker-compose.staging.yml --env-file infrastructure/staging.env config -q

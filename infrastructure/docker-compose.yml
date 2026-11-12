@@ -102,7 +102,6 @@ services:
       - /tmp:size=256m,mode=1777
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    pids_limit: 256
     depends_on:
       - egress-proxy
     restart: unless-stopped
@@ -111,6 +110,8 @@ services:
         limits:
           cpus: "1.0"
           memory: 768M
+          # Process limit here, not as pids_limit: Compose refuses both (newer versions treat them as clashing).
+          pids: 256
 
   egress-proxy:
     build:
@@ -125,13 +126,13 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    pids_limit: 128
     restart: unless-stopped
     deploy:
       resources:
         limits:
           cpus: "0.5"
           memory: 256M
+          pids: 128
 
 networks:
   default: {}
