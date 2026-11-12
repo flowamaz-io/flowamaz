@@ -150,7 +150,10 @@ public sealed class SessionAndAccessGapTests : ApiTestBase
                 other.PatchAsJsonAsync($"/api/v1/workspaces/{ws}/members/{ownerId}/role", new { role = "Viewer" }));
 
             results.Count(r => r.StatusCode == HttpStatusCode.NoContent).Should().Be(1, $"round {round}: only one demotion can win");
-            results.Count(r => r.StatusCode == HttpStatusCode.Conflict).Should().Be(1, $"round {round}: the other is refused as the last Admin");
+            // The loser is refused: as the last Admin (409) if it got the lock second, or — if the winner's demotion of
+            // it landed first — because its token was just ended (401) or its role is already Viewer (403).
+            results.Count(r => r.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                .Should().Be(1, $"round {round}: the other demotion is refused");
             var admins = await DbAsync(db => db.WorkspaceMembers.CountAsync(m => m.WorkspaceId == ws && m.IsActive && m.Role == WorkspaceRole.Admin));
             admins.Should().Be(1);
         }
@@ -232,6 +235,37 @@ public sealed class SessionAndAccessGapTests : ApiTestBase
         (await DbAsync(db => db.ScimRoleResyncs.CountAsync(r => r.OrgId == owner.OrgId))).Should().Be(0);
         (await StatusAsync(someone, "/api/v1/workspaces")).Should().Be(HttpStatusCode.Unauthorized,
             "a token from before the new roles is refreshed to carry them");
+    }
+
+    [Fact]
+    public async Task A_person_queued_again_while_the_job_runs_stays_queued_for_the_newer_change()
+    {
+        var owner = await RegisterOwnerAsync(U("gap-requeue"));
+        var person = await AddPersonAsync(owner.OrgId, "p@gap-requeue.test");
+        using (var scope = Fixture.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<IScimRepository>().QueueRoleResyncAsync(owner.OrgId, [person]);
+
+        // The job claims the row (and holds its lock) …
+        using var jobScope = Fixture.Services.CreateScope();
+        var jobDb = jobScope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+        var jobRepo = jobScope.ServiceProvider.GetRequiredService<IScimRepository>();
+        await using var claim = await jobDb.Database.BeginTransactionAsync();
+        var claimed = (await jobRepo.ClaimRoleResyncsAsync(1000, ScimService.MaxResyncAttempts)).Where(r => r.OrgUserId == person).ToList();
+        claimed.Should().HaveCount(1);
+
+        // … while a second group change queues the same person: it waits for the job instead of being dropped.
+        using var requestScope = Fixture.Services.CreateScope();
+        var requeue = requestScope.ServiceProvider.GetRequiredService<IScimRepository>().QueueRoleResyncAsync(owner.OrgId, [person]);
+        await Task.Delay(300);
+        requeue.IsCompleted.Should().BeFalse("the queued row is locked by the job");
+
+        await jobRepo.DeleteRoleResyncsAsync(claimed);
+        await claim.CommitAsync();
+        await requeue;
+
+        (await DbAsync(db => db.ScimRoleResyncs.CountAsync(r => r.OrgUserId == person))).Should().Be(1,
+            "the newer change is still waiting to be applied");
+        await DbAsync(db => db.ScimRoleResyncs.Where(r => r.OrgUserId == person).ExecuteDeleteAsync()); // leave the queue empty
     }
 
     // ── Agreed API limits ──────────────────────────────────────────────────────────────

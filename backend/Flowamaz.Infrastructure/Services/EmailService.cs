@@ -50,6 +50,11 @@ public sealed class EmailService : IEmailService
             SmtpEnableSsl = opt.SmtpEnableSsl,
         };
         if (string.IsNullOrWhiteSpace(_options.FromAddress)) _options.FromAddress = "noreply@flowamaz.io";
+        if (!string.IsNullOrWhiteSpace(_options.SmtpHost))
+            _logger.LogWarning(
+                "EmailService: sending all email through SMTP {Host}:{Port} (ssl={Ssl}), not Resend. Meant for local development " +
+                "(Mailpit); unset Email:SmtpHost / SMTP_HOST in production.",
+                _options.SmtpHost, _options.SmtpPort, _options.SmtpEnableSsl);
     }
 
     private static string NonEmpty(params string?[] values)

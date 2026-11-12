@@ -12,7 +12,7 @@ namespace Flowamaz.Tests.Unit.Workspaces;
 
 public class WorkspaceMemberServiceTests
 {
-    private readonly Mock<IWorkspaceMemberRepository> _memberRepo = new();
+    private readonly Mock<IWorkspaceMemberRepository> _memberRepo = new() { CallBase = true }; // GetFreshAsync → GetAsync
     private readonly Mock<IUnitOfWork> _uow = new();
     private readonly Mock<Flowamaz.Core.Interfaces.Services.IEditionService> _edition = new();
     private readonly Guid _workspaceId = Guid.NewGuid();

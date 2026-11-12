@@ -25,17 +25,22 @@ const search = ref('');
 const confirming = ref<string | null>(null);
 const unlinking = ref<string | null>(null);
 
+/** Numbers each search, so a slow older answer can't replace a newer one. */
+let latest = 0;
+
 async function load(): Promise<void> {
+  const request = ++latest;
   loading.value = true;
   loadError.value = '';
   try {
     const page = await ssoService.getLinkedIdentities(props.orgId, search.value.trim() || undefined);
+    if (request !== latest) return; // a newer search has started
     items.value = page.items;
     total.value = page.total;
   } catch (e) {
-    loadError.value = toUserFacingError(e).message;
+    if (request === latest) loadError.value = toUserFacingError(e).message;
   } finally {
-    loading.value = false;
+    if (request === latest) loading.value = false;
   }
 }
 

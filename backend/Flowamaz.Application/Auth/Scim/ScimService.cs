@@ -601,36 +601,61 @@ public sealed class ScimService
         return affected;
     }
 
+    /// <summary>A queued person whose roles fail to re-apply this many times is left parked (and logged) for a look.</summary>
+    public const int MaxResyncAttempts = 5;
+
     /// <summary>
     /// Re-applies the roles of up to <paramref name="batchSize"/> people queued by large group changes, oldest first,
     /// then ends their current access tokens. Safe to run on several servers at once (queued rows are locked and
-    /// skipped). Returns how many people were processed; a failure leaves the batch queued for the next run.
+    /// skipped). A person queued again while this ran stays queued, so the newer change is applied too. If the batch
+    /// fails it is rolled back and its rows count a failed attempt, moving them behind the rest of the queue.
+    /// Returns how many people were processed (0 after a failure).
     /// </summary>
-    public async Task<int> ProcessQueuedRoleResyncsAsync(int batchSize = 200, CancellationToken ct = default)
+    public async Task<int> ProcessQueuedRoleResyncsAsync(int batchSize = 50, CancellationToken ct = default)
     {
         _logger.LogDebug("ScimService.ProcessQueuedRoleResyncsAsync enter batch={Batch}", batchSize);
+        List<ScimRoleResync> queued = [];
+        var cutOff = new List<Guid>();
         try
         {
-            await using var transaction = await _unitOfWork.BeginTransactionAsync(ct);
-            var queued = await _scim.ClaimRoleResyncsAsync(batchSize, ct);
-            if (queued.Count == 0) return 0;
-            foreach (var org in queued.GroupBy(q => q.OrgId))
+            await using (var transaction = await _unitOfWork.BeginTransactionAsync(ct))
             {
-                // Settings may have changed since the people were queued: with roles from SCIM now off, sign-ins decide.
-                var config = await _configs.GetByOrgIdAsync(org.Key, ct) ?? new OrgSsoConfig { OrgId = org.Key };
-                await ResyncAsync(org.Key, config, org.Select(q => q.OrgUserId).ToList(), isNew: false, ct, evenWithoutScimRoles: false);
-                await _unitOfWork.SaveChangesAsync(ct);
+                queued = await _scim.ClaimRoleResyncsAsync(batchSize, MaxResyncAttempts, ct);
+                if (queued.Count == 0) return 0;
+                foreach (var org in queued.GroupBy(q => q.OrgId))
+                {
+                    // Settings may have changed since the people were queued: with roles from SCIM now off, sign-ins
+                    // decide, nothing changes here and nobody needs a new token.
+                    var config = await _configs.GetByOrgIdAsync(org.Key, ct) ?? new OrgSsoConfig { OrgId = org.Key };
+                    if (!config.RolesFromScim) continue;
+                    var people = org.Select(q => q.OrgUserId).ToList();
+                    await ResyncAsync(org.Key, config, people, isNew: false, ct, evenWithoutScimRoles: false);
+                    await _unitOfWork.SaveChangesAsync(ct);
+                    cutOff.AddRange(people);
+                }
+                await _scim.DeleteRoleResyncsAsync(queued, ct);
+                await transaction.CommitAsync(ct);
             }
-            await _scim.DeleteRoleResyncsAsync(queued.Select(q => q.Id).ToList(), ct);
-            await transaction.CommitAsync(ct);
-            await CutOffAsync(queued.Select(q => q.OrgUserId).ToList(), ct);
+            await CutOffAsync(cutOff, ct);
             _logger.LogInformation("ScimService.ProcessQueuedRoleResyncsAsync exit processed={Count}", queued.Count);
             return queued.Count;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "ScimService.ProcessQueuedRoleResyncsAsync error");
-            throw;
+            _logger.LogError(ex, "ScimService.ProcessQueuedRoleResyncsAsync error count={Count} — the batch stays queued", queued.Count);
+            if (queued.Count > 0)
+            {
+                try { await _scim.MarkRoleResyncsFailedAsync(queued.Select(q => q.Id).ToList(), ct); }
+                catch (Exception markEx) when (markEx is not OperationCanceledException)
+                {
+                    _logger.LogError(markEx, "ScimService.ProcessQueuedRoleResyncsAsync couldn't record the failed attempt");
+                }
+                var parked = queued.Where(q => q.Attempts + 1 >= MaxResyncAttempts).Select(q => q.OrgUserId).ToList();
+                if (parked.Count > 0)
+                    _logger.LogError("ScimService.ProcessQueuedRoleResyncsAsync parked {Count} people after {Max} failed attempts: {UserIds}",
+                        parked.Count, MaxResyncAttempts, parked);
+            }
+            return 0;
         }
     }
 

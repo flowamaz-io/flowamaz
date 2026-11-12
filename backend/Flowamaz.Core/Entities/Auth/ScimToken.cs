@@ -45,4 +45,7 @@ public class ScimRoleResync : BaseEntity
 {
     public Guid OrgId { get; set; }
     public Guid OrgUserId { get; set; }
+
+    /// <summary>Failed runs so far. Rows that keep failing go to the back of the queue and stop after a few tries.</summary>
+    public int Attempts { get; set; }
 }

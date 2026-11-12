@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Flowamaz.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(FlowAmazDbContext))]
-    [Migration("20261111235247_AddScimRoleResyncQueue")]
+    [Migration("20261112003046_AddScimRoleResyncQueue")]
     partial class AddScimRoleResyncQueue
     {
         /// <inheritdoc />
@@ -1313,6 +1313,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")

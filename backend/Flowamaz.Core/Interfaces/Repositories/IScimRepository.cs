@@ -56,8 +56,14 @@ public interface IScimRepository
     /// The oldest queued people (at most <paramref name="take"/>), locked for the caller's transaction and skipped by
     /// other workers. Call inside a transaction and remove them with <see cref="DeleteRoleResyncsAsync"/> before committing.
     /// </summary>
-    Task<List<ScimRoleResync>> ClaimRoleResyncsAsync(int take, CancellationToken ct = default);
-    Task DeleteRoleResyncsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+    Task<List<ScimRoleResync>> ClaimRoleResyncsAsync(int take, int maxAttempts, CancellationToken ct = default);
+    /// <summary>
+    /// Removes the claimed rows, unless a newer change queued the same person again meanwhile (its UpdatedAt moved):
+    /// those stay queued for the next run.
+    /// </summary>
+    Task DeleteRoleResyncsAsync(IReadOnlyCollection<ScimRoleResync> claimed, CancellationToken ct = default);
+    /// <summary>Counts a failed run against these rows (in its own statement, after the failed transaction rolled back).</summary>
+    Task MarkRoleResyncsFailedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
     /// <summary>How many people of this organisation are waiting for a role re-sync.</summary>
     Task<int> CountQueuedRoleResyncsAsync(Guid orgId, CancellationToken ct = default);
 }

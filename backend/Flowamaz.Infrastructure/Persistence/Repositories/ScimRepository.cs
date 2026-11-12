@@ -124,26 +124,39 @@ public sealed class ScimRepository(FlowAmazDbContext db) : IScimRepository
         var now = DateTime.UtcNow;
         // Only people of this organisation are queued, whatever ids are passed.
         await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO scim_role_resyncs (id, org_id, org_user_id, created_at, updated_at, is_deleted)
-            SELECT gen_random_uuid(), {orgId}, u.id, {now}, {now}, false
+            INSERT INTO scim_role_resyncs (id, org_id, org_user_id, created_at, updated_at, is_deleted, attempts)
+            SELECT gen_random_uuid(), {orgId}, u.id, {now}, {now}, false, 0
             FROM org_users u
             WHERE u.org_id = {orgId} AND u.id = ANY({ids})
-            ON CONFLICT (org_id, org_user_id) DO NOTHING
+            ON CONFLICT (org_id, org_user_id) DO UPDATE SET updated_at = clock_timestamp(), attempts = 0
             """, ct);
     }
 
-    public Task<List<ScimRoleResync>> ClaimRoleResyncsAsync(int take, CancellationToken ct = default) =>
+    public Task<List<ScimRoleResync>> ClaimRoleResyncsAsync(int take, int maxAttempts, CancellationToken ct = default) =>
         db.ScimRoleResyncs
-            .FromSqlInterpolated($"SELECT * FROM scim_role_resyncs ORDER BY created_at LIMIT {take} FOR UPDATE SKIP LOCKED")
+            .FromSqlInterpolated($"SELECT * FROM scim_role_resyncs WHERE attempts < {maxAttempts} ORDER BY attempts, created_at LIMIT {take} FOR UPDATE SKIP LOCKED")
             .IgnoreQueryFilters()
             .AsNoTracking()
             .ToListAsync(ct);
 
-    public async Task DeleteRoleResyncsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    public async Task DeleteRoleResyncsAsync(IReadOnlyCollection<ScimRoleResync> claimed, CancellationToken ct = default)
+    {
+        if (claimed.Count == 0) return;
+        var ids = claimed.Select(c => c.Id).ToArray();
+        var stamps = claimed.Select(c => DateTime.SpecifyKind(c.UpdatedAt, DateTimeKind.Utc)).ToArray();
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            DELETE FROM scim_role_resyncs r
+            USING unnest({ids}, {stamps}) AS c(id, stamp)
+            WHERE r.id = c.id AND r.updated_at = c.stamp
+            """, ct);
+    }
+
+    public async Task MarkRoleResyncsFailedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
     {
         if (ids.Count == 0) return;
         var array = ids.ToArray();
-        await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM scim_role_resyncs WHERE id = ANY({array})", ct);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE scim_role_resyncs SET attempts = attempts + 1, updated_at = clock_timestamp() WHERE id = ANY({array})", ct);
     }
 
     public Task<int> CountQueuedRoleResyncsAsync(Guid orgId, CancellationToken ct = default) =>

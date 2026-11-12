@@ -60,6 +60,14 @@ public sealed class WorkspaceMemberRepository(FlowAmazDbContext db) : IWorkspace
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0))", cancellationToken);
     }
 
+    public async Task<WorkspaceMember?> GetFreshAsync(Guid workspaceId, Guid orgUserId, CancellationToken cancellationToken = default)
+    {
+        var member = await GetAsync(workspaceId, orgUserId, cancellationToken);
+        if (member is null) return null;
+        await db.Entry(member).ReloadAsync(cancellationToken); // FirstOrDefault returns an already-tracked copy as it was
+        return db.Entry(member).State == EntityState.Detached ? null : member; // removed meanwhile
+    }
+
     public async Task AddAsync(WorkspaceMember member, CancellationToken cancellationToken = default) =>
         await db.WorkspaceMembers.AddAsync(member, cancellationToken);
 

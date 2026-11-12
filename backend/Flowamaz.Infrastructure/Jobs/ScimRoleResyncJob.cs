@@ -6,14 +6,14 @@ namespace Flowamaz.Infrastructure.Jobs;
 
 /// <summary>
 /// Quartz job (every 10s) that re-applies workspace roles for people queued by large SCIM group changes
-/// (<see cref="ScimService.InlineResyncLimit"/>). Works through up to 10 batches of 200 per run, so a group of
-/// 2,000 people is done in one run and a much larger one within a few minutes.
+/// (<see cref="ScimService.InlineResyncLimit"/>). Works through up to 40 batches of 50 per run (small transactions,
+/// so SCIM requests aren't held up), so a group of 2,000 people is done in one run and a much larger one within minutes.
 /// </summary>
 [DisallowConcurrentExecution]
 public sealed class ScimRoleResyncJob : IJob
 {
-    private const int BatchSize = 200;
-    private const int MaxBatchesPerRun = 10;
+    private const int BatchSize = 50;
+    private const int MaxBatchesPerRun = 40;
 
     private readonly ScimService _scim;
     private readonly ILogger<ScimRoleResyncJob> _logger;
@@ -40,7 +40,7 @@ public sealed class ScimRoleResyncJob : IJob
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The failed batch stays queued and is retried on the next run.
+            // ProcessQueuedRoleResyncsAsync handles a failed batch itself; this is anything unexpected around it.
             _logger.LogError(ex, "ScimRoleResyncJob.Execute error processed={Count}", total);
         }
     }

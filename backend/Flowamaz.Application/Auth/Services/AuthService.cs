@@ -256,7 +256,7 @@ public sealed class AuthService
 
             _logger.LogDebug("AuthService.GetMeAsync exit userId={UserId} workspaceCount={Count}", orgUserId, workspaces.Count);
             return new MeResponse(user.Id, user.Email, user.Name, user.OrgId, org.Slug, workspaces, user.IsOrgOwner,
-                Platform.PlatformStaff.IsStaffOrg(_configuration, user.OrgId));
+                Platform.PlatformStaff.IsStaff(_configuration, user.OrgId, user.IsOrgOwner));
         }
         catch (Exception ex)
         {

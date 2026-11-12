@@ -31,6 +31,13 @@ public interface IWorkspaceMemberRepository
     /// </summary>
     Task LockAdminsAsync(Guid workspaceId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The membership as committed now, re-read even if this unit of work already loaded it (e.g. while authorising the
+    /// request). Use after <see cref="LockAdminsAsync"/> so decisions don't rest on a copy read before the lock.
+    /// </summary>
+    Task<WorkspaceMember?> GetFreshAsync(Guid workspaceId, Guid orgUserId, CancellationToken cancellationToken = default) =>
+        GetAsync(workspaceId, orgUserId, cancellationToken);
+
     Task AddAsync(WorkspaceMember member, CancellationToken cancellationToken = default);
     void Update(WorkspaceMember member);
     void Remove(WorkspaceMember member);

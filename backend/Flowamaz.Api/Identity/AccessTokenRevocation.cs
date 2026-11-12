@@ -15,12 +15,15 @@ public static class AccessTokenRevocation
     private const string IssuedAtMsClaim = "iat_ms"; // JwtService.IssuedAtMsClaim
 
     /// <summary>True when the token these claims came from was issued before a revocation marker for its user or org.</summary>
-    public static async Task<bool> IsRevokedAsync(HttpContext context, IEnumerable<Claim> claims, ITokenRevocationService revocation)
+    public static async Task<bool> IsRevokedAsync(
+        HttpContext context, IEnumerable<Claim> claims, ITokenRevocationService revocation, bool useCache = true)
     {
-        if (context.Items.TryGetValue(ItemKey, out var cached) && cached is bool known) return known;
-
         var list = claims as IReadOnlyCollection<Claim> ?? claims.ToList();
         string? Value(params string[] types) => list.FirstOrDefault(c => types.Contains(c.Type))?.Value;
+
+        // Cached per token (subject + issue time), so a second token in the same request is checked on its own.
+        var cacheKey = $"{ItemKey}:{Value("sub", ClaimTypes.NameIdentifier)}:{Value(IssuedAtMsClaim)}";
+        if (useCache && context.Items.TryGetValue(cacheKey, out var cached) && cached is bool known) return known;
 
         var revoked = false;
         if (Guid.TryParse(Value("sub", ClaimTypes.NameIdentifier), out var userId))
@@ -31,7 +34,7 @@ public static class AccessTokenRevocation
             _ = long.TryParse(Value(IssuedAtMsClaim), out var issuedAtMs);
             revoked = await revocation.IsRevokedAsync(userId, orgId, isOwner, issuedAtMs, context.RequestAborted);
         }
-        context.Items[ItemKey] = revoked;
+        context.Items[cacheKey] = revoked;
         return revoked;
     }
 }

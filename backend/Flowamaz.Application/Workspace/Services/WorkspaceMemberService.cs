@@ -111,7 +111,7 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
             }
 
             await using var transaction = await BeginAdminLockAsync(workspaceId, cancellationToken);
-            var member = await _memberRepository.GetAsync(workspaceId, targetUserId, cancellationToken)
+            var member = await _memberRepository.GetFreshAsync(workspaceId, targetUserId, cancellationToken)
                 ?? throw new InvalidOperationException(
                     $"User '{targetUserId}' is not a member of workspace '{workspaceId}'.");
 
@@ -156,7 +156,7 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
             }
 
             await using var transaction = await BeginAdminLockAsync(workspaceId, cancellationToken);
-            var member = await _memberRepository.GetAsync(workspaceId, targetUserId, cancellationToken);
+            var member = await _memberRepository.GetFreshAsync(workspaceId, targetUserId, cancellationToken);
             if (member is null)
             {
                 _logger.LogWarning(
@@ -195,7 +195,7 @@ public sealed class WorkspaceMemberService : IWorkspaceMemberService
         try
         {
             await using var transaction = await BeginAdminLockAsync(workspaceId, cancellationToken);
-            var member = await _memberRepository.GetAsync(workspaceId, userId, cancellationToken);
+            var member = await _memberRepository.GetFreshAsync(workspaceId, userId, cancellationToken);
             if (member is null)
             {
                 _logger.LogWarning(

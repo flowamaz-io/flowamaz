@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useInstanceWebSocket, type InstanceStatusFrame } from '@/composables/useInstanceWebSocket';
 
+const refresh = vi.fn(async () => 'fresh');
+vi.mock('@/services/api.service', () => ({ BASE_URL: 'http://localhost', refreshAccessToken: () => refresh() }));
+
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((ev: { data: string }) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((ev?: { code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
   url: string;
   closed = false;
@@ -26,6 +29,7 @@ class FakeWebSocket {
 
 beforeEach(() => {
   FakeWebSocket.instances = [];
+  refresh.mockClear();
   vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
 });
 
@@ -56,26 +60,46 @@ describe('useInstanceWebSocket', () => {
     expect(frames[0]!.status).toBe('Running');
   });
 
-  it('reconnects with backoff on unexpected close', () => {
+  it('reconnects with backoff on unexpected close', async () => {
     vi.useFakeTimers();
     const ws = useInstanceWebSocket('w1', 'i1', () => 'tok');
     ws.connect();
+    FakeWebSocket.latest().onopen?.();
 
-    FakeWebSocket.latest().onclose?.();
+    FakeWebSocket.latest().onclose?.({ code: 1006 });
     expect(ws.connectionState.value).toBe('reconnecting');
 
-    vi.advanceTimersByTime(2000); // 2^1 * 1000ms
+    await vi.advanceTimersByTimeAsync(2000); // 2^1 * 1000ms
     expect(FakeWebSocket.instances.length).toBe(2);
+    expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('gives up after the max retries and reports lost', () => {
+  it('gets a fresh token before reconnecting when the server ends the session (4401)', async () => {
+    vi.useFakeTimers();
+    let token = 'old';
+    refresh.mockImplementationOnce(async () => {
+      token = 'fresh';
+      return token;
+    });
+    const ws = useInstanceWebSocket('w1', 'i1', () => token);
+    ws.connect();
+    FakeWebSocket.latest().onopen?.();
+
+    FakeWebSocket.latest().onclose?.({ code: 4401 });
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(FakeWebSocket.latest().url).toContain('token=fresh');
+  });
+
+  it('gives up after the max retries and reports lost', async () => {
     vi.useFakeTimers();
     const ws = useInstanceWebSocket('w1', 'i1', () => 'tok');
     ws.connect();
 
     for (let i = 0; i < 6; i++) {
       FakeWebSocket.latest().onclose?.();
-      vi.advanceTimersByTime(40_000);
+      await vi.advanceTimersByTimeAsync(40_000);
     }
 
     expect(ws.connectionState.value).toBe('lost');

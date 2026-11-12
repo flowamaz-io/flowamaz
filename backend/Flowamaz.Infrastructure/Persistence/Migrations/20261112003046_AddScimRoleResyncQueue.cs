@@ -18,6 +18,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     org_id = table.Column<Guid>(type: "uuid", nullable: false),
                     org_user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    attempts = table.Column<int>(type: "integer", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false),

@@ -59,9 +59,10 @@ public sealed class RedisTokenRevocationService : ITokenRevocationService
         try
         {
             var db = _redis.GetDatabase();
-            RedisKey[] keys = isOrgOwner ? [UserKey(orgUserId)] : [UserKey(orgUserId), OrgKey(orgId)];
-            var values = await db.StringGetAsync(keys);
-            foreach (var value in values)
+            // One GET per key, not MGET: the two keys may live on different Redis Cluster slots.
+            var lookups = new List<Task<RedisValue>> { db.StringGetAsync(UserKey(orgUserId)) };
+            if (!isOrgOwner) lookups.Add(db.StringGetAsync(OrgKey(orgId)));
+            foreach (var value in await Task.WhenAll(lookups))
             {
                 if (value.HasValue && long.TryParse(value.ToString(), out var revokedAt) && issuedAtUnixMs < revokedAt)
                     return true;

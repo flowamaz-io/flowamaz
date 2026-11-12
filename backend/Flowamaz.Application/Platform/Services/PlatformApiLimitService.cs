@@ -90,7 +90,7 @@ public sealed class PlatformApiLimitService
                 ResourceId = orgId,
                 ResourceLabel = org.Name,
                 Action = "updated",
-                Metadata = new { from = before, to = perMinute },
+                Metadata = new { from = before, to = perMinute, staffUserId },
             }, ct);
             var dto = await ToDtoAsync(org, ct);
             _logger.LogInformation("PlatformApiLimitService.SetAsync exit org={OrgId} effective={Effective}", orgId, dto.EffectivePerMinute);
