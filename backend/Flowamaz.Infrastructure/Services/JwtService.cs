@@ -33,8 +33,11 @@ public sealed class JwtService : IJwtService
     private readonly SymmetricSecurityKey _signingKey;
     private readonly ILogger<JwtService> _logger;
 
-    public JwtService(IOptions<JwtOptions> options, ILogger<JwtService> logger)
+    private readonly ITokenRevocationService? _revocation;
+
+    public JwtService(IOptions<JwtOptions> options, ILogger<JwtService> logger, ITokenRevocationService? revocation = null)
     {
+        _revocation = revocation;
         _options = options.Value;
         _logger = logger;
         if (string.IsNullOrEmpty(_options.Secret) || Encoding.UTF8.GetByteCount(_options.Secret) < MinSecretBytes)
@@ -69,7 +72,9 @@ public sealed class JwtService : IJwtService
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             // Millisecond issue time: JwtAuthMiddleware compares it with revocation markers (ITokenRevocationService),
             // so a token issued right after a revocation (e.g. a fresh sign-in) is never caught by it.
-            new(IssuedAtMsClaim, new DateTimeOffset(now).ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer64),
+            new(IssuedAtMsClaim,
+                (_revocation?.IssueTimeUnixMs() ?? new DateTimeOffset(now).ToUnixTimeMilliseconds()).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ClaimValueTypes.Integer64),
             new("name", user.Name),
             new("is_org_owner", user.IsOrgOwner.ToString().ToLowerInvariant()),
             new(OrgIdClaim, user.OrgId.ToString()),

@@ -367,10 +367,13 @@ public sealed class SsoService : ISsoService
             }
             if (!string.IsNullOrWhiteSpace(claims.Name) && claims.Name != user.Name) user.Name = claims.Name;
             user.LastLoginAt = DateTime.UtcNow;
-            if (!user.IsOrgOwner)
+            var rolesChanged = !user.IsOrgOwner &&
                 await _sync.SyncAsync(user, config, await RoleGroupsAsync(config, user.Id, claims, isNew: false, ct), isNew: false, ct);
             await _unitOfWork.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
+            // The person's other sessions (other browsers, devices) carry the old roles: end their current access tokens.
+            // The token this sign-in issues next is newer than the marker, so it isn't affected.
+            if (rolesChanged && _revocation is not null) await _revocation.RevokeUserAccessAsync(user.Id, ct);
             return user;
         }
 
