@@ -14,13 +14,14 @@ import DeleteWorkflowModal from '@/components/workflow/DeleteWorkflowModal.vue';
 import { useWorkflowStore } from '@/stores/workflow.store';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { fromNow } from '@/utils/date.util';
-import { CREATION_METHODS } from '@/utils/constants';
+import { CREATION_METHODS, DESIGNER_ROLE_NEEDED, canDesign } from '@/utils/constants';
 import { healthColorClass, workflowStatusVariant } from '@/utils/workflow.util';
 import type { WorkflowStatus } from '@/types';
 
 const store = useWorkflowStore();
 const { workflows, loading, error } = storeToRefs(store);
-const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
+const { currentWorkspaceId, current, loadWorkspaces } = useWorkspace();
+const canCreate = computed(() => canDesign(current.value?.role));
 const router = useRouter();
 
 const search = ref('');
@@ -136,11 +137,16 @@ onMounted(reload);
     <FmEmptyState
       v-else-if="workflows.length === 0"
       :icon="Workflow"
-      title="Create your first workflow"
-      description="Choose how you want to build — describe it in plain English, upload a document, or draw it on the canvas."
+      :title="canCreate ? 'Create your first workflow' : 'No workflows yet'"
+      :description="canCreate
+        ? 'Choose how you want to build — describe it in plain English, upload a document, or draw it on the canvas.'
+        : DESIGNER_ROLE_NEEDED"
     >
       <template #action>
-        <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div
+          v-if="canCreate"
+          class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3"
+        >
           <button
             v-for="method in CREATION_METHODS"
             :key="method.id"

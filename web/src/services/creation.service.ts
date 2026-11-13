@@ -103,7 +103,57 @@ export interface UnifiedWorkflowCreateRequest {
   documentMimeType?: string;
   /** Visual review path: the graph confirmed by the user (replaces imageBase64). */
   visualGraph?: ConfirmedVisualGraph;
+  /** Conversation review path: the extraction confirmed by the user (replaces conversationText). */
+  conversationExtraction?: ConversationExtraction;
 }
+
+/** Conversation → Workflow: someone who wrote in the thread (found by parsing it, not by AI). */
+export interface ConversationParticipant {
+  name: string;
+  messageCount: number;
+}
+
+export interface ConversationStep {
+  title: string;
+  owner: string | null;
+  system: string | null;
+  saidBy: string | null;
+}
+
+export interface ConversationDecision {
+  condition: string;
+  outcome: string;
+  saidBy: string | null;
+}
+
+export interface ConversationApprover {
+  who: string;
+  when: string | null;
+}
+
+/** What the AI read out of a conversation; the user reviews and edits it before generation. */
+export interface ConversationExtraction {
+  workflowName: string;
+  summary: string;
+  trigger: string;
+  participants: ConversationParticipant[];
+  steps: ConversationStep[];
+  decisions: ConversationDecision[];
+  approvers: ConversationApprover[];
+  agreements: string[];
+  systems: string[];
+  openQuestions: string[];
+  confidence: number;
+}
+
+export interface ConversationPreviewResult {
+  extraction: ConversationExtraction;
+  /** Things to check before generating (an approver nobody named, low confidence, open questions). */
+  warnings: string[];
+  tokensUsed: number;
+}
+
+export type ConversationSource = 'slack' | 'teams' | 'email' | 'generic';
 
 export interface WorkflowCreationResult {
   workflowId: string;
@@ -156,6 +206,19 @@ export async function previewVisual(
   const response = await http.post<ApiEnvelope<VisualPreviewResult>>(
     `/api/v1/workspaces/${workspaceId}/workflows/visual/preview`,
     { imageBase64, imageMimeType },
+  );
+  return unwrap(response);
+}
+
+/** Conversation creation step 1 — read the process out of the thread for review. Nothing is saved. */
+export async function previewConversation(
+  workspaceId: string,
+  text: string,
+  sourceType: ConversationSource,
+): Promise<ConversationPreviewResult> {
+  const response = await http.post<ApiEnvelope<ConversationPreviewResult>>(
+    `/api/v1/workspaces/${workspaceId}/workflows/conversation/preview`,
+    { text, sourceType },
   );
   return unwrap(response);
 }

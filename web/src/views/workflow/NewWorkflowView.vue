@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDebounceFn } from '@vueuse/core';
 import CreationMethodSelector from '../../components/creation/CreationMethodSelector.vue';
@@ -13,11 +13,13 @@ import { createWorkflow } from '../../services/creation.service';
 import { useWorkspace } from '../../composables/useWorkspace';
 import { useVoiceInput } from '../../composables/useVoiceInput';
 import { toUserFacingError } from '../../utils/error.util';
+import { DESIGNER_ROLE_NEEDED, canDesign } from '../../utils/constants';
 
 const route = useRoute();
 const router = useRouter();
 const ws = useWorkspace();
 const workspaceId = ws.currentWorkspaceId;
+const canCreate = computed(() => canDesign(ws.current.value?.role));
 const { isSupported: voiceSupported } = useVoiceInput();
 
 const selectedMethod = ref<string | null>(null);
@@ -94,6 +96,22 @@ onMounted(() => {
       class="flex items-center justify-center py-20"
     >
       <div class="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+
+    <!-- Not allowed: say so before the form is filled in (the server would refuse it anyway). -->
+    <div
+      v-else-if="!canCreate"
+      class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800"
+      role="status"
+      data-test="designer-role-needed"
+    >
+      <p>{{ DESIGNER_ROLE_NEEDED }}</p>
+      <RouterLink
+        to="/workflows"
+        class="mt-2 inline-block font-medium text-amber-900 underline"
+      >
+        Back to workflows
+      </RouterLink>
     </div>
 
     <!-- Error -->

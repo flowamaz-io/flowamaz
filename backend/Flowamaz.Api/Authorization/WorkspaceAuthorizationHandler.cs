@@ -70,7 +70,7 @@ public sealed class WorkspaceAuthorizationHandler : IAsyncAuthorizationFilter
         catch (InsufficientRoleException)
         {
             context.Result = Envelope(context, 403, "WORKSPACE_INSUFFICIENT_ROLE",
-                $"Insufficient permissions. Required role: {_minimumRole} or higher.");
+                $"This needs the {_minimumRole} role or higher in this workspace. Ask a workspace admin to change your role in Settings → Members.");
         }
     }
 

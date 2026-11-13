@@ -162,6 +162,30 @@ public sealed class SessionAndAccessGapTests : ApiTestBase
     }
 
     [Fact]
+    public async Task Two_admins_leaving_at_once_leave_the_workspace_with_an_admin()
+    {
+        // Phase 8 L2: leave used to count admins and then delete in two steps, so both could pass the check.
+        var owner = await RegisterOwnerAsync(U("gap-leave-race"));
+        var ownerId = await DbAsync(db => db.OrgUsers.Where(u => u.OrgId == owner.OrgId).Select(u => u.Id).SingleAsync());
+        for (var round = 0; round < 5; round++)
+        {
+            var ws = await CreateWorkspaceAsync(await SignedInAsync(ownerId), $"Leave race {round}", $"gap-leave-race-{round}");
+            var otherId = await AddPersonAsync(owner.OrgId, $"admin{round}@gap-leave-race.test", ws, WorkspaceRole.Admin);
+            var other = await SignedInAsync(otherId);
+            var ownerNow = await SignedInAsync(ownerId);
+
+            var results = await Task.WhenAll(
+                ownerNow.DeleteAsync($"/api/v1/workspaces/{ws}/members/me"),
+                other.DeleteAsync($"/api/v1/workspaces/{ws}/members/me"));
+
+            results.Count(r => r.IsSuccessStatusCode).Should().Be(1, $"round {round}: only one admin can leave");
+            results.Count(r => r.StatusCode == HttpStatusCode.Conflict).Should().Be(1, $"round {round}: the other is the last admin");
+            var admins = await DbAsync(db => db.WorkspaceMembers.CountAsync(m => m.WorkspaceId == ws && m.IsActive && m.Role == WorkspaceRole.Admin));
+            admins.Should().Be(1);
+        }
+    }
+
+    [Fact]
     public async Task Signing_out_ends_that_access_token_but_not_the_persons_other_sessions()
     {
         var owner = await RegisterOwnerAsync(U("gap-logout"));

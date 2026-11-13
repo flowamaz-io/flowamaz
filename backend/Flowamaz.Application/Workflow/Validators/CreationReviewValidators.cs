@@ -91,3 +91,60 @@ public sealed class ConfirmedVisualGraphValidator : AbstractValidator<ConfirmedV
         });
     }
 }
+
+/// <summary>The extraction a user reviewed in the conversation step (POST /workflows/create, method conversation).</summary>
+public sealed class ConversationExtractionValidator : AbstractValidator<ConversationExtraction>
+{
+    public const int MaxSteps = ConversationImportService.MaxSteps;
+    private const int MaxText = 500;
+
+    public ConversationExtractionValidator()
+    {
+        RuleFor(x => x.WorkflowName).MaximumLength(200)
+            .WithMessage("Workflow name is too long. Keep it under 200 characters.");
+        RuleFor(x => x.Summary).MaximumLength(2000).WithMessage("The summary is too long. Keep it under 2,000 characters.");
+        RuleFor(x => x.Trigger).MaximumLength(2000).WithMessage("The trigger is too long. Keep it under 2,000 characters.");
+
+        RuleFor(x => x.Steps)
+            .NotNull().WithMessage("Keep at least one step before generating the workflow.")
+            .Must(s => s is not null && s.Count > 0).WithMessage("Every step was removed. Keep or add at least one step, or describe the process in plain English instead.")
+            .Must(s => s is null || s.Count != 1).WithMessage("A workflow needs at least two steps. Add the step before or after this one (who does what next).")
+            .Must(s => s is null || s.Count <= MaxSteps).WithMessage($"More than {MaxSteps} steps. Split the process into smaller workflows.");
+        RuleForEach(x => x.Steps).ChildRules(step =>
+        {
+            step.RuleFor(s => s.Title).NotEmpty().WithMessage("A step has no text. Describe it, or remove it.")
+                .MaximumLength(MaxText).WithMessage($"A step is too long. Keep each under {MaxText} characters.");
+            step.RuleFor(s => s.Owner).MaximumLength(MaxText).WithMessage($"A step owner is too long. Keep it under {MaxText} characters.");
+            step.RuleFor(s => s.System).MaximumLength(MaxText).WithMessage($"A step's system is too long. Keep it under {MaxText} characters.");
+        });
+
+        RuleFor(x => x.Decisions).Must(d => d is null || d.Count <= ConversationImportService.MaxDecisions)
+            .WithMessage($"More than {ConversationImportService.MaxDecisions} conditions. Keep the ones that change what happens.");
+        RuleForEach(x => x.Decisions).ChildRules(d =>
+        {
+            d.RuleFor(x => x.Condition).NotEmpty().WithMessage("A condition is empty. Fill it in (e.g. \"amount above $5,000\"), or remove it.")
+                .MaximumLength(MaxText).WithMessage($"A condition is too long. Keep it under {MaxText} characters.");
+            d.RuleFor(x => x.Outcome).NotEmpty().WithMessage("A condition has no outcome. Say what happens then (e.g. \"CFO approves\"), or remove it.")
+                .MaximumLength(MaxText).WithMessage($"A condition's outcome is too long. Keep it under {MaxText} characters.");
+        });
+
+        RuleFor(x => x.Approvers).Must(a => a is null || a.Count <= ConversationImportService.MaxApprovers)
+            .WithMessage($"More than {ConversationImportService.MaxApprovers} approvers. Group them by role instead.");
+        RuleForEach(x => x.Approvers).ChildRules(a =>
+        {
+            a.RuleFor(x => x.Who).NotEmpty().WithMessage("An approver is empty. Name the person or role, or remove it.")
+                .MaximumLength(MaxText).WithMessage($"An approver is too long. Keep it under {MaxText} characters.");
+            a.RuleFor(x => x.When).MaximumLength(MaxText).WithMessage($"An approver's condition is too long. Keep it under {MaxText} characters.");
+        });
+
+        RuleFor(x => x.Systems).Must(BeShortList).WithMessage($"Keep systems to {ConversationImportService.MaxListItems} entries of under {MaxText} characters.");
+        RuleFor(x => x.Agreements).Must(BeShortList).WithMessage($"Keep agreements to {ConversationImportService.MaxListItems} entries of under {MaxText} characters.");
+        RuleFor(x => x.OpenQuestions).Must(BeShortList).WithMessage($"Keep open questions to {ConversationImportService.MaxListItems} entries of under {MaxText} characters.");
+        RuleFor(x => x.Participants).Must(p => p is null || p.Count <= ConversationImportService.MaxListItems)
+            .WithMessage($"More than {ConversationImportService.MaxListItems} participants. Re-run Extract on a shorter thread.");
+        RuleFor(x => x.Confidence).InclusiveBetween(0, 1).WithMessage("Confidence must be between 0 and 1. Re-run Extract to get a fresh review.");
+    }
+
+    private static bool BeShortList(IReadOnlyList<string>? items) =>
+        items is null || (items.Count <= ConversationImportService.MaxListItems && items.All(i => i is not null && i.Length <= MaxText));
+}

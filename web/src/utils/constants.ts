@@ -81,7 +81,7 @@ export const CREATION_METHODS: { id: string; label: string; icon: Component; met
   { id: 'nl', label: 'Plain English', icon: Type, method: 'nl' },
   { id: 'voice', label: 'Voice', icon: Mic, method: 'voice' },
   { id: 'visual', label: 'Whiteboard photo', icon: Camera, method: 'visual' },
-  { id: 'conversation', label: 'Slack conversation', icon: MessagesSquare, method: 'conversation' },
+  { id: 'conversation', label: 'Paste a conversation', icon: MessagesSquare, method: 'conversation' },
   { id: 'document', label: 'Upload a document', icon: FileText, method: 'document' },
   { id: 'canvas', label: 'Drag & drop', icon: MousePointer2, method: 'canvas' },
 ];
@@ -94,3 +94,12 @@ export const ROLE_BADGE: Record<WorkspaceRole, string> = {
   Runner: 'bg-blue-100 text-blue-700',
   Viewer: 'bg-slate-100 text-slate-600',
 };
+
+/** Designers and Admins create and edit workflows. An unknown role is allowed: the server checks anyway. */
+export function canDesign(role: string | null | undefined): boolean {
+  return !role || role === 'Admin' || role === 'Designer';
+}
+
+/** Shown instead of the creation methods to members who can't create workflows. */
+export const DESIGNER_ROLE_NEEDED =
+  'Creating workflows needs the Designer role. Ask a workspace admin to change your role in Settings → Members.';

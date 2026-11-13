@@ -30,6 +30,8 @@ public sealed class WorkflowCreationController : ControllerBase
     private readonly IValidator<NlWorkflowRequest> _nlValidator;
     private readonly IValidator<ConfirmedVisualGraph> _graphValidator;
     private readonly IValidator<VisualPreviewRequest> _previewValidator;
+    private readonly IValidator<ConversationPreviewRequest> _conversationValidator;
+    private readonly IValidator<ConversationExtraction> _extractionValidator;
     private readonly ILogger<WorkflowCreationController> _log;
 
     private const long MaxImageBytes = 10 * 1024 * 1024;
@@ -57,8 +59,12 @@ public sealed class WorkflowCreationController : ControllerBase
         IValidator<NlWorkflowRequest> nlValidator,
         IValidator<ConfirmedVisualGraph> graphValidator,
         IValidator<VisualPreviewRequest> previewValidator,
+        IValidator<ConversationPreviewRequest> conversationValidator,
+        IValidator<ConversationExtraction> extractionValidator,
         ILogger<WorkflowCreationController> log)
     {
+        _conversationValidator = conversationValidator;
+        _extractionValidator = extractionValidator;
         _clarification = clarification;
         _nlValidator = nlValidator;
         _graphValidator = graphValidator;
@@ -155,12 +161,23 @@ public sealed class WorkflowCreationController : ControllerBase
 
                 case "conversation":
                 {
+                    // Review path: the user checked (and maybe edited) the extraction from POST /conversation/preview.
+                    // Only the generation AI call runs; the thread is not read again.
+                    if (request.ConversationExtraction is not null)
+                    {
+                        await _extractionValidator.ValidateAndThrowAsync(request.ConversationExtraction, cancellationToken);
+                        var reviewed = await _conversationImport.GenerateAsync(request.ConversationExtraction, workspaceId, cancellationToken);
+                        yamlContent = reviewed.YamlContent;
+                        tokensUsed = reviewed.TokensUsed;
+                        break;
+                    }
+
+                    // One-shot path (API clients that skip review): extract and generate in one request.
                     if (string.IsNullOrWhiteSpace(request.ConversationText))
                         return BadRequest(new { error = "Paste a Slack thread, email chain, or meeting notes in conversationText." });
 
                     var source = (request.SourceType ?? "generic").ToLowerInvariant();
-                    if (!ValidSources.Contains(source))
-                        return BadRequest(new { error = $"Unknown sourceType '{source}'. Use slack, teams, email, or generic." });
+                    await _conversationValidator.ValidateAndThrowAsync(new ConversationPreviewRequest(request.ConversationText, source), cancellationToken);
 
                     var conv = await _conversationImport.ImportAsync(request.ConversationText, source, workspaceId, cancellationToken);
                     yamlContent = conv.YamlContent;
@@ -445,6 +462,41 @@ public sealed class WorkflowCreationController : ControllerBase
     }
 
     /// <summary>
+    /// Conversation creation step 1: read the process out of a pasted thread — participants, steps with owners and
+    /// systems, conditions, approvers, what was agreed and what was left open — plus warnings worth checking.
+    /// Nothing is saved; POST /create with method=conversation and <c>conversationExtraction</c> generates the
+    /// workflow from the reviewed extraction.
+    /// </summary>
+    [HttpPost("conversation/preview")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    [RequestSizeLimit(2 * 1024 * 1024)]
+    public async Task<ActionResult<ConversationPreviewResult>> PreviewConversation(
+        Guid workspaceId, [FromBody] ConversationPreviewRequest request, CancellationToken cancellationToken)
+    {
+        _log.LogInformation("WorkflowCreationController.PreviewConversation entry workspaceId={WorkspaceId} source={Source}", workspaceId, request.SourceType);
+        await _conversationValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        ConversationPreviewResult preview;
+        try
+        {
+            preview = await _conversationImport.ExtractAsync(request.Text, (request.SourceType ?? "generic").ToLowerInvariant(), workspaceId, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not AppException and not OperationCanceledException)
+        {
+            _log.LogError(ex, "WorkflowCreationController.PreviewConversation AI service error workspaceId={WorkspaceId}", workspaceId);
+            return StatusCode(502, new
+            {
+                error = UnexpectedAiFailure("read the conversation"),
+                code = "AI_PROCESSING_FAILED",
+            });
+        }
+
+        _log.LogInformation("WorkflowCreationController.PreviewConversation exit steps={Steps} warnings={Warnings}",
+            preview.Extraction.Steps.Count, preview.Warnings.Count);
+        return Ok(preview);
+    }
+
+    /// <summary>
     /// Import a workflow from a conversation thread. Returns raw YAML.
     /// Prefer POST /create with method=conversation for the full save-and-navigate flow.
     /// </summary>
@@ -542,8 +594,13 @@ public sealed record UnifiedWorkflowCreateRequest(
     string? SourceType = null,
     string? DocumentBase64 = null,
     string? DocumentMimeType = null,
-    ConfirmedVisualGraph? VisualGraph = null
+    ConfirmedVisualGraph? VisualGraph = null,
+    /// <summary>Conversation review path: the extraction confirmed by the user (replaces conversationText).</summary>
+    ConversationExtraction? ConversationExtraction = null
 );
+
+/// <summary>Body of POST /workflows/conversation/preview.</summary>
+public sealed record ConversationPreviewRequest(string Text, string? SourceType = null);
 
 /// <summary>Body of POST /workflows/visual/preview.</summary>
 public sealed record VisualPreviewRequest(string ImageBase64, string? ImageMimeType = null);

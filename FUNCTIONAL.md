@@ -444,6 +444,7 @@ Phase: Year 2 (requires 6+ months of execution data).
 ### 8.4 Conversation→Workflow
 Paste a Slack thread / Teams transcript / email chain → AI extracts the process → generates workflow. Same pipeline as Method 4 above.
 Phase: Phase 3 (same NL→YAML pipeline, different input format).
+> Implemented (13 Nov 2026): two steps. **Extract** parses the thread into who said what without AI (Slack export or API JSON with real names and timestamp order; Teams .vtt or copied chat; email chains with quoted text and signatures dropped, in date order; "Name: …" notes), then one metered AI call reads out the steps (owner, system, who described it), conditions, approvers, what was agreed and what was left open. Warnings are computed, not asked of the AI: low confidence, an approver or owner nobody in the thread named, open questions. The user edits that in a review step; **Generate** sends only the reviewed version to the plain-English generator. An unreadable answer or a thread with no steps is a 422 with what to do next, never an empty workflow. API: `POST /workflows/conversation/preview`, then `POST /workflows/create` with `conversationExtraction`; the one-shot `conversationText` path remains for API clients.
 
 ### 8.5 Workflow Negotiator
 When two systems return conflicting data, AI mediates. Detects conflict, attempts autonomous resolution using business rules, escalates to human with clear recommendation if needed.
