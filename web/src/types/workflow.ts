@@ -204,6 +204,22 @@ export interface TimelineResponse {
   nodes: TimelineNode[];
 }
 
+/** One field an approver fills in at a human gate (FUNCTIONAL.md §23.2). Mirrors Flowamaz.Core.Workflow.GateFormField. */
+export type GateFormFieldType = 'text' | 'textarea' | 'number' | 'date' | 'select' | 'checkbox' | 'email';
+
+export interface GateFormField {
+  key: string;
+  label: string;
+  type: GateFormFieldType;
+  required?: boolean;
+  options?: string[] | null;
+  help?: string | null;
+  min?: number | null;
+  max?: number | null;
+}
+
+export type GateFormValue = string | number | boolean;
+
 export interface GateResponse {
   id: string;
   instanceId: string;
@@ -223,6 +239,10 @@ export interface GateResponse {
   label?: string | null;
   /** True when the gate belongs to a test run (optional — older APIs omit it). */
   isTest?: boolean;
+  /** Fields the approver fills in before approving (null when the gate has no form). */
+  form?: GateFormField[] | null;
+  /** What the approver entered, once approved. */
+  formValues?: Record<string, GateFormValue> | null;
 }
 
 export interface InterpreterNarrative {

@@ -2488,6 +2488,161 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.ToTable("connector_submissions");
                 });
 
+            modelBuilder.Entity("Flowamaz.Core.Entities.Library.FormDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("category");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTime?>("DeprecatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deprecated_at");
+
+                    b.Property<string>("DeprecationNote")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("deprecation_note");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("FieldsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("fields_json");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsOfficial")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_official");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PublisherId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("publisher_id");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("slug");
+
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tags");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("version");
+
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_form_definitions");
+
+                    b.HasIndex("WorkspaceId", "Slug")
+                        .IsUnique()
+                        .HasDatabaseName("ix_form_definitions_workspace_id_slug");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("WorkspaceId", "Slug"), false);
+
+                    b.ToTable("form_definitions");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0005-000000000001"),
+                            Category = "Finance",
+                            CreatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "What the approver confirms on a purchase request: the amount, cost centre and budget line.",
+                            FieldsJson = "[{\"key\":\"approved_amount\",\"label\":\"Approved amount\",\"type\":\"number\",\"required\":true,\"options\":null,\"help\":\"The amount you approve; it can be lower than requested.\",\"min\":0,\"max\":null},{\"key\":\"cost_centre\",\"label\":\"Cost centre\",\"type\":\"text\",\"required\":true,\"options\":null,\"help\":null,\"min\":null,\"max\":null},{\"key\":\"budget_line\",\"label\":\"Budget line\",\"type\":\"select\",\"required\":false,\"options\":[\"Operating\",\"Capital\",\"Project\"],\"help\":null,\"min\":null,\"max\":null},{\"key\":\"conditions\",\"label\":\"Conditions\",\"type\":\"textarea\",\"required\":false,\"options\":null,\"help\":\"Anything the requester must do, e.g. get two quotes.\",\"min\":null,\"max\":null}]",
+                            IsDeleted = false,
+                            IsOfficial = true,
+                            Name = "Purchase details",
+                            PublisherId = "flowamaz-io",
+                            Slug = "purchase-details",
+                            Tags = "[]",
+                            UpdatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Version = "1.0.0"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0005-000000000002"),
+                            Category = "Finance",
+                            CreatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Checks before paying an expense claim: receipts, category and the amount to reimburse.",
+                            FieldsJson = "[{\"key\":\"receipts_checked\",\"label\":\"I checked the receipts\",\"type\":\"checkbox\",\"required\":true,\"options\":null,\"help\":null,\"min\":null,\"max\":null},{\"key\":\"category\",\"label\":\"Category\",\"type\":\"select\",\"required\":true,\"options\":[\"Travel\",\"Meals\",\"Equipment\",\"Training\",\"Other\"],\"help\":null,\"min\":null,\"max\":null},{\"key\":\"reimburse_amount\",\"label\":\"Amount to reimburse\",\"type\":\"number\",\"required\":true,\"options\":null,\"help\":null,\"min\":0,\"max\":null}]",
+                            IsDeleted = false,
+                            IsOfficial = true,
+                            Name = "Expense check",
+                            PublisherId = "flowamaz-io",
+                            Slug = "expense-check",
+                            Tags = "[]",
+                            UpdatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Version = "1.0.0"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0005-000000000003"),
+                            Category = "HR",
+                            CreatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "What a manager records when approving leave: the dates and who covers.",
+                            FieldsJson = "[{\"key\":\"first_day\",\"label\":\"First day of leave\",\"type\":\"date\",\"required\":true,\"options\":null,\"help\":null,\"min\":null,\"max\":null},{\"key\":\"last_day\",\"label\":\"Last day of leave\",\"type\":\"date\",\"required\":true,\"options\":null,\"help\":null,\"min\":null,\"max\":null},{\"key\":\"cover\",\"label\":\"Who covers (email)\",\"type\":\"email\",\"required\":false,\"options\":null,\"help\":null,\"min\":null,\"max\":null}]",
+                            IsDeleted = false,
+                            IsOfficial = true,
+                            Name = "Leave approval",
+                            PublisherId = "flowamaz-io",
+                            Slug = "leave-approval",
+                            Tags = "[]",
+                            UpdatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Version = "1.0.0"
+                        });
+                });
+
             modelBuilder.Entity("Flowamaz.Core.Entities.Library.LibrarySyncState", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2557,6 +2712,153 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_library_sync_states_source");
 
                     b.ToTable("library_sync_states");
+                });
+
+            modelBuilder.Entity("Flowamaz.Core.Entities.Library.PackDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Connectors")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("connectors");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTime?>("DeprecatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deprecated_at");
+
+                    b.Property<string>("DeprecationNote")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("deprecation_note");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Forms")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("forms");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsOfficial")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_official");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PublisherId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("publisher_id");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("slug");
+
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("tags");
+
+                    b.Property<string>("Templates")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("templates");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_pack_definitions");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pack_definitions_slug");
+
+                    b.ToTable("pack_definitions");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0006-000000000001"),
+                            Category = "Finance",
+                            Connectors = "[\"slack\",\"email-smtp\"]",
+                            CreatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Purchase approval, expense claims and refunds, with Slack and email notices and the purchase and expense forms.",
+                            Forms = "[\"purchase-details\",\"expense-check\"]",
+                            IsDeleted = false,
+                            IsOfficial = true,
+                            Name = "Finance approvals",
+                            PublisherId = "flowamaz-io",
+                            Slug = "finance-approvals",
+                            Tags = "[]",
+                            Templates = "[\"purchase-approval\",\"expense-claim\",\"customer-refund\"]",
+                            UpdatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Version = "1.0.0"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0006-000000000002"),
+                            Category = "HR",
+                            Connectors = "[\"microsoft-365\",\"email-smtp\"]",
+                            CreatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Onboarding and leave requests with Microsoft 365 and email, and the leave approval form.",
+                            Forms = "[\"leave-approval\"]",
+                            IsDeleted = false,
+                            IsOfficial = true,
+                            Name = "People operations",
+                            PublisherId = "flowamaz-io",
+                            Slug = "people-operations",
+                            Tags = "[]",
+                            Templates = "[\"employee-onboarding\",\"leave-request\"]",
+                            UpdatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Version = "1.0.0"
+                        });
                 });
 
             modelBuilder.Entity("Flowamaz.Core.Entities.Library.WorkflowTemplate", b =>
@@ -3658,6 +3960,14 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
+
+                    b.Property<string>("FormJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("form_json");
+
+                    b.Property<string>("FormValuesJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("form_values_json");
 
                     b.Property<Guid>("InstanceId")
                         .HasColumnType("uuid")

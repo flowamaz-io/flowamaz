@@ -7,23 +7,29 @@ import { outputOpts } from "../lib/opts";
 import { printFormatted, printTable, success, error } from "../lib/output";
 import { asArray, describeError, requireWorkspaceId, str, unwrap } from "../lib/util";
 
-// ---- Library (connectors + templates), FUNCTIONAL.md §23.5 ----
+// ---- Library (connectors, templates, forms, packs), FUNCTIONAL.md §23.2 / §23.5 ----
 // Every call is workspace-scoped: /api/v1/workspaces/{id}/library/...
 
-type Kind = "connectors" | "templates";
+type Kind = "connectors" | "templates" | "forms" | "packs";
 
 interface LibraryOpts {
   workspace?: string;
   templates?: boolean;
   template?: boolean;
+  forms?: boolean;
+  packs?: boolean;
   type?: string;
   category?: string;
   name?: string;
 }
 
-/** --templates / --template / --type template all mean templates; connectors otherwise. */
+/** --templates / --forms / --packs, or --type template|form|pack; connectors otherwise. */
 export function kindOf(o: LibraryOpts): Kind {
-  return o.templates || o.template || (o.type ?? "").toLowerCase().startsWith("template") ? "templates" : "connectors";
+  const type = (o.type ?? "").toLowerCase();
+  if (o.packs || type.startsWith("pack")) return "packs";
+  if (o.forms || type.startsWith("form")) return "forms";
+  if (o.templates || o.template || type.startsWith("template")) return "templates";
+  return "connectors";
 }
 
 async function base(o: LibraryOpts): Promise<string> {
@@ -32,6 +38,18 @@ async function base(o: LibraryOpts): Promise<string> {
 }
 
 function itemRow(kind: Kind, i: Record<string, unknown>): string[] {
+  if (kind === "forms") {
+    const fields = Array.isArray(i.fields) ? (i.fields as Record<string, unknown>[]) : [];
+    const owner = i.isWorkspaceForm ? "this workspace" : str(i.publisher ?? "");
+    return [str(i.slug), str(i.name), String(fields.length), owner, fields.map((f) => str(f.key)).join(", ")];
+  }
+  if (kind === "packs") {
+    const items = Array.isArray(i.items) ? (i.items as Record<string, unknown>[]) : [];
+    const count = (k: string): number => items.filter((x) => x.kind === k).length;
+    const missing = items.filter((x) => x.available && !x.installed).length;
+    return [str(i.slug), str(i.name), count("connector") + " / " + count("template") + " / " + count("form"),
+      str(i.publisher ?? ""), missing === 0 ? "everything installed" : missing + " to install"];
+  }
   if (kind === "templates") {
     return [str(i.slug), str(i.name), str(i.version), str(i.publisher ?? (i.isOfficial ? "flowamaz-io" : "")), str(i.category)];
   }
@@ -43,6 +61,8 @@ function itemRow(kind: Kind, i: Record<string, unknown>): string[] {
 const HEADERS: Record<Kind, string[]> = {
   connectors: ["ID", "Name", "Version", "Publisher", "This workspace"],
   templates: ["Slug", "Name", "Version", "Publisher", "Category"],
+  forms: ["Slug", "Name", "Fields", "From", "Keys"],
+  packs: ["Slug", "Name", "Connectors / templates / forms", "Publisher", "This workspace"],
 };
 
 async function list(o: LibraryOpts, cmd: Command, query?: string): Promise<void> {
@@ -71,7 +91,22 @@ async function show(o: LibraryOpts, id: string, cmd: Command): Promise<void> {
 
 async function install(o: LibraryOpts, id: string): Promise<void> {
   const kind = kindOf(o);
+  if (kind === "forms") {
+    throw new Error(
+      "Forms aren't installed: a human gate copies one in. Open the workflow, select the gate and choose \"Use a Library form\", or put its fields under config.form in the YAML (fmz library show " + id + " --forms)."
+    );
+  }
   const client = await createClient();
+  if (kind === "packs") {
+    const result = unwrap((await client.post((await base(o)) + "packs/install", { id })).data) as Record<string, unknown>;
+    const items = Array.isArray(result?.items) ? (result.items as Record<string, unknown>[]) : [];
+    printTable(["Kind", "Item", "Result"], items.map((r) => [str(r.kind), str(r.name), str(r.status).replace("_", " ") + ": " + str(r.message)]));
+    const failed = Number(result?.failed ?? 0);
+    success("Pack " + str(result?.pack ?? id) + ": " + str(result?.installed) + " installed, " + str(result?.alreadyInstalled) + " already here" +
+      (failed > 0 ? ", " + failed + " not installed (see above)." : "."));
+    if (failed > 0) process.exitCode = 1;
+    return;
+  }
   const resp = await client.post((await base(o)) + kind + "/install", { id, name: o.name });
   const data = unwrap(resp.data) as Record<string, unknown>;
   if (kind === "templates") {
@@ -83,6 +118,9 @@ async function install(o: LibraryOpts, id: string): Promise<void> {
 
 async function outdated(o: LibraryOpts, cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
+  if (kindOf(o) === "forms" || kindOf(o) === "packs") {
+    throw new Error("Only connectors update in place. Forms are copied onto gates and packs install copies, so there's nothing outdated to list. Run: fmz library outdated");
+  }
   const client = await createClient();
   const resp = await client.get((await base(o)) + kindOf(o) + "/outdated");
   if (opts.json || opts.yaml) {
@@ -103,6 +141,9 @@ async function outdated(o: LibraryOpts, cmd: Command): Promise<void> {
 }
 
 async function update(o: LibraryOpts, id: string): Promise<void> {
+  if (kindOf(o) === "forms" || kindOf(o) === "packs") {
+    throw new Error("Only connectors update in place. To get a newer pack's workflows, run: fmz library install " + id + " --packs (it adds what's missing).");
+  }
   if (kindOf(o) === "templates") {
     throw new Error(
       "Templates are copied into your workspace when you install them, so they don't update in place. Install the new version again: fmz library install " + id + " --template"
@@ -297,16 +338,18 @@ function registerAuthoringGroup(
 export function registerLibraryCommands(program: Command): void {
   const lib = program
     .command("library")
-    .description("Connector & template Library");
+    .description("Library: connectors, templates, forms and packs");
 
   const scoped = (c: Command): Command =>
     c
       .option("-w, --workspace <workspace>", "Workspace id or slug (default: fmz workspace use)")
       .option("--templates", "Templates instead of connectors", false)
-      .option("--template", "Same as --templates", false);
+      .option("--template", "Same as --templates", false)
+      .option("--forms", "Human-gate forms instead of connectors", false)
+      .option("--packs", "Packs instead of connectors", false);
 
   scoped(lib.command("list").description("List Library connectors (or --templates)"))
-    .option("--type <type>", "connector or template")
+    .option("--type <type>", "connector, template, form or pack")
     .option("--category <category>", "Only this category, e.g. finance")
     .action(libraryAction((o: LibraryOpts, cmd: Command) => list(o, cmd)));
 
@@ -314,10 +357,10 @@ export function registerLibraryCommands(program: Command): void {
     .option("--category <category>", "Only this category")
     .action(libraryAction((query: string, o: LibraryOpts, cmd: Command) => list(o, cmd, query)));
 
-  scoped(lib.command("show <id>").description("Show a connector (id or publisher/id) or template (slug)"))
+  scoped(lib.command("show <id>").description("Show a connector (id or publisher/id), template, form or pack (slug)"))
     .action(libraryAction((id: string, o: LibraryOpts, cmd: Command) => show(o, id, cmd)));
 
-  scoped(lib.command("install <id>").description("Install a connector, or a template as a new workflow"))
+  scoped(lib.command("install <id>").description("Install a connector, a template as a new workflow, or a pack (--packs)"))
     .option("--name <name>", "Name for the workflow a template creates")
     .action(libraryAction((id: string, o: LibraryOpts) => install(o, id)));
 

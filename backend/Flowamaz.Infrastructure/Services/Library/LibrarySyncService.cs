@@ -8,6 +8,7 @@ using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Library;
 using Flowamaz.Core.Models;
 using Flowamaz.Infrastructure.Persistence;
+using Flowamaz.Infrastructure.Persistence.Seed;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -393,9 +394,134 @@ public sealed class LibrarySyncService : ILibrarySyncService
             deprecated++;
         }
 
+        var forms = await ApplyFormsAsync(snapshot, now, skipped, ct);
+        var packs = await ApplyPacksAsync(snapshot, now, skipped, ct);
+        added += forms.Added + packs.Added;
+        updated += forms.Updated + packs.Updated;
+        deprecated += forms.Deprecated + packs.Deprecated;
+
         _log.LogInformation("LibrarySyncService templates sha={Sha} added={Added} updated={Updated} deprecated={Deprecated} skipped={Skipped}",
             snapshot.CommitSha, added, updated, deprecated, skipped.Count);
         return new LibrarySyncReport("templates", "synced", snapshot.CommitSha, added, updated, deprecated, skipped);
+    }
+
+    // ── Forms and packs (templates repository: forms/, packs/) ─────────────────────────
+
+    private static readonly System.Text.Json.JsonSerializerOptions FieldsJson = new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    private async Task<(int Added, int Updated, int Deprecated)> ApplyFormsAsync(LibrarySnapshot snapshot, DateTime now, List<string> skipped, CancellationToken ct)
+    {
+        var parsed = new List<ParsedForm>();
+        foreach (var item in snapshot.Items)
+        {
+            if (!item.Files.TryGetValue("form.yaml", out var manifest)) continue;
+            try { parsed.Add(LibraryManifestParser.ParseForm(new LibraryFolder(item.Path, manifest))); }
+            catch (LibraryManifestException ex) { skipped.Add(ex.Message); }
+        }
+
+        // Only Library forms (no workspace) are the sync's; a workspace's own forms are never touched.
+        var rows = await _db.FormDefinitions.IgnoreQueryFilters().Where(f => f.WorkspaceId == null).ToListAsync(ct);
+        int added = 0, updated = 0, deprecated = 0;
+        foreach (var p in parsed)
+        {
+            var row = rows.FirstOrDefault(f => f.Slug == p.Slug);
+            if (row is null)
+            {
+                row = new FormDefinition { Slug = p.Slug };
+                _db.FormDefinitions.Add(row);
+                rows.Add(row);
+                added++;
+            }
+            else if (SemVersion.IsNewer(p.Version, row.Version) || row.IsDeleted) updated++;
+            else
+            {
+                deprecated += Deprecate(p.Deprecated, p.DeprecationNote, () => row.DeprecatedAt, (a, n) => { row.DeprecatedAt = a; row.DeprecationNote = n; }, now);
+                continue;
+            }
+            row.Name = p.Name;
+            row.Description = p.Description;
+            row.Category = p.Category;
+            row.Tags = p.Tags;
+            row.Version = p.Version;
+            row.FieldsJson = System.Text.Json.JsonSerializer.Serialize(p.Fields, FieldsJson);
+            row.PublisherId = p.PublisherId;
+            row.IsOfficial = p.PublisherId == LibraryManifestParser.OfficialPublisher;
+            row.IsDeleted = false;
+            row.DeletedAt = null;
+            deprecated += Deprecate(p.Deprecated, p.DeprecationNote, () => row.DeprecatedAt, (a, n) => { row.DeprecatedAt = a; row.DeprecationNote = n; }, now);
+        }
+        var present = parsed.Select(p => p.Slug).ToHashSet();
+        foreach (var row in rows.Where(f => f.PublisherId != null && !f.IsDeleted && f.DeprecatedAt is null && !present.Contains(f.Slug) && !SeededIds.Contains(f.Id)))
+        {
+            row.DeprecatedAt = now;
+            row.DeprecationNote = RemovedNote;
+            deprecated++;
+        }
+        return (added, updated, deprecated);
+    }
+
+    private async Task<(int Added, int Updated, int Deprecated)> ApplyPacksAsync(LibrarySnapshot snapshot, DateTime now, List<string> skipped, CancellationToken ct)
+    {
+        var parsed = new List<ParsedPack>();
+        foreach (var item in snapshot.Items)
+        {
+            if (!item.Files.TryGetValue("pack.yaml", out var manifest)) continue;
+            try { parsed.Add(LibraryManifestParser.ParsePack(new LibraryFolder(item.Path, manifest))); }
+            catch (LibraryManifestException ex) { skipped.Add(ex.Message); }
+        }
+
+        var rows = await _db.PackDefinitions.IgnoreQueryFilters().ToListAsync(ct);
+        int added = 0, updated = 0, deprecated = 0;
+        foreach (var p in parsed)
+        {
+            var row = rows.FirstOrDefault(x => x.Slug == p.Slug);
+            if (row is null)
+            {
+                row = new PackDefinition { Slug = p.Slug };
+                _db.PackDefinitions.Add(row);
+                rows.Add(row);
+                added++;
+            }
+            else if (SemVersion.IsNewer(p.Version, row.Version) || row.IsDeleted) updated++;
+            else
+            {
+                deprecated += Deprecate(p.Deprecated, p.DeprecationNote, () => row.DeprecatedAt, (a, n) => { row.DeprecatedAt = a; row.DeprecationNote = n; }, now);
+                continue;
+            }
+            row.Name = p.Name;
+            row.Description = p.Description;
+            row.Category = p.Category;
+            row.Tags = p.Tags;
+            row.Version = p.Version;
+            row.Connectors = p.Connectors;
+            row.Templates = p.Templates;
+            row.Forms = p.Forms;
+            row.PublisherId = p.PublisherId;
+            row.IsOfficial = p.PublisherId == LibraryManifestParser.OfficialPublisher;
+            row.IsDeleted = false;
+            row.DeletedAt = null;
+            deprecated += Deprecate(p.Deprecated, p.DeprecationNote, () => row.DeprecatedAt, (a, n) => { row.DeprecatedAt = a; row.DeprecationNote = n; }, now);
+        }
+        var present = parsed.Select(p => p.Slug).ToHashSet();
+        foreach (var row in rows.Where(x => x.PublisherId != null && !x.IsDeleted && x.DeprecatedAt is null && !present.Contains(x.Slug) && !SeededIds.Contains(x.Id)))
+        {
+            row.DeprecatedAt = now;
+            row.DeprecationNote = RemovedNote;
+            deprecated++;
+        }
+        return (added, updated, deprecated);
+    }
+
+    // The seeded official forms and packs ship with the platform, like the seeded templates: a repository
+    // without them (one that predates forms/ and packs/) doesn't take them out of the Library.
+    private static readonly HashSet<Guid> SeededIds = LibraryFormsAndPacksSeed.OfficialForms.Select(f => f.Id)
+        .Concat(LibraryFormsAndPacksSeed.OfficialPacks.Select(p => p.Id)).ToHashSet();
+
+    private static int Deprecate(bool isDeprecated, string? note, Func<DateTime?> current, Action<DateTime?, string?> set, DateTime now)
+    {
+        if (isDeprecated && current() is null) { set(now, note); return 1; }
+        if (!isDeprecated && current() is not null) set(null, null);
+        return 0;
     }
 
     private static void SyncDeprecation(Flowamaz.Core.Entities.Library.WorkflowTemplate row, ParsedTemplate p, DateTime now, ref int deprecated)

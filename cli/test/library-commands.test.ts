@@ -40,4 +40,12 @@ describe("library manifests and options", () => {
     expect(kindOf({ type: "template" })).toBe("templates");
     expect(kindOf({ type: "connector" })).toBe("connectors");
   });
+
+  it("reads --forms and --packs (or --type form|pack)", () => {
+    expect(kindOf({ forms: true })).toBe("forms");
+    expect(kindOf({ type: "form" })).toBe("forms");
+    expect(kindOf({ packs: true })).toBe("packs");
+    expect(kindOf({ type: "packs" })).toBe("packs");
+    expect(kindOf({ packs: true, templates: true })).toBe("packs");
+  });
 });
