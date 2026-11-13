@@ -17,9 +17,14 @@ import { toUserFacingError } from '@/utils/error.util';
 interface Props {
   connector: ConnectorDefinition;
   modelValue: boolean;
+  /**
+   * Install the connector in this workspace once its credential is set (the default). The health page's
+   * re-connect passes false: the connector is already installed and only needs a new credential.
+   */
+  install?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { install: true });
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
   installed: [credentialId: string];
@@ -68,6 +73,8 @@ function resetState(): void {
   credentialName.value = '';
   oauthError.value = null;
   oauthConnecting.value = false;
+  resolvedCredentialId.value = '';
+  saveError.value = null;
   if (oauthTimeout) clearTimeout(oauthTimeout);
 }
 
@@ -82,12 +89,46 @@ function canContinueStep1(): boolean {
  * Stores the pasted secret in the workspace vault (previously the value was collected and then
  * discarded). Connectors that need no credential install directly.
  */
+/**
+ * Records the install on the server. Until this succeeds nothing is installed, so the wizard only shows
+ * "Connected" afterwards; on failure it says why and stays open.
+ */
+async function recordInstall(credentialId: string): Promise<string | null> {
+  if (!props.install || !currentWorkspaceId.value) return null;
+  try {
+    await connectorService.installConnector(currentWorkspaceId.value, props.connector.connectorId, credentialId || undefined);
+    return null;
+  } catch (e) {
+    const message = toUserFacingError(e).message;
+    return `${props.connector.displayName} wasn't installed: ${message}`;
+  }
+}
+
 async function continueStep1(): Promise<void> {
   if (!canContinueStep1() || !currentWorkspaceId.value) return;
   saveError.value = null;
   if (authType.value === 'none' || !manualType.value) {
+    saving.value = true;
+    const problem = await recordInstall('');
+    saving.value = false;
+    if (problem) {
+      saveError.value = problem;
+      return;
+    }
     resolvedCredentialId.value = '';
     credentialName.value = defaultCredentialName.value;
+    step.value = 3;
+    return;
+  }
+  if (resolvedCredentialId.value) {
+    // The credential was saved but the install failed: retry the install only.
+    saving.value = true;
+    const problem = await recordInstall(resolvedCredentialId.value);
+    saving.value = false;
+    if (problem) {
+      saveError.value = problem;
+      return;
+    }
     step.value = 3;
     return;
   }
@@ -104,6 +145,11 @@ async function continueStep1(): Promise<void> {
     password.value = '';
     resolvedCredentialId.value = alias.id;
     credentialName.value = alias.name;
+    const problem = await recordInstall(alias.id);
+    if (problem) {
+      saveError.value = `${problem} The credential "${alias.name}" was saved; select Continue to try the install again.`;
+      return;
+    }
     step.value = 3;
   } catch (e) {
     saveError.value = toUserFacingError(e).message;
@@ -134,8 +180,15 @@ async function startOAuth(): Promise<void> {
       if (event.data.success === true && typeof event.data.credentialId === 'string') {
         resolvedCredentialId.value = event.data.credentialId as string;
         credentialName.value = defaultCredentialName.value;
-        oauthConnecting.value = false;
-        step.value = 3;
+        void recordInstall(resolvedCredentialId.value).then((problem) => {
+          oauthConnecting.value = false;
+          if (problem) {
+            oauthError.value = problem;
+            step.value = 1;
+          } else {
+            step.value = 3;
+          }
+        });
       } else {
         oauthError.value = 'OAuth authorisation failed. Please try again.';
         oauthConnecting.value = false;

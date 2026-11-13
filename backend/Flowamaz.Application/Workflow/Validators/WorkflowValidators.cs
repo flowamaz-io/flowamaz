@@ -46,5 +46,9 @@ public sealed class GateDecisionRequestValidator : AbstractValidator<GateDecisio
             .NotEmpty()
             .Must(d => Allowed.Contains(d, StringComparer.OrdinalIgnoreCase))
             .WithMessage("Decision must be 'approved' or 'rejected'.");
+
+        RuleFor(x => x.Values)
+            .Must(v => v is null || v.Count <= Flowamaz.Core.Workflow.GateForms.MaxFields)
+            .WithMessage($"Too many form answers. A gate form has at most {Flowamaz.Core.Workflow.GateForms.MaxFields} fields.");
     }
 }

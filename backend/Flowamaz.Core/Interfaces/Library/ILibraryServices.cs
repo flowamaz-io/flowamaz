@@ -44,6 +44,17 @@ public interface ILibraryService
     Task<LibraryTemplateItem> GetTemplateAsync(Guid workspaceId, string slugOrId, CancellationToken ct = default);
     Task<Guid> InstallTemplateAsync(Guid workspaceId, string slugOrId, string? name, Guid userId, CancellationToken ct = default);
 
+    Task<IReadOnlyList<LibraryFormItem>> ListFormsAsync(Guid workspaceId, string? query, string? category, CancellationToken ct = default);
+    Task<LibraryFormItem> GetFormAsync(Guid workspaceId, string slugOrId, CancellationToken ct = default);
+    /// <summary>Saves a gate's fields as one of this workspace's forms, so other gates can reuse them.</summary>
+    Task<LibraryFormItem> SaveFormAsync(Guid workspaceId, string name, string? description, string? category, IReadOnlyList<Flowamaz.Core.Workflow.GateFormField> fields, Guid userId, CancellationToken ct = default);
+    Task DeleteFormAsync(Guid workspaceId, Guid formId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<LibraryPackItem>> ListPacksAsync(Guid workspaceId, string? query, CancellationToken ct = default);
+    Task<LibraryPackItem> GetPackAsync(Guid workspaceId, string slugOrId, CancellationToken ct = default);
+    /// <summary>Installs every connector and template the pack bundles; one item failing doesn't stop the rest.</summary>
+    Task<LibraryPackInstallResult> InstallPackAsync(Guid workspaceId, string slugOrId, Guid userId, CancellationToken ct = default);
+
     Task<LibraryPublishResult> PublishConnectorAsync(Guid workspaceId, Guid orgId, string manifestYaml, CancellationToken ct = default);
     Task<LibraryPublishResult> PublishTemplateAsync(Guid workspaceId, Guid orgId, Guid userId, string manifestYaml, CancellationToken ct = default);
 }

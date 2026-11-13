@@ -211,10 +211,14 @@ describe('findNodeIdLine', () => {
     expect(findNodeIdLine(yaml, 'y')).toBeNull();
   });
 
-  it('returns null for empty input or a document without spec.nodes', () => {
+  it('returns null for empty input or a document without nodes', () => {
     expect(findNodeIdLine('', 'a')).toBeNull();
     expect(findNodeIdLine('spec:\n  nodes:\n    - id: a\n', '')).toBeNull();
-    expect(findNodeIdLine('nodes:\n  - id: a\n', 'a')).toBeNull();
+    expect(findNodeIdLine('metadata:\n  id: a\n', 'a')).toBeNull();
+  });
+
+  it('also finds nodes in the short shape (top-level nodes:)', () => {
+    expect(findNodeIdLine('nodes:\n  - id: a\n', 'a')).toBe(2);
   });
 });
 

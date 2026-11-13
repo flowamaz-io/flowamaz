@@ -19,6 +19,9 @@ public sealed class LibraryException : AppException
             ? $"{name} is already installed here ({pin}). A newer major is available: run `fmz library update` with the connector id, or upgrade it from Library → Connectors."
             : $"{name} is already installed here ({pin}), and it's the latest version.", 409);
 
+    public static LibraryException Disabled(string name) => new("LIBRARY_CONNECTOR_DISABLED",
+        $"{name} is switched off on this platform, so it can't be installed. Ask platform support to enable it, or pick another connector.", 409);
+
     public static LibraryException UpToDate(string name, string pin) => new("LIBRARY_CONNECTOR_UP_TO_DATE",
         $"{name} is already on the latest major ({pin}). Minor and patch releases are applied automatically.", 409);
 
@@ -31,6 +34,21 @@ public sealed class LibraryException : AppException
     public static LibraryException TemplatesDontUpdate() => new("LIBRARY_TEMPLATES_DONT_UPDATE",
         "Templates are copied into your workspace when you install them, so they don't update in place. " +
         "To use a newer version, install it again as a new workflow (`fmz library install <template> --templates`).", 400);
+
+    public static LibraryException FormNotFound(string id) => new("LIBRARY_FORM_NOT_FOUND",
+        $"There is no form '{id}' in the Library or this workspace. Open Library → Forms to find it, or define the fields on the gate.", 404);
+
+    public static LibraryException FormNotYours() => new("LIBRARY_FORM_READ_ONLY",
+        "Library forms can't be changed or deleted from a workspace. Use the form on a gate and edit the gate's copy, or save your own form.", 403);
+
+    public static LibraryException FormInvalid(string problem) => new("LIBRARY_FORM_INVALID",
+        problem + " Fix the field and save again.", 400);
+
+    public static LibraryException FormNameTaken(string name) => new("LIBRARY_FORM_NAME_TAKEN",
+        $"This workspace already has a form called '{name}'. Choose another name, or delete the old form in Library → Forms first.", 409);
+
+    public static LibraryException PackNotFound(string id) => new("LIBRARY_PACK_NOT_FOUND",
+        $"There is no pack '{id}' in the Library. Open Library → Packs to see the packs there are.", 404);
 
     public static LibraryException InvalidManifest(string message) => new("LIBRARY_INVALID_MANIFEST",
         message + " Fix the manifest and publish again.", 400);

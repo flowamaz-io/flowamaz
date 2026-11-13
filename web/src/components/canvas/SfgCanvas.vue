@@ -145,6 +145,7 @@ import { GRID_SIZE, gridDotSpacing, loadSnapPreference, renderedToModel, saveSna
 import type { WorkflowVariable } from './shared/VariableAutocomplete.vue';
 import { Clipboard } from 'lucide-vue-next';
 import { buildCanvasSkeleton, dumpWorkflowYaml, expandYamlAliases } from '@/utils/yaml.util';
+import { canvasNodeType, workflowSection } from '@/utils/workflowGraph.util';
 import type { NodeType, CanvasNode } from '@/types/canvas.types';
 
 const props = defineProps<{
@@ -206,13 +207,14 @@ function buildConfigNode(nodeId: string): ConfigNode | null {
   if (!nodeId) return null;
   let nodeFromYaml: Record<string, unknown> | undefined;
   try {
-    const parsed = jsYaml.load(yamlContent.value) as Record<string, unknown> | undefined;
-    const spec = (parsed?.spec as Record<string, unknown>) ?? {};
+    const spec = workflowSection(jsYaml.load(yamlContent.value)) ?? {};
     const nodes = (spec.nodes as Array<Record<string, unknown>>) ?? [];
     nodeFromYaml = nodes.find((n) => n.id === nodeId);
   } catch { /* fall back to canvas data */ }
   const cyNode = canvas.cy.value?.getElementById(nodeId);
-  const type = (nodeFromYaml?.type as string) ?? (cyNode?.data('nodeType') as string) ?? 'action';
+  // The config panels key on the canvas type ('human-gate'); YAML may spell it 'HumanGate'.
+  const rawType = typeof nodeFromYaml?.type === 'string' ? nodeFromYaml.type : undefined;
+  const type: string = rawType ? canvasNodeType(rawType) : (cyNode?.data('nodeType') as string | undefined) ?? 'action';
   const label = (nodeFromYaml?.label as string) ?? (cyNode?.data('label') as string) ?? nodeId;
   const config = (nodeFromYaml?.config as Record<string, unknown>) ?? {};
   return { id: nodeId, type, label, config };
@@ -221,8 +223,7 @@ function buildConfigNode(nodeId: string): ConfigNode | null {
 function refreshConfigVariables(): void {
   const vars: WorkflowVariable[] = [];
   try {
-    const parsed = jsYaml.load(yamlContent.value) as Record<string, unknown> | undefined;
-    const spec = (parsed?.spec as Record<string, unknown>) ?? {};
+    const spec = workflowSection(jsYaml.load(yamlContent.value)) ?? {};
     // spec.variables is a map in flowamaz/v1 (`name: { type, required }`); older drafts used a list.
     const declared = spec.variables;
     if (Array.isArray(declared)) {
@@ -264,7 +265,7 @@ function applyNodeConfig(payload: { id: string; label: string; config: Record<st
   // Merge the config + label into the YAML, then rebuild so the canvas re-renders.
   try {
     const parsed = (jsYaml.load(yamlContent.value) as Record<string, unknown>) ?? {};
-    const spec = (parsed.spec as Record<string, unknown>) ?? (parsed.spec = {});
+    const spec = workflowSection(parsed, true);
     const nodes = (spec.nodes as Array<Record<string, unknown>>) ?? (spec.nodes = []);
     const existing = nodes.find((n) => n.id === payload.id);
     if (existing) {
@@ -334,8 +335,7 @@ watch(() => props.initialYaml, (next) => {
 
 const workflowTriggerType = computed<string>(() => {
   try {
-    const parsed = jsYaml.load(yamlContent.value) as Record<string, unknown> | undefined;
-    const trigger = (parsed?.spec as Record<string, unknown> | undefined)?.trigger as Record<string, unknown> | undefined;
+    const trigger = workflowSection(jsYaml.load(yamlContent.value))?.trigger as Record<string, unknown> | undefined;
     return typeof trigger?.type === 'string' ? trigger.type : '';
   } catch {
     return '';
@@ -596,7 +596,8 @@ function buildYamlFromState(): string {
     } catch { /* fall back to blank scaffold */ }
   }
 
-  const spec = ((parsed.spec as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+  // Short-shape documents (top-level nodes:) are written back in place, never into a second spec.nodes.
+  const spec = workflowSection(parsed, true);
   const existingNodes = (spec.nodes as Array<Record<string, unknown>>) ?? [];
   const existingEdges = (spec.edges as Array<Record<string, unknown>>) ?? [];
   const existingNodeMap = new Map(existingNodes.map(n => [n.id as string, n]));
@@ -638,7 +639,6 @@ function buildYamlFromState(): string {
     }));
   }
 
-  parsed.spec = spec;
   return dumpWorkflowYaml(parsed);
 }
 </script>

@@ -322,6 +322,24 @@ public sealed class WorkflowValidator : IWorkflowValidator
                 errors.Add(new ValidationIssue(2, "GRF-003",
                     $"Node '{n.Id}' is unreachable from the trigger. Connect it or remove it.", n.Id, null, null));
         }
+
+        // FRM-001 — a human gate's form (Library Forms, FUNCTIONAL.md §23.2): the approver couldn't fill in a broken one.
+        foreach (var gate in nodes.Where(n => n.Type is { } t && t.Replace("-", "").Replace("_", "").Equals("humangate", StringComparison.OrdinalIgnoreCase) && n.Config?.ContainsKey("form") == true))
+        {
+            var config = JsonSerializer.SerializeToElement(gate.Config);
+            var form = config.GetProperty("form");
+            var shapeOk = form.ValueKind == JsonValueKind.Array
+                          || (form.ValueKind == JsonValueKind.Object && form.TryGetProperty("fields", out var f) && f.ValueKind == JsonValueKind.Array);
+            if (!shapeOk)
+            {
+                errors.Add(new ValidationIssue(2, "FRM-001",
+                    $"Human gate '{gate.Id}' has a form without fields. Write form: {{ fields: [ {{ key: amount, label: Amount, type: number }} ] }}, or remove form.",
+                    gate.Id, null, null));
+                continue;
+            }
+            foreach (var problem in Flowamaz.Core.Workflow.GateForms.DefinitionProblems(Flowamaz.Core.Workflow.GateForms.Read(config), $"Human gate '{gate.Id}'"))
+                errors.Add(new ValidationIssue(2, "FRM-001", problem, gate.Id, null, null));
+        }
     }
 
     // ─── Layer 3: Expression Validation ──────────────────────────────────────

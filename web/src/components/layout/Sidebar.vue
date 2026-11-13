@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useEventListener } from '@vueuse/core';
+import { GATES_CHANGED_EVENT } from '@/utils/gateEvents.util';
 import { computed, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
@@ -153,6 +155,7 @@ function badgeCount(item: NavItem): number {
 
 onMounted(loadPendingGates);
 watch(currentWorkspaceId, loadPendingGates);
+useEventListener(window, GATES_CHANGED_EVENT, () => { void loadPendingGates(); });
 
 // The generic Help button opens on search + the article list; contextual entry points
 // (Shift+?, "?" links, error states) open straight on their article.

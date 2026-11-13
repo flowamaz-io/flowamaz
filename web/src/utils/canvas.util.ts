@@ -272,6 +272,15 @@ function findSpecNodesBlock(lines: string[]): NodesBlock | null {
   return null;
 }
 
+/** The short legacy shape: a top-level `nodes:` list (no `spec:`). */
+function findTopLevelNodesBlock(lines: string[]): NodesBlock | null {
+  const wrapped = ['spec:', ...lines.map((l) => (isBlankOrComment(l) ? l : '  ' + l))];
+  const block = findSpecNodesBlock(wrapped);
+  if (!block) return null;
+  // Line numbers in `wrapped` are one ahead of the original.
+  return { start: block.start - 1, end: block.end - 1, flow: block.flow };
+}
+
 /**
  * Scan node items. Only list items at the node-list indent (the first `-` seen) count,
  * so nested lists/maps inside a node's config never produce false matches.
@@ -320,7 +329,7 @@ function scanForNodeId(lines: string[], block: NodesBlock, nodeId: string): numb
 export function findNodeIdLine(yaml: string, nodeId: string): number | null {
   if (!yaml || !nodeId) return null;
   const lines = yaml.split(/\r?\n/);
-  const block = findSpecNodesBlock(lines);
+  const block = findSpecNodesBlock(lines) ?? findTopLevelNodesBlock(lines);
   return block ? scanForNodeId(lines, block, nodeId) : null;
 }
 

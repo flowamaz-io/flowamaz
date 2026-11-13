@@ -54,6 +54,10 @@ public sealed class GateApprovalController : ControllerBase
         _logger.LogInformation(
             "GateApprovalController.ApproveViaEmail exit gate={GateId} valid={Valid}", gateDecisionId, result.valid);
 
+        if (result.needsForm)
+            return HtmlPage("A few details are needed",
+                "This approval asks you to fill in a short form, which an email link can't do. Nothing has been recorded yet. " +
+                "Open Flowamaz → Approvals, fill in the form and approve there.", "#d97706", statusCode: 422);
         return result.valid
             ? HtmlPage("Decision Recorded", "Your approval has been recorded. The workflow will resume shortly.", "#16a34a")
             : HtmlPage("Link Invalid or Expired", "This approval link is invalid or has expired. Please use the portal to approve this request.", "#dc2626", statusCode: 400);
@@ -182,6 +186,10 @@ public sealed class GateApprovalController : ControllerBase
 
             return Ok(new { text = $"Decision recorded: {decision}." });
         }
+        catch (Flowamaz.Core.Exceptions.GateFormException)
+        {
+            return Ok(new { text = "This approval asks for a few details first (a short form), which Slack buttons can't fill in. Nothing was recorded. Open Flowamaz → Approvals to fill it in and approve." });
+        }
         catch (Flowamaz.Core.Exceptions.AppException ex)
         {
             // Already decided / run ended: tell the approver exactly why, in Slack.
@@ -197,11 +205,11 @@ public sealed class GateApprovalController : ControllerBase
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private async Task<(bool valid, GateInfoDto? gate)> HandleEmailDecision(
+    private async Task<(bool valid, GateInfoDto? gate, bool needsForm)> HandleEmailDecision(
         Guid gateDecisionId, string action, string sig, string decision, CancellationToken ct)
     {
         var gate = await _gates.GetByGateIdAsync(gateDecisionId, ct);
-        if (gate is null) return (false, null);
+        if (gate is null) return (false, null, false);
 
         // Verify HMAC signature.
         var signingKey = GateHmacHelper.GetSigningKey(_config, _logger);
@@ -215,7 +223,7 @@ public sealed class GateApprovalController : ControllerBase
             _logger.LogWarning(
                 "GateApprovalController: HMAC validation failed for gate={GateId} action={Action}",
                 gateDecisionId, action);
-            return (false, null);
+            return (false, null, false);
         }
 
         // Check expiry.
@@ -224,7 +232,7 @@ public sealed class GateApprovalController : ControllerBase
             _logger.LogWarning(
                 "GateApprovalController: expired gate link gate={GateId} expiresAt={ExpiresAt}",
                 gateDecisionId, gate.ExpiresAt);
-            return (false, null);
+            return (false, null, false);
         }
 
         try
@@ -232,13 +240,17 @@ public sealed class GateApprovalController : ControllerBase
             await _gates.DecideAsync(
                 gate.WorkspaceId, gate.InstanceId, gate.NodeId,
                 decision, "Decided via email link.", Guid.Empty, ct);
-            return (true, null);
+            return (true, null, false);
+        }
+        catch (Flowamaz.Core.Exceptions.GateFormException)
+        {
+            return (false, null, true);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
                 "GateApprovalController: decision recording failed gate={GateId}", gateDecisionId);
-            return (false, null);
+            return (false, null, false);
         }
     }
 

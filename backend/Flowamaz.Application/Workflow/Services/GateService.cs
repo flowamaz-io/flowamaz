@@ -1,3 +1,4 @@
+using Flowamaz.Core.Workflow;
 using System.Text.Json;
 using Flowamaz.Application.Workflow.DTOs;
 using Flowamaz.Core.Entities.Workflow;
@@ -118,7 +119,7 @@ public sealed class GateService
     /// </summary>
     public async Task<GateResponse?> DecideAsync(
         Guid workspaceId, Guid instanceId, string nodeId, string decision, string? note, Guid decidedBy,
-        CancellationToken ct = default, string? decidedByLabel = null)
+        CancellationToken ct = default, string? decidedByLabel = null, IReadOnlyDictionary<string, JsonElement>? values = null)
     {
         _logger.LogInformation(
             "GateService.DecideAsync enter workspace={WorkspaceId} instance={InstanceId} node={NodeId} decision={Decision}",
@@ -135,6 +136,18 @@ public sealed class GateService
         if (await _gates.IsInstanceFinishedAsync(instanceId, ct)) throw new GateRunEndedException(nodeId);
 
         var approved = string.Equals(decision, "approved", StringComparison.OrdinalIgnoreCase);
+
+        // A gate with a form takes its answers on approval; a rejection needs none (the note says why).
+        var form = FormOf(gate);
+        string? formValuesJson = null;
+        if (approved && form.Count > 0)
+        {
+            var (checkedValues, problems) = GateForms.Check(form, values);
+            if (problems.Count > 0) throw new GateFormException(problems);
+            formValuesJson = JsonSerializer.Serialize(checkedValues);
+            gate.FormValuesJson = formValuesJson;
+        }
+
         gate.Decision = approved ? GateDecisionStatus.Approved : GateDecisionStatus.Rejected;
         // Public-API decisions pass Guid.Empty (no human); the audit row is attributed to the API key (O4).
         Guid? decider = decidedBy == Guid.Empty ? null : decidedBy;
@@ -163,7 +176,9 @@ public sealed class GateService
 
         if (approved)
         {
-            await _orchestrator.CompleteNodeAsync(instanceId, nodeId, $$"""{"decision":"approved"}""", "gate", ct);
+            // The answers travel on as the gate's output: {{ gate-id.output.form.<key> }}.
+            var output = formValuesJson is null ? $$"""{"decision":"approved"}""" : $$"""{"decision":"approved","form":{{formValuesJson}}}""";
+            await _orchestrator.CompleteNodeAsync(instanceId, nodeId, output, "gate", ct);
         }
         else if (await _orchestrator.HasDecisionRouteAsync(instanceId, nodeId, "rejected", ct))
         {
@@ -202,5 +217,24 @@ public sealed class GateService
     private static GateResponse ToResponse(GateDecision g) => new(
         g.Id, g.InstanceId, g.NodeId, g.Decision.ToString(), g.AssignedToEmail,
         g.DeliveryChannel.ToString(), g.DeliveryStatus.ToString(), g.ExpiresAt, g.CreatedAt, g.DecidedAt, g.DecisionNote,
-        DecidedByLabel: g.DecidedByLabel);
+        DecidedByLabel: g.DecidedByLabel,
+        Form: FormOf(g),
+        FormValues: g.FormValuesJson is null ? null : JsonDocument.Parse(g.FormValuesJson).RootElement.Clone());
+
+    /// <summary>The form captured when the gate opened.</summary>
+    public static IReadOnlyList<GateFormField> FormOf(GateDecision g)
+    {
+        if (string.IsNullOrEmpty(g.FormJson)) return [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<GateFormField>>(g.FormJson, new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>True when approving needs answers only a person can give in Flowamaz (email/Slack buttons can't).</summary>
+    public static bool NeedsFormAnswers(GateDecision g) => FormOf(g).Any(f => f.Required);
 }

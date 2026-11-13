@@ -41,6 +41,12 @@ public class GateDecision : WorkspaceEntity
 
     /// <summary>Times this gate has been escalated (escalation happens at most once).</summary>
     public int EscalationCount { get; set; }
+
+    /// <summary>The form the approver fills in (the gate's config.form.fields as JSON), or null when it has none.</summary>
+    public string? FormJson { get; set; }
+
+    /// <summary>The approver's checked answers (JSON object keyed by field key), set on approval.</summary>
+    public string? FormValuesJson { get; set; }
 }
 
 /// <summary>Field limits for <see cref="GateDecision"/> shared by the EF mapping and request validators.</summary>

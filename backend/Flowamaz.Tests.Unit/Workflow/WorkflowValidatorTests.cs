@@ -432,4 +432,39 @@ public sealed class WorkflowValidatorTests
 
         result.Warnings.Should().NotContain(w => w.Code == "BPR-010");
     }
+
+    [Theory]
+    [InlineData("human-gate")]
+    [InlineData("HumanGate")]
+    public async Task GateForm_IsChecked_WhicheverWayTheTypeIsSpelled(string type)
+    {
+        var yaml = $$"""
+            apiVersion: flowamaz/v1
+            kind: Workflow
+            metadata:
+              id: gate-form
+              name: "Gate form"
+            spec:
+              trigger:
+                type: webhook
+              nodes:
+                - id: start
+                  type: trigger
+                - id: approval
+                  type: {{type}}
+                  config:
+                    form:
+                      fields:
+                        - { key: kind, label: Kind, type: select }
+                - id: done
+                  type: end
+              edges:
+                - { id: e1, from: start, to: approval }
+                - { id: e2, from: approval, to: done }
+            """;
+
+        var result = await Create().ValidateAsync(yaml);
+
+        result.Errors.Should().Contain(e => e.Code == "FRM-001" && e.Message.Contains("select field 'kind' has no options"));
+    }
 }

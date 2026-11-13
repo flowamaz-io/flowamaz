@@ -1,15 +1,19 @@
 <script setup lang="ts">
+import { notifyGatesChanged } from '@/utils/gateEvents.util';
+import { toUserFacingError } from '@/utils/error.util';
 import { computed, onMounted, ref } from 'vue';
-import { CheckCircle, XCircle, Clock } from 'lucide-vue-next';
+import { CheckCircle, XCircle, Clock, ClipboardList } from 'lucide-vue-next';
 import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmEmptyState from '@/components/common/FmEmptyState.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import FmBadge from '@/components/common/FmBadge.vue';
+import GateApproveDialog from '@/components/gates/GateApproveDialog.vue';
 import { gateService } from '@/services/gate.service';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { formatDate, fromNow } from '@/utils/date.util';
 import { humanizeId } from '@/utils/string.util';
-import type { GateResponse } from '@/types';
+import { displayValue } from '@/utils/gateForm.util';
+import type { GateFormValue, GateResponse } from '@/types';
 
 type Tab = 'pending' | 'all';
 
@@ -74,19 +78,57 @@ async function load(): Promise<void> {
     allGates.value = await gateService.getAllGates(currentWorkspaceId.value, showTest.value);
   } catch (err: unknown) {
     error.value =
-      err instanceof Error
-        ? err.message
-        : 'Could not load approval gates. Check that the Flowamaz API is reachable, then select "Try again".';
+      toUserFacingError(err).message || 'Could not load approval gates. Check that the Flowamaz API is reachable, then select "Try again".';
   } finally {
     loading.value = false;
   }
 }
 
+// A gate with a form opens the form first; the answers go with the approval (FUNCTIONAL.md §23.2).
+const formGate = ref<GateResponse | null>(null);
+const formError = ref<string | null>(null);
+const formOpen = computed({
+  get: () => formGate.value !== null,
+  set: (open: boolean) => { if (!open) { formGate.value = null; formError.value = null; } },
+});
+
+function hasForm(gate: GateResponse): boolean {
+  return (gate.form ?? []).length > 0;
+}
+
+function formAnswers(gate: GateResponse): { label: string; value: string }[] {
+  if (!gate.formValues) return [];
+  const fields = gate.form ?? [];
+  return Object.entries(gate.formValues).map(([key, value]) => ({
+    label: fields.find((f) => f.key === key)?.label ?? humanizeId(key),
+    value: displayValue(value),
+  }));
+}
+
+function approve(gate: GateResponse): void {
+  if (hasForm(gate)) {
+    formError.value = null;
+    formGate.value = gate;
+    return;
+  }
+  void decide(gate, 'approved');
+}
+
+async function approveWithForm(values: Record<string, GateFormValue>, note: string | undefined): Promise<void> {
+  const gate = formGate.value;
+  if (!gate) return;
+  formError.value = null;
+  const ok = await decide(gate, 'approved', values, note);
+  if (ok) formGate.value = null;
+}
+
 async function decide(
   gate: GateResponse,
   decision: 'approved' | 'rejected',
-): Promise<void> {
-  if (!currentWorkspaceId.value) return;
+  values?: Record<string, GateFormValue>,
+  noteOverride?: string,
+): Promise<boolean> {
+  if (!currentWorkspaceId.value) return false;
 
   const key = `${gate.instanceId}-${gate.nodeId}`;
   submitting.value[key] = true;
@@ -97,7 +139,8 @@ async function decide(
       gate.instanceId,
       gate.nodeId,
       decision,
-      notes.value[key] || undefined,
+      noteOverride ?? (notes.value[key] || undefined),
+      values,
     );
 
     const idx = allGates.value.findIndex(
@@ -105,13 +148,17 @@ async function decide(
     );
     if (idx !== -1) allGates.value[idx] = updated;
     decidedHere.value = new Set(decidedHere.value).add(key);
+    notifyGatesChanged();
 
     delete notes.value[key];
+    return true;
   } catch (err: unknown) {
-    error.value =
-      err instanceof Error
-        ? err.message
-        : `Failed to record decision. Please reload and try again.`;
+    const message =
+      toUserFacingError(err).message || 'The decision was not recorded. Reload the page and decide again.';
+    // Inside the form, the problem shows next to the answers; elsewhere it replaces the list.
+    if (values !== undefined) formError.value = message;
+    else error.value = message;
+    return false;
   } finally {
     submitting.value[key] = false;
   }
@@ -283,6 +330,31 @@ onMounted(load);
               <div class="font-mono text-xs text-slate-400">
                 {{ gate.nodeId }} · {{ gate.instanceId.slice(0, 8) }}…
               </div>
+              <div
+                v-if="gate.decision === 'Pending' && hasForm(gate)"
+                class="mt-1 inline-flex items-center gap-1 text-xs text-slate-500"
+                data-testid="gate-has-form"
+              >
+                <ClipboardList class="h-3.5 w-3.5" />
+                Asks for {{ gate.form?.length }} {{ gate.form?.length === 1 ? 'detail' : 'details' }}
+              </div>
+              <dl
+                v-if="formAnswers(gate).length > 0"
+                class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs"
+                data-testid="gate-form-answers"
+              >
+                <template
+                  v-for="a in formAnswers(gate)"
+                  :key="a.label"
+                >
+                  <dt class="text-slate-500">
+                    {{ a.label }}
+                  </dt>
+                  <dd class="text-slate-800">
+                    {{ a.value }}
+                  </dd>
+                </template>
+              </dl>
             </td>
 
             <!-- Assignee -->
@@ -353,10 +425,11 @@ onMounted(load);
                 <button
                   :disabled="submitting[rowKey(gate)]"
                   class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  @click="decide(gate, 'approved')"
+                  :data-testid="`gate-approve-${gate.nodeId}`"
+                  @click="approve(gate)"
                 >
                   <CheckCircle class="h-3.5 w-3.5" />
-                  Approve
+                  {{ hasForm(gate) ? 'Approve…' : 'Approve' }}
                 </button>
                 <button
                   :disabled="submitting[rowKey(gate)]"
@@ -383,5 +456,14 @@ onMounted(load);
         </tbody>
       </table>
     </div>
+
+    <GateApproveDialog
+      v-model="formOpen"
+      :gate-name="formGate ? gateDisplayName(formGate) : ''"
+      :fields="formGate?.form ?? []"
+      :submitting="formGate ? submitting[rowKey(formGate)] === true : false"
+      :server-error="formError"
+      @approve="approveWithForm"
+    />
   </div>
 </template>

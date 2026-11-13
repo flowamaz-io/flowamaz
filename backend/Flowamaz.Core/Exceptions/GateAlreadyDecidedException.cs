@@ -19,3 +19,17 @@ public sealed class GateRunEndedException : AppException
             httpStatusCode: 409)
     { }
 }
+
+/// <summary>An approval whose form answers don't pass the gate's form. Maps to 422; nothing was recorded.</summary>
+public sealed class GateFormException : AppException
+{
+    public GateFormException(IReadOnlyList<string> problems)
+        : base("GATE_FORM_INVALID",
+            $"This approval needs a few details before it can go through: {string.Join(" ", problems)} Fill them in and approve again.",
+            httpStatusCode: 422)
+    {
+        Problems = problems;
+    }
+
+    public IReadOnlyList<string> Problems { get; }
+}

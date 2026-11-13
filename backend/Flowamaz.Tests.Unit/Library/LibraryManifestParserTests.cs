@@ -148,4 +148,57 @@ public sealed class LibraryManifestParserTests
         LibraryManifestParser.DeclaredId("name: My Connector").Should().BeNull();
         LibraryManifestParser.DeclaredId(": : broken").Should().BeNull();
     }
+
+    [Fact]
+    public void ParseForm_ReadsFields_AndRefusesBadOnes()
+    {
+        const string yaml = """
+            name: Purchase details
+            version: 1.1.0
+            category: Finance
+            fields:
+              - { key: amount, label: Amount, type: number, required: true, min: 0 }
+              - { key: line, label: Budget line, type: select, options: [Operating, Capital] }
+            """;
+
+        var form = LibraryManifestParser.ParseForm(new LibraryFolder("forms/acme/purchase-details", yaml));
+
+        form.Slug.Should().Be("acme-purchase-details");
+        form.Name.Should().Be("Purchase details");
+        form.Version.Should().Be("1.1.0");
+        form.Fields.Select(f => f.Key).Should().Equal("amount", "line");
+        form.Fields[0].Required.Should().BeTrue();
+        form.Fields[0].Min.Should().Be(0);
+
+        var noRoot = () => LibraryManifestParser.ParseForm(new LibraryFolder("acme/purchase-details", yaml));
+        noRoot.Should().Throw<LibraryManifestException>().WithMessage("*expected forms/{publisher}/{name}/*");
+        var badSelect = () => LibraryManifestParser.ParseForm(new LibraryFolder("forms/acme/x", yaml.Replace(", options: [Operating, Capital]", "")));
+        badSelect.Should().Throw<LibraryManifestException>().WithMessage("*select field 'line' has no options*");
+        var noFields = () => LibraryManifestParser.ParseForm(new LibraryFolder("forms/acme/x", "version: 1.0.0\n"));
+        noFields.Should().Throw<LibraryManifestException>().WithMessage("*fields is missing*");
+    }
+
+    [Fact]
+    public void ParsePack_ReadsItsItems_AndRefusesEmptyOrOddOnes()
+    {
+        const string yaml = """
+            name: Finance approvals
+            version: 1.0.0
+            connectors: [slack, acme/invoice-sync]
+            templates: [purchase-approval]
+            forms: [purchase-details]
+            """;
+
+        var pack = LibraryManifestParser.ParsePack(new LibraryFolder("packs/flowamaz-io/finance-approvals", yaml));
+
+        pack.Slug.Should().Be("finance-approvals");
+        pack.Connectors.Should().Equal("slack", "acme/invoice-sync");
+        pack.Templates.Should().Equal("purchase-approval");
+        pack.Forms.Should().Equal("purchase-details");
+
+        var empty = () => LibraryManifestParser.ParsePack(new LibraryFolder("packs/acme/x", "version: 1.0.0\n"));
+        empty.Should().Throw<LibraryManifestException>().WithMessage("*the pack is empty*");
+        var odd = () => LibraryManifestParser.ParsePack(new LibraryFolder("packs/acme/x", "version: 1.0.0\ntemplates: [\"Purchase Approval\"]\n"));
+        odd.Should().Throw<LibraryManifestException>().WithMessage("*isn't a Library id*");
+    }
 }
