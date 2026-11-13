@@ -25,6 +25,10 @@ const publisherId = computed(() => String(route.params.publisherId ?? ''));
 const kinds: PublisherItemKind[] = ['connector', 'template', 'form', 'pack'];
 const initial = computed(() => (profile.value?.displayName.trim()[0] ?? '?').toUpperCase());
 
+function installsLabel(n: number): string {
+  return `${n.toLocaleString()} ${n === 1 ? 'install' : 'installs'}`;
+}
+
 function itemsOf(kind: PublisherItemKind): PublisherProfile['items'] {
   return profile.value?.items.filter((i) => i.kind === kind) ?? [];
 }
@@ -194,7 +198,7 @@ watch(publisherId, load, { immediate: true });
                 v-if="item.kind === 'connector' || item.kind === 'template'"
                 class="mt-2 text-xs text-slate-500"
               >
-                {{ item.installs.toLocaleString() }} installs<template v-if="item.ratingCount > 0">
+                {{ installsLabel(item.installs) }}<template v-if="item.ratingCount > 0">
                   · {{ item.averageRating.toFixed(1) }} ★ ({{ item.ratingCount }})
                 </template>
               </p>

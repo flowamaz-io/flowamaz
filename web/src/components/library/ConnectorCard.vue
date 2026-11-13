@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { formatInstalls, type ConnectorDefinition } from '@/services/connector.service';
+import { installsText, type ConnectorDefinition } from '@/services/connector.service';
 import { CONNECTOR_INSTALL_ROLE_NEEDED } from '@/utils/constants';
 import { noticeDate, type LibraryConnectorItem, type LibraryOutdatedItem } from '@/services/library.service';
 
@@ -55,7 +55,6 @@ const tierClasses = computed<string>(() => {
   return map[props.connector.tier] ?? 'bg-gray-100 text-gray-600';
 });
 
-const installLabel = computed<string>(() => formatInstalls(props.connector.installCount));
 const ratingLabel = computed<string>(() =>
   props.connector.ratingCount > 0
     ? `${props.connector.averageRating.toFixed(1)} (${props.connector.ratingCount})`
@@ -142,7 +141,7 @@ function onCardClick(): void {
     <div class="flex items-center justify-between mt-auto pt-1">
       <div class="flex items-center gap-3 text-xs text-slate-400">
         <span>⭐ {{ ratingLabel }}</span>
-        <span>{{ installLabel }} installs</span>
+        <span>{{ installsText(connector.installCount) }}</span>
       </div>
 
       <span

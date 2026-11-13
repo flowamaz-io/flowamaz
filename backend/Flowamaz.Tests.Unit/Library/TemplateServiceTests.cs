@@ -257,4 +257,30 @@ public sealed class TemplateServiceTests
                 string.Join("; ", result.Errors.Select(e => $"{e.Code} {e.Message}")));
         }
     }
+
+    [Fact]
+    public async Task List_says_who_published_each_template_by_profile_name_with_a_profile_link()
+    {
+        var acmeId = Guid.NewGuid();
+        var community = new WorkflowTemplate { Id = Guid.NewGuid(), Name = "Acme PO", Slug = "acme-po", OrgId = acmeId, YamlContent = "x" };
+        var synced = new WorkflowTemplate { Id = Guid.NewGuid(), Name = "Synced", Slug = "beta-x", PublisherId = "beta", YamlContent = "x" };
+        var official = new WorkflowTemplate { Id = Guid.NewGuid(), Name = "Official", Slug = "o", IsOfficial = true, YamlContent = "x" };
+        _templates.Setup(r => r.ListAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([community, synced, official]);
+        var orgs = new Mock<IOrganisationRepository>();
+        orgs.Setup(r => r.GetByIdAsync(acmeId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Flowamaz.Core.Entities.Platform.Organisation { Id = acmeId, Name = "PR21 E2E", Slug = "acme" });
+        var directory = new Mock<Flowamaz.Core.Interfaces.Library.IPublisherDirectory>();
+        directory.Setup(d => d.DisplayNamesAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string> { ["acme"] = "Procurement Labs" });
+        var svc = new TemplateService(_templates.Object, _definitions.Object, WorkflowSvc(),
+            new Flowamaz.Application.Workflow.Validation.WorkflowValidator(NullLogger<Flowamaz.Application.Workflow.Validation.WorkflowValidator>.Instance),
+            _unitOfWork.Object, NullLogger<TemplateService>.Instance, null, null, null, orgs.Object, directory.Object);
+
+        var page = await svc.ListTemplatesAsync(null, null, 1, 10);
+
+        page.Items.Single(t => t.Slug == "acme-po").Should().Match<Flowamaz.Core.Models.TemplateListItem>(t => t.PublisherName == "Procurement Labs" && t.PublisherId == "acme");
+        page.Items.Single(t => t.Slug == "beta-x").Should().Match<Flowamaz.Core.Models.TemplateListItem>(t => t.PublisherName == "beta" && t.PublisherId == "beta");
+        page.Items.Single(t => t.Slug == "o").PublisherName.Should().BeNull("official templates carry the Official badge instead");
+    }
 }

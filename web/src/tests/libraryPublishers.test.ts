@@ -4,6 +4,7 @@ import PublisherProfileView from '@/views/library/PublisherProfileView.vue';
 import LibraryPublisherSection from '@/components/library/LibraryPublisherSection.vue';
 import PlatformLibraryReviewView from '@/views/platform/PlatformLibraryReviewView.vue';
 import { itemLink, submissionBadge, type PublisherProfile } from '@/services/libraryPublisher.service';
+import { installsText } from '@/services/connector.service';
 
 // Library publishers (FUNCTIONAL.md §23.9): profile page, portal section, staff reviews.
 const api = vi.hoisted(() => ({
@@ -42,6 +43,12 @@ describe('libraryPublisher helpers', () => {
     expect(submissionBadge('approved').label).toBe('Live');
     expect(submissionBadge('pending').label).toBe('In review');
     expect(submissionBadge('rejected').variant).toBe('danger');
+  });
+
+  it('pluralises install counts', () => {
+    expect(installsText(1)).toBe('1 install');
+    expect(installsText(0)).toBe('0 installs');
+    expect(installsText(1200)).toBe('1.2k installs');
   });
 });
 
@@ -97,6 +104,10 @@ describe('LibraryPublisherSection', () => {
     expect(w.find('[data-testid="library-publisher-no-items"]').exists()).toBe(true);
     expect(w.find('[data-testid="library-publisher-no-submissions"]').exists()).toBe(true);
     await w.get('[data-testid="library-publisher-edit"]').trigger('click');
+    const name = w.get('[data-testid="library-publisher-form"] input');
+    expect((name.element as HTMLInputElement).value).toBe('');
+    expect(name.attributes('placeholder')).toBe('Acme Labs');
+    await name.setValue('Procurement Labs');
     await w.get('[data-testid="library-publisher-save"]').trigger('click');
     await flushPromises();
     expect(w.text()).toContain('full https:// address');
@@ -131,5 +142,22 @@ describe('PlatformLibraryReviewView', () => {
     await flushPromises();
     expect(api.reviewQueue).not.toHaveBeenCalled();
     expect(w.text()).toContain('This page is for Flowamaz staff');
+  });
+});
+
+describe('TemplateCard publisher line', () => {
+  it('links the publisher to their profile', async () => {
+    const { default: TemplateCard } = await import('@/components/library/TemplateCard.vue');
+    const base = {
+      id: 't1', name: 'Acme PO', slug: 'acme-po', description: '', category: 'Finance', isOfficial: false, previewImageUrl: null,
+      installCount: 1, averageRating: 0, tags: [], version: '1.0.0', createdAt: '2026-11-01T00:00:00Z',
+      pricingModel: 'free', priceCents: 0, currency: 'usd', publisherName: 'Procurement Labs',
+    };
+    const linked = mount(TemplateCard, { props: { template: { ...base, publisherId: 'acme' } }, global: { stubs } });
+    expect(linked.findComponent(RouterLinkStub).props('to')).toBe('/library/publishers/acme');
+    expect(linked.text()).toContain('by Procurement Labs');
+    expect(linked.text()).toContain('1 install');
+    const plain = mount(TemplateCard, { props: { template: base }, global: { stubs } });
+    expect(plain.findAllComponents(RouterLinkStub)).toHaveLength(0);
   });
 });

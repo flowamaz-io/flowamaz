@@ -6,7 +6,7 @@ import FmSpinner from '@/components/common/FmSpinner.vue';
 import FmErrorState from '@/components/common/FmErrorState.vue';
 import CredentialSetupWizard from '@/components/library/CredentialSetupWizard.vue';
 import RateConnectorModal from '@/components/library/RateConnectorModal.vue';
-import { connectorService, formatInstalls } from '@/services/connector.service';
+import { connectorService, installsText } from '@/services/connector.service';
 import { libraryService, noticeDate, type LibraryConnectorDetail, type LibraryOutdatedItem } from '@/services/library.service';
 import { toUserFacingError } from '@/utils/error.util';
 import { useWorkspace } from '@/composables/useWorkspace';
@@ -243,7 +243,7 @@ onMounted(load);
               </router-link>
             </p>
             <div class="mt-1 flex items-center gap-4 text-sm text-slate-500">
-              <span>{{ formatInstalls(connector.installCount) }} installs</span>
+              <span>{{ installsText(connector.installCount) }}</span>
               <span>
                 ⭐ {{ connector.ratingCount > 0 ? `${connector.averageRating.toFixed(1)} (${connector.ratingCount})` : 'No ratings' }}
               </span>

@@ -17,6 +17,8 @@ export interface TemplatePricing {
   priceCents: number;
   currency: string;
   publisherName: string | null;
+  /** Library publisher id behind publisherName, for /library/publishers/{id} (older APIs omit it). */
+  publisherId?: string | null;
 }
 
 export type PurchaseStatus = 'none' | 'pending' | 'active' | 'canceled' | 'past_due' | 'refunded';

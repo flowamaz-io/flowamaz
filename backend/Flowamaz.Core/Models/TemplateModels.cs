@@ -23,7 +23,9 @@ public sealed record TemplateListItem(
     string PricingModel = "free",
     int PriceCents = 0,
     string Currency = "usd",
-    string? PublisherName = null);
+    string? PublisherName = null,
+    // The Library publisher id behind PublisherName, for linking to /library/publishers/{id}.
+    string? PublisherId = null);
 
 /// <summary>Full template detail including the YAML body and a derived node-type summary.</summary>
 public sealed record TemplateDetail(
@@ -44,7 +46,9 @@ public sealed record TemplateDetail(
     string PricingModel = "free",
     int PriceCents = 0,
     string Currency = "usd",
-    string? PublisherName = null);
+    string? PublisherName = null,
+    // The Library publisher id behind PublisherName, for linking to /library/publishers/{id}.
+    string? PublisherId = null);
 
 /// <summary>"This template uses: 2× human-gate, 3× action…" — a count per node type.</summary>
 public sealed record TemplateNodeSummary(string NodeType, int Count);

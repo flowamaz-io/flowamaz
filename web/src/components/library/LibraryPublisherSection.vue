@@ -47,7 +47,8 @@ async function load(): Promise<void> {
 function startEdit(): void {
   const p = profile.value;
   draft.value = {
-    displayName: p?.displayName ?? '',
+    // A new profile starts empty (the org name is the placeholder), so typing doesn't append to it.
+    displayName: portal.value?.hasProfile ? p?.displayName ?? '' : '',
     bio: p?.bio ?? '',
     websiteUrl: p?.websiteUrl ?? '',
     githubLogin: p?.githubLogin ?? '',
@@ -142,6 +143,7 @@ onMounted(load);
               v-model="draft.displayName"
               :class="inputClass"
               maxlength="100"
+              :placeholder="profile.displayName"
               required
             >
           </label>
@@ -241,7 +243,7 @@ onMounted(load);
           class="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500"
           data-testid="library-publisher-no-items"
         >
-          Nothing live yet. Publish a workflow as a template from its page (Publish to Library), or a connector with
+          Nothing live yet. Publish a workflow, then use "Publish as template" on its page, or publish a connector with
           <code>fmz connector publish</code>. Items appear here, with their installs and ratings, once they're live.
         </p>
         <div
