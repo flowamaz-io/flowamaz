@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { installsText } from '@/services/connector.service';
 import { computed } from 'vue';
 import { Download, Eye } from 'lucide-vue-next';
 import type { TemplateListItem } from '@/services/template.service';
@@ -17,12 +18,6 @@ const categoryEmoji: Record<string, string> = {
 };
 
 const icon = computed(() => categoryEmoji[props.template.category.toLowerCase()] ?? '📋');
-
-const installLabel = computed<string>(() => {
-  const n = props.template.installCount;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
-});
 </script>
 
 <template>
@@ -76,15 +71,24 @@ const installLabel = computed<string>(() => {
       <span class="w-fit rounded-full bg-slate-100 px-2 py-0.5 text-xs capitalize text-slate-600">
         {{ template.category }}
       </span>
+      <router-link
+        v-if="template.publisherName && template.publisherId"
+        :to="`/library/publishers/${template.publisherId}`"
+        class="truncate text-xs text-slate-400 hover:text-indigo-700 hover:underline"
+        data-testid="template-publisher-link"
+        @click.stop
+      >
+        by {{ template.publisherName }}
+      </router-link>
       <span
-        v-if="template.publisherName"
+        v-else-if="template.publisherName"
         class="truncate text-xs text-slate-400"
       >by {{ template.publisherName }}</span>
     </div>
 
     <!-- Footer: installs + actions -->
     <div class="mt-auto flex items-center justify-between pt-1">
-      <span class="text-xs text-slate-400">{{ installLabel }} installs</span>
+      <span class="text-xs text-slate-400">{{ installsText(template.installCount) }}</span>
       <div class="flex items-center gap-2">
         <button
           class="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"

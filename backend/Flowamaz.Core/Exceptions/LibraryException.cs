@@ -19,6 +19,20 @@ public sealed class LibraryException : AppException
             ? $"{name} is already installed here ({pin}). A newer major is available: run `fmz library update` with the connector id, or upgrade it from Library → Connectors."
             : $"{name} is already installed here ({pin}), and it's the latest version.", 409);
 
+    public static LibraryException NoOrganisation() => new("AUTH_REQUIRED",
+        "Sign in to your organisation to manage its Library profile. Your session has no organisation context.", 401);
+
+    public static LibraryException PublisherNotFound(string id) => new("LIBRARY_PUBLISHER_NOT_FOUND",
+        $"There is no Library publisher '{id}'. Publisher ids are lowercase, like the first part of a pin (acme in acme/invoice-sync@1). Open an item in the Library and follow its publisher link.", 404);
+
+    public static LibraryException ProfileInvalid(string problem) => new("LIBRARY_PROFILE_INVALID", problem, 400);
+
+    public static LibraryException ReviewNotFound(Guid id) => new("LIBRARY_REVIEW_NOT_FOUND",
+        $"Template {id} isn't waiting for review. It may already have been approved or rejected; reload the review queue.", 404);
+
+    public static LibraryException ReviewNotesRequired() => new("LIBRARY_REVIEW_NOTES_REQUIRED",
+        "Say why the template is rejected (at least 10 characters). The publisher sees this note and uses it to fix the template.", 400);
+
     public static LibraryException Disabled(string name) => new("LIBRARY_CONNECTOR_DISABLED",
         $"{name} is switched off on this platform, so it can't be installed. Ask platform support to enable it, or pick another connector.", 409);
 

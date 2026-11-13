@@ -8,7 +8,7 @@ import {
   HelpCircle, HeartPulse, LayoutDashboard, Microscope, Plug, Settings, Sparkles,
   Terminal, Workflow, X, Upload, KeyRound,
   LockKeyhole, Users, Webhook, ShieldCheck, ScrollText, CreditCard,
-  ShoppingBag, Store, Gauge,
+  ShoppingBag, Store, Gauge, ClipboardCheck,
 } from 'lucide-vue-next';
 import { useUiStore } from '@/stores/ui.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -84,6 +84,7 @@ const sections: NavSection[] = [
       { label: 'Purchases', to: '/settings/purchases', icon: ShoppingBag },
       { label: 'Audit Log', to: '/settings/audit', icon: ScrollText },
       { label: 'API Limits (staff)', to: '/platform/api-limits', icon: Gauge, staffOnly: true },
+      { label: 'Library reviews (staff)', to: '/platform/library-reviews', icon: ClipboardCheck, staffOnly: true },
     ],
   },
   {

@@ -235,6 +235,11 @@ public static class DependencyInjection
         services.AddScoped<Core.Interfaces.Library.ILibrarySource, Services.Library.GitHubLibrarySource>();
         services.AddScoped<Core.Interfaces.Library.ILibrarySyncService, Services.Library.LibrarySyncService>();
         services.AddScoped<Core.Interfaces.Library.ILibraryService, Services.Library.LibraryService>();
+        services.AddScoped<Core.Interfaces.Library.IPublisherDirectory, Services.Library.PublisherDirectory>();
+        services.AddScoped<Core.Interfaces.Library.IPublisherService>(sp => new Services.Library.PublisherService(
+            sp.GetRequiredService<Persistence.FlowAmazDbContext>(),
+            sp.GetRequiredService<Core.Interfaces.Services.IConnectorSubmissionPrService>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Library.PublisherService>>()));
         services.AddHttpClient(ConnectorSandbox.HttpClientName).ConfigurePrimaryHttpMessageHandler(Flowamaz.Application.DependencyInjection.GuardedHandler);
         services.AddScoped<IConnectorSandbox, ConnectorSandbox>();
     }

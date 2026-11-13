@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { installsText } from '@/services/connector.service';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ArrowLeft, Download, Lock, RefreshCw, ShoppingCart } from 'lucide-vue-next';
@@ -273,12 +274,19 @@ onMounted(async () => {
                 :currency="template.currency"
               />
               <template v-if="template.publisherName">
-                <span>by {{ template.publisherName }}</span>
+                <span>by
+                  <router-link
+                    v-if="template.publisherId"
+                    :to="`/library/publishers/${template.publisherId}`"
+                    class="text-indigo-600 hover:text-indigo-800 hover:underline"
+                  >{{ template.publisherName }}</router-link>
+                  <template v-else>{{ template.publisherName }}</template>
+                </span>
                 <span>·</span>
               </template>
               <span class="capitalize">{{ template.category }}</span>
               <span>·</span>
-              <span>{{ template.installCount }} installs</span>
+              <span>{{ installsText(template.installCount) }}</span>
               <span>·</span>
               <span>v{{ template.version }}</span>
             </div>

@@ -172,6 +172,58 @@ async function update(o: LibraryOpts, id: string): Promise<void> {
   success("Upgraded " + id + " from " + str(data?.fromVersion) + " to " + str(data?.toVersion) + " (" + str(data?.pin) + ")");
 }
 
+// ---- Publishers (FUNCTIONAL.md §23.9) ----
+
+/** The rows `fmz library publisher` prints for a profile's items. */
+export function publisherRows(items: Record<string, unknown>[]): string[][] {
+  return items.map((i) => {
+    const counted = i.kind === "connector" || i.kind === "template";
+    const rated = Number(i.ratingCount ?? 0) > 0;
+    return [str(i.kind), str(i.id), str(i.name), str(i.version), counted ? str(i.installs) : "-",
+      rated ? Number(i.averageRating).toFixed(1) + " (" + str(i.ratingCount) + ")" : "-",
+      i.deprecatedAt ? "deprecated" : "live"];
+  });
+}
+
+async function publisher(id: string, cmd: Command): Promise<void> {
+  const opts = outputOpts(cmd);
+  const client = await createClient();
+  const p = unwrap((await client.get("/api/v1/library/publishers/" + encodeURIComponent(id))).data) as Record<string, unknown>;
+  if (opts.json || opts.yaml) {
+    printFormatted(p, opts);
+    return;
+  }
+  const totals = (p.totals ?? {}) as Record<string, unknown>;
+  const badge = p.isOfficial ? " (official)" : p.isVerified ? " (verified)" : "";
+  success(str(p.displayName) + badge + " · " + str(p.publisherId));
+  if (p.bio) console.log(str(p.bio));
+  const links = [p.websiteUrl, p.githubLogin ? "https://github.com/" + str(p.githubLogin) : null].filter(Boolean);
+  if (links.length > 0) console.log(links.join("  "));
+  console.log(str(totals.items) + " items · " + str(totals.installs) + " installs" +
+    (Number(totals.ratingCount ?? 0) > 0 ? " · " + Number(totals.averageRating).toFixed(1) + " ★" : ""));
+  const items = Array.isArray(p.items) ? (p.items as Record<string, unknown>[]) : [];
+  if (items.length > 0) printTable(["Kind", "Id", "Name", "Version", "Installs", "Rating", "Status"], publisherRows(items));
+}
+
+async function submissions(cmd: Command): Promise<void> {
+  const opts = outputOpts(cmd);
+  const client = await createClient();
+  const portal = unwrap((await client.get("/api/v1/publisher/portal")).data) as Record<string, unknown>;
+  const subs = Array.isArray(portal.submissions) ? (portal.submissions as Record<string, unknown>[]) : [];
+  if (opts.json || opts.yaml) {
+    printFormatted(subs, opts);
+    return;
+  }
+  if (subs.length === 0) {
+    success("Nothing submitted yet. Publish with: fmz connector publish <dir> or fmz template publish <dir>.");
+    return;
+  }
+  printTable(["Kind", "Name", "Status", "What happens next", "Pull request"], subs.map((s) => [
+    str(s.kind), str(s.name), str(s.status), str(s.statusText) + (s.reviewerNotes ? " Note: " + str(s.reviewerNotes) : ""),
+    str(s.pullRequestUrl ?? ""),
+  ]));
+}
+
 function libraryAction<A extends unknown[]>(fn: (...args: A) => Promise<void>) {
   return async (...args: A): Promise<void> => {
     try {
@@ -386,6 +438,12 @@ export function registerLibraryCommands(program: Command): void {
 
   scoped(lib.command("update <id>").description("Upgrade an installed connector to its latest major (workspace admin)"))
     .action(libraryAction((id: string, o: LibraryOpts) => update(o, id)));
+
+  lib.command("publisher <id>").description("Show a Library publisher's profile and everything they publish")
+    .action(libraryAction((id: string, _o: unknown, cmd: Command) => publisher(id, cmd)));
+
+  lib.command("submissions").description("Your organisation's Library submissions and where each stands (org owner)")
+    .action(libraryAction((_o: unknown, cmd: Command) => submissions(cmd)));
 
   registerAuthoringGroup(lib, "connector");
   registerAuthoringGroup(lib, "template");

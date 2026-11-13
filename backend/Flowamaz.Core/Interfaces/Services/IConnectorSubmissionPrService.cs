@@ -13,4 +13,10 @@ public interface IConnectorSubmissionPrService
     /// </summary>
     Task<string> CreatePullRequestAsync(string connectorName, string connectorId, string publisherId, string manifestYaml,
         string submitterOrgId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The pull request's state: "open", "merged" or "closed" (closed without merging), or null when GitHub can't be
+    /// asked (no token, network, rate limit). Callers keep the last known status on null.
+    /// </summary>
+    Task<string?> GetPullRequestStateAsync(string pullRequestUrl, CancellationToken cancellationToken = default);
 }

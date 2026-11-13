@@ -161,3 +161,8 @@ export const connectorService = {
 export function formatInstalls(count: number): string {
   return count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
 }
+
+/** "1 install", "12 installs", "1.2k installs". */
+export function installsText(count: number): string {
+  return `${formatInstalls(count)} ${count === 1 ? 'install' : 'installs'}`;
+}

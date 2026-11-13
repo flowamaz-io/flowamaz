@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Flowamaz.Application.Library;
 using Flowamaz.Application.Workflow.DTOs;
 using Flowamaz.Application.Workflow.Services;
 using Flowamaz.Core.Entities.Economy;
@@ -53,8 +54,10 @@ public sealed partial class TemplateService : ITemplateService
         IAuditService? audit = null,
         IWorkflowEconomyService? economy = null,
         IWorkspaceRepository? workspaces = null,
-        IOrganisationRepository? organisations = null)
+        IOrganisationRepository? organisations = null,
+        IPublisherDirectory? publisherDirectory = null)
     {
+        _publisherDirectory = publisherDirectory;
         _economy = economy;
         _workspaces = workspaces;
         _organisations = organisations;
@@ -111,7 +114,8 @@ public sealed partial class TemplateService : ITemplateService
             template.IsOfficial, template.PreviewImageUrl, template.InstallCount, template.AverageRating,
             template.Tags, template.Version, yaml, nodeSummary, template.CreatedAt,
             template.PricingModel, template.PriceCents, template.Currency,
-            template.OrgId is { } o ? publishers.GetValueOrDefault(o) : null);
+            publishers.TryGetValue(template.Id, out var by) ? by.Name : null,
+            publishers.TryGetValue(template.Id, out var byId) ? byId.Id : null);
     }
 
     public async Task<Guid> InstallTemplateAsync(
@@ -271,21 +275,40 @@ public sealed partial class TemplateService : ITemplateService
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
-    private static TemplateListItem ToListItem(WorkflowTemplate t, IReadOnlyDictionary<Guid, string> publishers) => new(
+    private static TemplateListItem ToListItem(WorkflowTemplate t, IReadOnlyDictionary<Guid, (string Name, string Id)> publishers) => new(
         t.Id, t.Name, t.Slug, t.Description, t.Category, t.IsOfficial, t.PreviewImageUrl,
         t.InstallCount, t.AverageRating, t.Tags, t.Version, t.CreatedAt,
-        t.PricingModel, t.PriceCents, t.Currency, t.OrgId is { } o ? publishers.GetValueOrDefault(o) : null);
+        t.PricingModel, t.PriceCents, t.Currency,
+        publishers.TryGetValue(t.Id, out var by) ? by.Name : null, publishers.TryGetValue(t.Id, out var byId) ? byId.Id : null);
 
-    private async Task<IReadOnlyDictionary<Guid, string>> PublisherNamesAsync(IEnumerable<WorkflowTemplate> templates, CancellationToken ct)
+    private readonly IPublisherDirectory? _publisherDirectory;
+
+    /// <summary>
+    /// Who published each template, keyed by template id: the publisher's profile name (falling back to the
+    /// organisation's name, or the repository publisher id) and the publisher id for linking to the profile.
+    /// Official templates have no "by" line.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, (string Name, string Id)>> PublisherNamesAsync(IEnumerable<WorkflowTemplate> templates, CancellationToken ct)
     {
-        var names = new Dictionary<Guid, string>();
-        if (_organisations is null) return names;
-        foreach (var orgId in templates.Where(t => t.OrgId.HasValue).Select(t => t.OrgId!.Value).Distinct())
+        var result = new Dictionary<Guid, (string Name, string Id)>();
+        var list = templates.Where(t => !t.IsOfficial).ToList();
+        var orgs = new Dictionary<Guid, Flowamaz.Core.Entities.Platform.Organisation>();
+        if (_organisations is not null)
+            foreach (var orgId in list.Where(t => t.PublisherId is null && t.OrgId.HasValue).Select(t => t.OrgId!.Value).Distinct())
+                if (await _organisations.GetByIdAsync(orgId, ct) is { } org) orgs[orgId] = org;
+
+        var ids = new Dictionary<Guid, (string Id, string Fallback)>();
+        foreach (var t in list)
         {
-            var org = await _organisations.GetByIdAsync(orgId, ct);
-            if (org is not null) names[orgId] = org.Name;
+            if (t.PublisherId is { Length: > 0 } pid) ids[t.Id] = (pid, pid);
+            else if (t.OrgId is { } o && orgs.TryGetValue(o, out var org)) ids[t.Id] = (PublisherIds.ForOrg(org.Slug, o), org.Name);
         }
-        return names;
+        var profiles = _publisherDirectory is null
+            ? new Dictionary<string, string>()
+            : await _publisherDirectory.DisplayNamesAsync(ids.Values.Select(v => v.Id).Distinct().ToList(), ct);
+        foreach (var (templateId, (id, fallback)) in ids)
+            result[templateId] = (profiles.GetValueOrDefault(id) ?? fallback, id);
+        return result;
     }
 
     private IReadOnlyList<TemplateNodeSummary> BuildNodeSummary(string yaml)

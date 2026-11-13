@@ -20,6 +20,8 @@ public sealed class WorkflowTemplateConfiguration : IEntityTypeConfiguration<Wor
         builder.Property(t => t.PreviewImageUrl).HasMaxLength(1024);
         builder.Property(t => t.Version).HasMaxLength(64).IsRequired();
         builder.Property(t => t.ReviewStatus).HasMaxLength(16).IsRequired();
+        builder.Property(t => t.ReviewNotes).HasMaxLength(1000);
+        builder.HasIndex(t => t.ReviewStatus);
         builder.Property(t => t.YamlContent).IsRequired();
         builder.Property(t => t.AverageRating).HasColumnType("numeric(3,2)");
         builder.Property(t => t.PricingModel).HasMaxLength(16).HasDefaultValue("free").IsRequired();
