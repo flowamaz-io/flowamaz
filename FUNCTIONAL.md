@@ -1031,6 +1031,17 @@ The Library is a dedicated section inside the Flowamaz application. It is the fr
 | 🖥️ Apps | Year 2 | Micro-applications built on Flowamaz workflows |
 | 🤖 AI Prompts | Year 2 | Reusable AI node prompt templates |
 
+> **Built (Nov 2026):** Forms and Packs.
+> - **Forms.** A human gate's `config.form.fields` lists what the approver fills in. Each field has `key`, `label` and `type` (text, textarea, number, date, select, checkbox or email), plus optional `required`, `options`, `help`, `min` and `max`.
+>   - The approver sees the fields when approving. The server checks the answers (422 `GATE_FORM_INVALID`), and the answers become the gate's output: `{{ gate-id.output.form.key }}`.
+>   - A rejection needs no answers. Validation rule FRM-001 checks the definition.
+>   - Library forms come from `forms/{publisher}/{name}/form.yaml` in the templates repository; official ones are seeded. A workspace can also save its own forms.
+>   - Using a form copies its fields onto the gate, so later changes to the Library form never alter a live workflow.
+> - **Packs.** A pack is defined in `packs/{publisher}/{name}/pack.yaml` with `connectors`, `templates` and `forms` lists.
+>   - Installing a pack installs each connector and each template (as a workflow). It skips anything already there and reports a result per item.
+>   - Both kinds of folder are synced like templates (§23.7).
+>   - API: `/api/v1/workspaces/{id}/library/forms` and `/library/packs`. CLI: `fmz library list --forms`, `fmz library list --packs` and `fmz library install <pack> --packs`.
+
 ### 23.3 What a Library Connector Contains
 ```
 connectors/{publisher-id}/{connector-name}/

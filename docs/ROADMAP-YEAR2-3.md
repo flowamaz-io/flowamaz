@@ -11,10 +11,11 @@ roadmap, so they come first.
 
 | # | Item | Spec | What is missing | Size |
 |---|------|------|-----------------|------|
-| A1 | `fmz library` commands | §23.5, CLI | The CLI calls `/api/v1/library/{connectors,templates}[/…]` (search, show, install, outdated, update, publish). No such routes exist; the app uses `/api/v1/templates` and `/workspaces/{id}/connectors`. Every `fmz library` command except the local `init`/`validate` fails. | M |
-| A2 | Connector versioning | §23.8 | Semver per connector exists, but no pinning to a major (`publisher/connector@1`), no auto-applied minor/patch with a changelog notice, no explicit major upgrade, no 90-day deprecation notice. Needed for A1's `outdated`/`update`. | M |
-| A3 | Library **Forms** | §23.2 (Phase 5) | Reusable human-gate form definitions. The Library tab shows "Soon"; nothing behind it. | M |
-| A4 | Library **Packs** | §23.2, §23.9 (Phase 6) | Bundles of connectors + templates for a domain, installable in one go. The tab shows "Soon". | M |
+| A1 | `fmz library` commands | §23.5, CLI | ✅ Done (PR #22): workspace Library API and `fmz library` search/show/install/outdated/update/publish. | — |
+| A2 | Connector versioning | §23.8 | ✅ Done (PR #22): major pins, automatic minor/patch with changelog notice, explicit major upgrade, 90-day deprecation, Library GitHub sync (§23.7). | — |
+| A3 | Library **Forms** | §23.2 (Phase 5) | ✅ Done (PR #23): gate forms, Library + workspace forms, sync from `forms/`. | — |
+| A4 | Library **Packs** | §23.2, §23.9 (Phase 6) | ✅ Done (PR #23): packs with per-item install results, sync from `packs/`. | — |
+| A5 | Contributor profiles, publisher portal | §23.9 (Phases 5–6) | Public publisher pages (items, installs, ratings) and a portal where publishers see their submissions, review status and stats. Payouts belong with the paid Marketplace. | M | 
 
 ## B. Year 2
 
@@ -42,7 +43,7 @@ roadmap, so they come first.
 
 ## Suggested order
 
-1. **A1–A4** (one or two PRs): they are promised by the current spec and A1 is visibly broken in the CLI.
+1. **A1–A4** are done (PRs #22, #23). **A5** (contributor profiles, publisher portal) is the remaining in-scope item.
 2. **B1 Twin** and **B4 Consciousness** (stale alerts + drift): the most product value for code alone.
 3. **B5 collaboration**, **B7 multi-language**: broaden who can use it.
 4. **B2 Memory** once real runs accumulate; **B3 Negotiator** after a short design.
