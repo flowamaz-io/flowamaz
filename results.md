@@ -1612,3 +1612,10 @@ Carried out as PRs #2–#21 into `develop` (protected branch), each followed by 
 **Deviations:** PRs instead of direct pushes (branch protection). Four in-scope gaps were found at the end and are
 listed, not fixed: `fmz library` routes, connector version pinning, Library Forms, Library Packs
 (`docs/ROADMAP-YEAR2-3.md` §A).
+
+## 2026-11-13 — Library Forms and Packs (PR #23)
+
+- Human-gate forms: `config.form.fields` checked on approve (422 GATE_FORM_INVALID, fix-it messages), answers as `{{ gate-id.output.form.key }}`; FRM-001 definition check (both `human-gate` and `HumanGate` spellings).
+- Library Forms (3 official seeds + workspace forms, read-only Library forms) and Packs (2 official: finance-approvals, people-operations), synced from `forms/` and `packs/` of the templates repo; seeded items never deprecated by sync.
+- Web: approval dialog on Gates, answers shown on decided gates, gate form editor (Use a Library form / Save as a form), Forms and Packs tabs. CLI `--forms` / `--packs`.
+- Tests: unit +10 (GateForms, parser, FRM-001), integration +5 (LibraryFormsAndPacksTests), web +7, CLI +1, E2E S82–S85.
