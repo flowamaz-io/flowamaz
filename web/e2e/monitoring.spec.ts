@@ -53,7 +53,7 @@ test.describe('Monitoring (S68–S69)', () => {
 
     await page.getByRole('button', { name: /Replay/i }).click();
     // The replay lands on a new instance flagged as a test run.
-    await page.waitForURL((url) => /\/instances\/.+/.test(new URL(url).pathname) && !url.includes(instanceId));
+    await page.waitForURL((url) => /\/instances\/.+/.test(url.pathname) && !url.pathname.includes(instanceId));
     await expect(page.getByText(/Test/i).first()).toBeVisible();
   });
 });

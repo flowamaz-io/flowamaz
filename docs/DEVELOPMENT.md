@@ -35,6 +35,23 @@ dotnet watch --project Flowamaz.Api
   summaries and narratives. Workflow *generation* (plain English, photo, conversation) still needs `Ai__AnthropicPlatformKey`.
 - Easiest local start for manual or browser testing: `prompts/e2e-chrome/start-local.sh` (or `.ps1`).
 
+### End-to-end tests (Playwright)
+```bash
+./scripts/e2e-local.sh                 # whole suite: starts its own stack, runs it, stops it
+./scripts/e2e-local.sh -g "S44|S45"    # extra arguments go to `playwright test`
+E2E_KEEP=1 ./scripts/e2e-local.sh      # leave the servers up afterwards to poke at a failure
+```
+Needs Docker, the .NET SDK and Node 22. The script starts Postgres/Redis/Mailpit from `docker-compose.dev.yml`,
+recreates the `flowamaz_e2e` database, builds and starts the API (8317), the web app (5183) and the marketing site
+(5184), builds the CLI, then runs `web/e2e`. It uses its own ports and database, so a dev stack on 8307/5173 keeps
+running. Keys are generated per run and never written to disk. Reports land in `web/e2e/playwright-report/` and
+`web/e2e/e2e-results.json`; server logs in `web/e2e/.local-run/`.
+
+Against a stack you already started, run Playwright directly from `web/`:
+`E2E_API_URL=http://localhost:8307 npx playwright test --config e2e/playwright.config.ts` (`E2E_BASE_URL` and
+`E2E_MARKETING_URL` default to 5173 and 5174). Tests mark the first-visit product tour as seen through the API,
+except the tour's own tests.
+
 ## Frontend
 ```bash
 cd web
@@ -74,7 +91,9 @@ CI is defined in `.github/workflows/`:
   `security` (Trivy fs scan, fails on CRITICAL/HIGH).
 - **release.yml** — on push to `main`: builds and pushes `flowamaz-backend` / `flowamaz-web` images to
   GHCR and publishes `@flowamaz/cli` to npm.
-- **e2e.yml** — Playwright suite, nightly at 02:00 UTC and on manual `workflow_dispatch`.
+- **e2e.yml** — Playwright suite, nightly at 02:00 UTC and on manual `workflow_dispatch`. It runs
+  `scripts/e2e-local.sh` (see *End-to-end tests* below) and uploads the HTML report, `e2e-results.json`, failure
+  traces/screenshots and the server logs as the `playwright-report` artifact.
 
 ### Required status checks (branch protection)
 

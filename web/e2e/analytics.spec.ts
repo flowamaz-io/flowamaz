@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createTestWorkflow, setupReadyOrg, uniqueSuffix } from './fixtures/test-factories';
+import { createWorkflowFor, setupReadyOrg, uniqueSuffix } from './fixtures/test-factories';
 
 // ROI analytics E2E (prompt 05-08, S42–S43). Runs against the full stack in the nightly e2e job.
 test.describe('ROI Analytics (S42–S43)', () => {
@@ -16,7 +16,7 @@ test.describe('ROI Analytics (S42–S43)', () => {
   // S43: Configure ROI for a workflow → numbers appear in the table.
   test('S43: configuring ROI surfaces the workflow in the table', async ({ page }) => {
     const org = await setupReadyOrg(page);
-    const wf = await createTestWorkflow(page, org, `roi-${uniqueSuffix()}`);
+    const wf = await createWorkflowFor(org, `roi-${uniqueSuffix()}`);
 
     await page.goto('/analytics');
     // The workflow row exposes a Configure action.

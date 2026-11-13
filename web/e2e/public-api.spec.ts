@@ -1,5 +1,5 @@
 import { expect, request, test } from '@playwright/test';
-import { API_URL, createTestWorkflow, publishWorkflow, setupReadyOrg, uniqueSuffix } from './fixtures/test-factories';
+import { API_URL, createWorkflowFor, publishWorkflowFor, setupReadyOrg, uniqueSuffix } from './fixtures/test-factories';
 
 // Public API E2E (prompt 06-07, S51–S52). Runs against the full stack in the nightly e2e job.
 test.describe('Public API (S51–S52)', () => {
@@ -12,8 +12,8 @@ test.describe('Public API (S51–S52)', () => {
   // S52: GET /api/public/v1/workflows with a workspace API key returns the published workflows.
   test('S52: public workflows endpoint returns published workflows for a valid API key', async ({ page }) => {
     const org = await setupReadyOrg(page);
-    const wf = await createTestWorkflow(page, org, `pub-${uniqueSuffix()}`);
-    await publishWorkflow(page, org, wf.id);
+    const wf = await createWorkflowFor(org, `pub-${uniqueSuffix()}`);
+    await publishWorkflowFor(org, wf.id);
 
     // Mint an API key via the settings UI.
     await page.goto('/settings/api-keys');

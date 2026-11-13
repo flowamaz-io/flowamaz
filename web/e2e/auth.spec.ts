@@ -16,8 +16,8 @@ test.describe('Authentication (S1–S6)', () => {
     const email = `owner-${suffix}@e2e.flowamaz.test`;
 
     await page.goto('/register');
-    // First plan card is Community; pick Starter so registration creates a hosted trial.
-    await page.getByRole('button', { name: /Starter/ }).click();
+    // The plan picker is a radiogroup; the first plan is Community. Pick Starter so registration creates a hosted trial.
+    await page.getByRole('radio', { name: /Starter/ }).click();
     // Target inputs by placeholder — FmInput's help tooltip pollutes the accessible label. The
     // org-name suffix is unique, so the auto-generated org-URL slug is unique too (no need to set it).
     await page.getByPlaceholder('Acme Inc.').fill(`E2E Org ${suffix}`);
@@ -54,7 +54,7 @@ test.describe('Authentication (S1–S6)', () => {
       await page.locator('input[type="password"]').fill(`wrong-${attempt}`);
       await page.getByRole('button', { name: 'Sign in' }).click();
       // The backend's actionable message for bad credentials (no user enumeration).
-      await expect(page.getByText(/invalid credentials/i)).toBeVisible();
+      await expect(page.getByText(/Sign-in failed/i)).toBeVisible();
       await expect(page).toHaveURL(/\/login$/);
     }
   });
@@ -69,14 +69,14 @@ test.describe('Authentication (S1–S6)', () => {
     await page.getByPlaceholder('you@company.com').fill(org.email);
     await page.getByPlaceholder('acme').fill(org.orgSlug);
 
-    // 5 wrong attempts: each rejected as invalid credentials; the 5th trips the lockout server-side.
+    // 5 wrong attempts: each rejected as a failed sign-in; the 5th trips the lockout server-side.
     for (let attempt = 0; attempt < 5; attempt++) {
       await page.locator('input[type="password"]').fill(`wrong-${attempt}`);
       await page.getByRole('button', { name: 'Sign in' }).click();
-      await expect(page.getByText(/invalid credentials|temporarily locked/i)).toBeVisible();
+      await expect(page.getByText(/Sign-in failed|temporarily locked/i)).toBeVisible();
     }
 
-    // 6th attempt: account is locked — message differs from "invalid credentials".
+    // 6th attempt: account is locked — message differs from the failed sign-in one.
     await page.locator('input[type="password"]').fill('wrong-final');
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page.getByText(/temporarily locked/i)).toBeVisible();

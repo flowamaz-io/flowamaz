@@ -10,10 +10,9 @@ test.describe('Performance & health (S72)', () => {
   test('S72: /health is healthy with all dependencies', async () => {
     const api = await request.newContext();
     const res = await api.get(`${API_URL}/health`);
-    await api.dispose();
-
     expect(res.ok()).toBeTruthy();
     const body = (await res.json()) as { status?: string; entries?: Record<string, unknown> };
+    await api.dispose(); // only after reading the body
     expect(body.status).toMatch(/Healthy/i);
     // Each registered dependency check is present in the report.
     expect(body.entries ?? {}).toBeTruthy();
