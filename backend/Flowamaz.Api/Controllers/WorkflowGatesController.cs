@@ -58,7 +58,8 @@ public sealed class WorkflowGatesController : ControllerBase
     {
         await _decisionValidator.ValidateAndThrowAsync(request, cancellationToken);
         var gate = await _gates.DecideAsync(
-            workspaceId, instanceId, nodeId, request.Decision, request.Note, _currentUser.UserId!.Value, cancellationToken);
+            workspaceId, instanceId, nodeId, request.Decision, request.Note, _currentUser.UserId!.Value, cancellationToken,
+            values: request.Values);
         return gate is null ? NotFound() : Ok(gate);
     }
 }

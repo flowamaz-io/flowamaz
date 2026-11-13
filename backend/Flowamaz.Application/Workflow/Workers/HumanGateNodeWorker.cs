@@ -1,3 +1,4 @@
+using Flowamaz.Core.Workflow;
 using System.Text.Json;
 using Flowamaz.Application.Email;
 using Flowamaz.Application.Workflow.Gates;
@@ -28,6 +29,7 @@ public sealed class HumanGateNodeWorker : INodeWorker
     private readonly IConnectorOperationHandlerRegistry _connectorRegistry;
     private readonly IConnectorCredentialResolver? _credentials;
     private readonly Connectors.Services.ConnectorDispatcher? _dispatcher;
+    internal static readonly JsonSerializerOptions FormJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IConfiguration _config;
     private readonly ILogger<HumanGateNodeWorker> _logger;
 
@@ -121,6 +123,9 @@ public sealed class HumanGateNodeWorker : INodeWorker
                 OnTimeout = onTimeout,
                 EscalateToEmail = string.IsNullOrWhiteSpace(escalateTo) ? null : escalateTo.Trim(),
                 TimeoutHours = timeoutHours,
+                // A form (Library Forms, FUNCTIONAL.md §23.2) is captured with the gate so later edits to the
+                // workflow can't change what this approver is asked.
+                FormJson = GateForms.Read(config) is { Count: > 0 } fields ? JsonSerializer.Serialize(fields, FormJsonOptions) : null,
             };
 
             await _gateRepo.AddAsync(gate, cancellationToken);

@@ -78,6 +78,36 @@ public sealed record ParsedTemplate(
     bool Deprecated,
     string Path);
 
+/// <summary>A form folder (<c>forms/{publisher}/{name}/form.yaml</c>) of the templates repository, read and checked.</summary>
+public sealed record ParsedForm(
+    string Slug,
+    string Name,
+    string PublisherId,
+    string Version,
+    string Category,
+    string Description,
+    string[] Tags,
+    IReadOnlyList<Flowamaz.Core.Workflow.GateFormField> Fields,
+    string? DeprecationNote,
+    bool Deprecated,
+    string Path);
+
+/// <summary>A pack folder (<c>packs/{publisher}/{name}/pack.yaml</c>) of the templates repository, read and checked.</summary>
+public sealed record ParsedPack(
+    string Slug,
+    string Name,
+    string PublisherId,
+    string Version,
+    string Category,
+    string Description,
+    string[] Tags,
+    string[] Connectors,
+    string[] Templates,
+    string[] Forms,
+    string? DeprecationNote,
+    bool Deprecated,
+    string Path);
+
 /// <summary>A folder the sync could not use; it is skipped and the rest of the Library still syncs.</summary>
 public sealed class LibraryManifestException(string message) : Exception(message);
 
@@ -173,6 +203,98 @@ public static partial class LibraryManifestParser
     }
 
     /// <summary>
+    /// <c>forms/{publisher}/{name}/form.yaml</c>: name, version, category, description, tags and <c>fields</c>
+    /// (the same shape as a human gate's <c>config.form.fields</c>).
+    /// </summary>
+    public static ParsedForm ParseForm(LibraryFolder folder)
+    {
+        var (publisher, name) = PublisherAndName(folder.Path, "forms", rootRequired: true);
+        var root = Load(folder.ManifestYaml, "form.yaml", folder.Path);
+        CheckPublisher(root, publisher, folder.Path, "form.yaml");
+        var version = Version(root, folder.Path, "form.yaml");
+
+        if (!root.Children.TryGetValue(new YamlScalarNode("fields"), out var fieldsNode) || fieldsNode is not YamlSequenceNode)
+            throw new LibraryManifestException($"{folder.Path}/form.yaml: fields is missing. List the fields, e.g. fields: [{{ key: amount, label: Amount, type: number }}].");
+        using var json = JsonDocument.Parse(new JsonObject { ["form"] = new JsonObject { ["fields"] = ToJson(fieldsNode) } }.ToJsonString());
+        var fields = Flowamaz.Core.Workflow.GateForms.Read(json.RootElement);
+        if (fields.Count == 0)
+            throw new LibraryManifestException($"{folder.Path}/form.yaml: fields is empty. A form needs at least one field.");
+        var problems = Flowamaz.Core.Workflow.GateForms.DefinitionProblems(fields, $"{folder.Path}/form.yaml");
+        if (problems.Count > 0) throw new LibraryManifestException(problems[0]);
+
+        var (deprecated, note) = Deprecation(root);
+        return new ParsedForm(
+            Slug: publisher == OfficialPublisher ? name : $"{publisher}-{name}",
+            Name: Scalar(root, "name") is { } n && !SlugRegex().IsMatch(n) ? n : Scalar(root, "title") ?? Humanise(name),
+            PublisherId: publisher,
+            Version: version,
+            Category: Scalar(root, "category") ?? "Custom",
+            Description: Scalar(root, "description") ?? "",
+            Tags: Strings(root, "tags"),
+            Fields: fields,
+            DeprecationNote: note,
+            Deprecated: deprecated,
+            Path: folder.Path);
+    }
+
+    /// <summary>The most items of each kind a pack may bundle.</summary>
+    public const int MaxPackItems = 20;
+
+    /// <summary>
+    /// <c>packs/{publisher}/{name}/pack.yaml</c>: name, version, category, description and the <c>connectors</c>,
+    /// <c>templates</c> and <c>forms</c> it bundles (ids or slugs as the Library lists them).
+    /// </summary>
+    public static ParsedPack ParsePack(LibraryFolder folder)
+    {
+        var (publisher, name) = PublisherAndName(folder.Path, "packs", rootRequired: true);
+        var root = Load(folder.ManifestYaml, "pack.yaml", folder.Path);
+        CheckPublisher(root, publisher, folder.Path, "pack.yaml");
+        var version = Version(root, folder.Path, "pack.yaml");
+
+        string[] Refs(string key)
+        {
+            var refs = root.Children.TryGetValue(new YamlScalarNode(key), out var v) && v is YamlSequenceNode seq
+                ? seq.Children.OfType<YamlScalarNode>().Select(x => x.Value?.Trim()).Where(x => !string.IsNullOrEmpty(x)).Select(x => x!).Distinct().ToArray()
+                : [];
+            if (refs.Length > MaxPackItems)
+                throw new LibraryManifestException($"{folder.Path}/pack.yaml: {key} lists more than {MaxPackItems} items. Split it into two packs.");
+            foreach (var r in refs)
+                if (!PackRefRegex().IsMatch(r))
+                    throw new LibraryManifestException($"{folder.Path}/pack.yaml: '{r}' in {key} isn't a Library id. Use the id the Library shows, e.g. slack or acme/invoice-sync.");
+            return refs;
+        }
+        var connectors = Refs("connectors");
+        var templates = Refs("templates");
+        var forms = Refs("forms");
+        if (connectors.Length + templates.Length + forms.Length == 0)
+            throw new LibraryManifestException($"{folder.Path}/pack.yaml: the pack is empty. List at least one of connectors, templates or forms.");
+
+        var (deprecated, note) = Deprecation(root);
+        return new ParsedPack(
+            Slug: publisher == OfficialPublisher ? name : $"{publisher}-{name}",
+            Name: Scalar(root, "name") is { } n && !SlugRegex().IsMatch(n) ? n : Scalar(root, "title") ?? Humanise(name),
+            PublisherId: publisher,
+            Version: version,
+            Category: Scalar(root, "category") ?? "Custom",
+            Description: Scalar(root, "description") ?? "",
+            Tags: Strings(root, "tags"),
+            Connectors: connectors,
+            Templates: templates,
+            Forms: forms,
+            DeprecationNote: note,
+            Deprecated: deprecated,
+            Path: folder.Path);
+    }
+
+    private static string Version(YamlMappingNode root, string path, string file)
+    {
+        var version = Scalar(root, "version") ?? throw new LibraryManifestException($"{path}/{file}: version is missing (semver, e.g. 1.0.0).");
+        if (!SemVersion.TryParse(version, out var semver))
+            throw new LibraryManifestException($"{path}/{file}: version '{version}' is not semver (e.g. 1.0.0).");
+        return semver.ToString();
+    }
+
+    /// <summary>
     /// Release notes from CHANGELOG.md: <c>## 1.2.0 (2026-11-01)</c>, <c>## [1.2.0] - 2026-11-01</c> or
     /// <c>## v1.2.0</c> headings, each followed by its notes. Newest first, as written.
     /// </summary>
@@ -210,10 +332,11 @@ public static partial class LibraryManifestParser
 
     // ── Helpers ─────────────────────────────────────────────────────────────────────
 
-    private static (string Publisher, string Name) PublisherAndName(string path, string root)
+    private static (string Publisher, string Name) PublisherAndName(string path, string root, bool rootRequired = false)
     {
         var parts = path.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 3 && parts[0] == root) parts = parts[1..];
+        else if (rootRequired) parts = [];
         if (parts.Length != 2 || !SlugRegex().IsMatch(parts[0]) || !SlugRegex().IsMatch(parts[1]))
             throw new LibraryManifestException($"{path}: expected {root}/{{publisher}}/{{name}}/ with lowercase, hyphenated names.");
         return (parts[0], parts[1]);
@@ -315,6 +438,9 @@ public static partial class LibraryManifestParser
 
     [GeneratedRegex(@"^[a-z0-9][a-z0-9-]{0,63}$")]
     private static partial Regex SlugRegex();
+
+    [GeneratedRegex("^([a-z0-9][a-z0-9-]{0,63}/)?[a-z0-9][a-z0-9-]{0,99}$")]
+    private static partial Regex PackRefRegex();
 
     [GeneratedRegex(@"^#{2,3}\s*\[?(v?\d+\.\d+\.\d+[^\]\s)]*)\]?\s*(?:[-–(]\s*(\d{4}-\d{2}-\d{2})\)?)?")]
     private static partial Regex ChangelogHeadingRegex();

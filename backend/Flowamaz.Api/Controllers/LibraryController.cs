@@ -7,6 +7,7 @@ using Flowamaz.Core.Interfaces.Library;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Models;
 using Flowamaz.Core.Exceptions;
+using Flowamaz.Core.Workflow;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,10 +25,13 @@ public sealed class LibraryController : ControllerBase
     private readonly ILibraryService _library;
     private readonly ICurrentUserService _currentUser;
     private readonly IValidator<LibraryPublishRequest> _publishValidator;
+    private readonly IValidator<LibraryFormRequest> _formValidator;
     private readonly ILogger<LibraryController> _log;
 
-    public LibraryController(ILibraryService library, ICurrentUserService currentUser, IValidator<LibraryPublishRequest> publishValidator, ILogger<LibraryController> log)
+    public LibraryController(ILibraryService library, ICurrentUserService currentUser, IValidator<LibraryPublishRequest> publishValidator,
+        IValidator<LibraryFormRequest> formValidator, ILogger<LibraryController> log)
     {
+        _formValidator = formValidator;
         _library = library;
         _currentUser = currentUser;
         _publishValidator = publishValidator;
@@ -84,6 +88,53 @@ public sealed class LibraryController : ControllerBase
         return Ok(new { workflowId });
     }
 
+    // ── Forms (§23.2): reusable human-gate forms ────────────────────────────────────
+
+    [HttpGet("forms")]
+    [RequireWorkspaceRole(WorkspaceRole.Viewer)]
+    public async Task<ActionResult<IReadOnlyList<LibraryFormItem>>> Forms(Guid workspaceId, [FromQuery] string? q, [FromQuery] string? category, CancellationToken ct) =>
+        Ok(await _library.ListFormsAsync(workspaceId, q, category, ct));
+
+    [HttpGet("forms/{slugOrId}")]
+    [RequireWorkspaceRole(WorkspaceRole.Viewer)]
+    public async Task<ActionResult<LibraryFormItem>> Form(Guid workspaceId, string slugOrId, CancellationToken ct) =>
+        Ok(await _library.GetFormAsync(workspaceId, slugOrId, ct));
+
+    /// <summary>Saves a gate's fields as one of this workspace's forms.</summary>
+    [HttpPost("forms")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    public async Task<ActionResult<LibraryFormItem>> SaveForm(Guid workspaceId, [FromBody] LibraryFormRequest request, CancellationToken ct)
+    {
+        await _formValidator.ValidateAndThrowAsync(request, ct);
+        return Ok(await _library.SaveFormAsync(workspaceId, request.Name, request.Description, request.Category, request.Fields, _currentUser.UserId!.Value, ct));
+    }
+
+    [HttpDelete("forms/{formId:guid}")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    public async Task<ActionResult> DeleteForm(Guid workspaceId, Guid formId, CancellationToken ct)
+    {
+        await _library.DeleteFormAsync(workspaceId, formId, ct);
+        return NoContent();
+    }
+
+    // ── Packs (§23.2): connectors + templates + forms for one domain ────────────────
+
+    [HttpGet("packs")]
+    [RequireWorkspaceRole(WorkspaceRole.Viewer)]
+    public async Task<ActionResult<IReadOnlyList<LibraryPackItem>>> Packs(Guid workspaceId, [FromQuery] string? q, CancellationToken ct) =>
+        Ok(await _library.ListPacksAsync(workspaceId, q, ct));
+
+    [HttpGet("packs/{slugOrId}")]
+    [RequireWorkspaceRole(WorkspaceRole.Viewer)]
+    public async Task<ActionResult<LibraryPackItem>> Pack(Guid workspaceId, string slugOrId, CancellationToken ct) =>
+        Ok(await _library.GetPackAsync(workspaceId, slugOrId, ct));
+
+    /// <summary>Installs what the pack bundles. Partial success is a 200 with a result per item.</summary>
+    [HttpPost("packs/install")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    public async Task<ActionResult<LibraryPackInstallResult>> InstallPack(Guid workspaceId, [FromBody] LibraryItemRequest request, CancellationToken ct) =>
+        Ok(await _library.InstallPackAsync(workspaceId, request.Id, _currentUser.UserId!.Value, ct));
+
     /// <summary>`fmz connector publish`: opens the review pull request against the connectors repository.</summary>
     [HttpPost("connectors/publish")]
     [RequireWorkspaceRole(WorkspaceRole.Designer)]
@@ -107,6 +158,24 @@ public sealed class LibraryController : ControllerBase
 public sealed record LibraryItemRequest(string Id, string? Name = null);
 
 public sealed record LibraryPublishRequest(string Manifest);
+
+/// <summary>A workspace form: the fields as a human gate's <c>config.form.fields</c> holds them.</summary>
+public sealed record LibraryFormRequest(string Name, string? Description, string? Category, List<GateFormField> Fields);
+
+public sealed class LibraryFormRequestValidator : AbstractValidator<LibraryFormRequest>
+{
+    public LibraryFormRequestValidator()
+    {
+        RuleFor(x => x.Name).Cascade(CascadeMode.Stop)
+            .NotEmpty().WithMessage("Give the form a name, e.g. Purchase details.")
+            .MaximumLength(200).WithMessage("The form name is longer than 200 characters. Shorten it.");
+        RuleFor(x => x.Description).MaximumLength(1024).WithMessage("The description is longer than 1,024 characters. Shorten it.");
+        RuleFor(x => x.Category).MaximumLength(64).WithMessage("The category is longer than 64 characters. Shorten it.");
+        RuleFor(x => x.Fields).Cascade(CascadeMode.Stop)
+            .NotEmpty().WithMessage("The form has no fields. Add at least one field on the gate first.")
+            .Must(f => f.Count <= GateForms.MaxFields).WithMessage($"A form can have up to {GateForms.MaxFields} fields. Split it across two gates.");
+    }
+}
 
 public sealed class LibraryPublishRequestValidator : AbstractValidator<LibraryPublishRequest>
 {

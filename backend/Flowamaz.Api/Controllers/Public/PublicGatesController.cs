@@ -52,9 +52,18 @@ public sealed class PublicGatesController : PublicApiController
                 $"No pending gate found with id '{id}' in this workspace.", "errors#gate_not_found");
 
         // Guid.Empty: no Flowamaz user — the audit row names the API key, plus decided_by when the caller sends it.
-        var result = await _gates.DecideAsync(
-            ws, info.InstanceId, info.NodeId, request.Decision!.Trim(), request.Note, Guid.Empty, ct,
-            decidedByLabel: request.DecidedBy);
+        Application.Workflow.DTOs.GateResponse? result;
+        try
+        {
+            result = await _gates.DecideAsync(
+                ws, info.InstanceId, info.NodeId, request.Decision!.Trim(), request.Note, Guid.Empty, ct,
+                decidedByLabel: request.DecidedBy, values: request.Values);
+        }
+        catch (Core.Exceptions.GateFormException ex)
+        {
+            // The gate has a form: approving needs its answers in "values" (see the gate's "form" in GET /gates).
+            return ApiError(StatusCodes.Status422UnprocessableEntity, "form_invalid", ex.Message, "errors#form_invalid");
+        }
         return result is null
             ? ApiError(StatusCodes.Status404NotFound, "gate_not_found", "Gate could not be decided.", "errors#gate_not_found")
             : Data(result);
@@ -69,4 +78,5 @@ public sealed class PublicGatesController : PublicApiController
 public sealed record PublicGateDecisionRequest(
     [property: JsonPropertyName("decision")] string? Decision,
     [property: JsonPropertyName("note")] string? Note,
-    [property: JsonPropertyName("decided_by")] string? DecidedBy = null);
+    [property: JsonPropertyName("decided_by")] string? DecidedBy = null,
+    [property: JsonPropertyName("values")] Dictionary<string, System.Text.Json.JsonElement>? Values = null);

@@ -7,6 +7,8 @@ import FmErrorState from '@/components/common/FmErrorState.vue';
 import ConnectorCard from '@/components/library/ConnectorCard.vue';
 import CredentialSetupWizard from '@/components/library/CredentialSetupWizard.vue';
 import TemplateGalleryView from '@/views/library/TemplateGalleryView.vue';
+import LibraryFormsPanel from '@/components/library/LibraryFormsPanel.vue';
+import LibraryPacksPanel from '@/components/library/LibraryPacksPanel.vue';
 import { connectorService } from '@/services/connector.service';
 import { libraryService, type LibraryConnectorItem, type LibraryOutdatedItem } from '@/services/library.service';
 import { useWorkspace } from '@/composables/useWorkspace';
@@ -156,24 +158,15 @@ onMounted(load);
         type="button"
         role="tab"
         :aria-selected="activeTab === tab"
-        :disabled="tab === 'forms' || tab === 'packs'"
         :class="[
           'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
           activeTab === tab
             ? 'bg-white text-slate-900 shadow-sm'
-            : tab === 'forms' || tab === 'packs'
-              ? 'cursor-not-allowed text-slate-300'
-              : 'text-slate-500 hover:text-slate-700',
+            : 'text-slate-500 hover:text-slate-700',
         ]"
         @click="activeTab = tab"
       >
         {{ tab.charAt(0).toUpperCase() + tab.slice(1) }}
-        <span
-          v-if="tab === 'forms' || tab === 'packs'"
-          class="ml-1 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400"
-        >
-          Soon
-        </span>
       </button>
     </div>
 
@@ -284,6 +277,8 @@ onMounted(load);
 
     <!-- Templates tab -->
     <TemplateGalleryView v-else-if="activeTab === 'templates'" />
+    <LibraryFormsPanel v-else-if="activeTab === 'forms'" />
+    <LibraryPacksPanel v-else-if="activeTab === 'packs'" />
 
     <!-- Wizard -->
     <CredentialSetupWizard

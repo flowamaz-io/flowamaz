@@ -1,5 +1,5 @@
 import { http, unwrap } from './api.service';
-import type { ApiEnvelope, GateResponse } from '@/types';
+import type { ApiEnvelope, GateFormValue, GateResponse } from '@/types';
 
 const gatesBase = (workspaceId: string): string =>
   `/api/v1/workspaces/${workspaceId}/gates`;
@@ -24,10 +24,11 @@ export const gateService = {
     nodeId: string,
     decision: 'approved' | 'rejected',
     note?: string,
+    values?: Record<string, GateFormValue>,
   ): Promise<GateResponse> {
     const res = await http.post<ApiEnvelope<GateResponse>>(
       `${gatesBase(workspaceId)}/${instanceId}/${nodeId}/decide`,
-      { decision, note },
+      { decision, note, values },
     );
     return unwrap(res);
   },

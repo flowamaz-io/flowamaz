@@ -84,3 +84,41 @@ public sealed record LibrarySyncStatus(
     DateTime? LastAttemptAt,
     int ConsecutiveFailures,
     string? LastError);
+
+/// <summary>A human-gate form: a Library form, or one this workspace saved for itself.</summary>
+public sealed record LibraryFormItem(
+    Guid Id,
+    string Slug,
+    string Name,
+    string Description,
+    string Category,
+    string Version,
+    string? Publisher,
+    bool IsOfficial,
+    bool IsWorkspaceForm,
+    IReadOnlyList<Flowamaz.Core.Workflow.GateFormField> Fields,
+    string[] Tags,
+    DateTime? DeprecatedAt,
+    string? DeprecationNote);
+
+/// <summary>One item a pack bundles, with whether this workspace can use it and already has it.</summary>
+public sealed record LibraryPackEntry(string Kind, string Id, string Name, bool Available, bool Installed);
+
+public sealed record LibraryPackItem(
+    Guid Id,
+    string Slug,
+    string Name,
+    string Description,
+    string Category,
+    string Version,
+    string? Publisher,
+    bool IsOfficial,
+    IReadOnlyList<LibraryPackEntry> Items,
+    string[] Tags,
+    DateTime? DeprecatedAt,
+    string? DeprecationNote);
+
+/// <summary>What installing one pack item did: installed, already_installed, unavailable or failed.</summary>
+public sealed record LibraryPackItemResult(string Kind, string Id, string Name, string Status, string Message, Guid? WorkflowId = null);
+
+public sealed record LibraryPackInstallResult(string Pack, int Installed, int AlreadyInstalled, int Failed, IReadOnlyList<LibraryPackItemResult> Items);

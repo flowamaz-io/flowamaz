@@ -16,7 +16,8 @@ public sealed record UpdateWorkflowDefinitionRequest(string YamlContent, long? S
 
 public sealed record TriggerInstanceRequest(Guid WorkflowDefinitionId, string? Payload, string? IdempotencyKey, bool IsTest = false);
 
-public sealed record GateDecisionRequest(string Decision, string? Note);
+/// <summary><c>Values</c>: the approver's answers to the gate's form, keyed by field key (checked on approval).</summary>
+public sealed record GateDecisionRequest(string Decision, string? Note, Dictionary<string, System.Text.Json.JsonElement>? Values = null);
 
 // ── Responses ───────────────────────────────────────────────────────────────
 
@@ -82,7 +83,10 @@ public sealed record InstanceDetailResponse(
 public sealed record GateResponse(
     Guid Id, Guid InstanceId, string NodeId, string Decision, string? AssignedToEmail,
     string DeliveryChannel, string DeliveryStatus, DateTime? ExpiresAt, DateTime CreatedAt,
-    DateTime? DecidedAt, string? DecisionNote, bool IsTest = false, string? DecidedByLabel = null);
+    DateTime? DecidedAt, string? DecisionNote, bool IsTest = false, string? DecidedByLabel = null,
+    // The form the approver fills in (empty when the gate has none) and, once approved, the answers.
+    IReadOnlyList<Flowamaz.Core.Workflow.GateFormField>? Form = null,
+    System.Text.Json.JsonElement? FormValues = null);
 
 /// <summary>
 /// Minimal gate metadata returned by cross-workspace gate lookups (email/Slack click-through).

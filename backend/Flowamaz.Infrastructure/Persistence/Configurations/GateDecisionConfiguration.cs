@@ -17,6 +17,8 @@ public sealed class GateDecisionConfiguration : IEntityTypeConfiguration<GateDec
         builder.Property(g => g.DeliveryStatus).HasConversion<string>().HasMaxLength(32);
         builder.Property(g => g.OnTimeout).HasMaxLength(32).HasDefaultValue(GateTimeoutActions.Fail);
         builder.Property(g => g.EscalateToEmail).HasMaxLength(256);
+        builder.Property(g => g.FormJson).HasColumnType("jsonb");
+        builder.Property(g => g.FormValuesJson).HasColumnType("jsonb");
 
         builder.HasIndex(g => new { g.InstanceId, g.NodeId }).IsUnique();
         builder.HasIndex(g => g.AssignedTo);

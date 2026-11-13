@@ -20,6 +20,10 @@ public sealed class PublicGateDecisionRequestValidator : AbstractValidator<Publi
             .Must(d => d is not null && Allowed.Contains(d.Trim(), StringComparer.OrdinalIgnoreCase))
             .WithMessage(x => $"'decision' must be \"approved\" or \"rejected\", not \"{x.Decision}\". Fix the value and send the decision again.");
 
+        RuleFor(x => x.Values)
+            .Must(v => v is null || v.Count <= Flowamaz.Core.Workflow.GateForms.MaxFields)
+            .WithMessage($"'values' has too many answers. A gate form has at most {Flowamaz.Core.Workflow.GateForms.MaxFields} fields.");
+
         RuleFor(x => x.Note)
             .MaximumLength(GateDecisionLimits.NoteMaxLength)
             .WithMessage($"'note' is too long. Keep it to {GateDecisionLimits.NoteMaxLength} characters or fewer.");

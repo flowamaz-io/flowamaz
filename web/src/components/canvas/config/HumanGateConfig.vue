@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { credentialService, type CredentialAlias } from '@/services/credential.service';
 import { Plus, Trash2 } from 'lucide-vue-next';
+import GateFormEditor from './GateFormEditor.vue';
 import {
   type Config, hasKey, readNumber, readString, withoutKeys, writeAlias,
 } from './configKeys';
@@ -482,5 +483,11 @@ function removeOption(index: number): void {
         </p>
       </div>
     </div>
+
+    <GateFormEditor
+      :config="config"
+      :workspace-id="workspaceId"
+      @update="emit('update', $event)"
+    />
   </div>
 </template>

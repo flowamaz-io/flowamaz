@@ -55,11 +55,13 @@ public sealed class GitHubLibrarySource : ILibrarySource
             .Where(e => e.GetProperty("type").GetString() == "blob")
             .Select(e => (Path: e.GetProperty("path").GetString()!, Size: e.TryGetProperty("size", out var s) ? s.GetInt64() : 0))
             .ToList();
-        var manifestName = source == "connectors" ? "connector.yaml" : "template.yaml";
-        var companions = source == "connectors" ? new[] { "CHANGELOG.md" } : new[] { "workflow.yaml", "CHANGELOG.md" };
-        var folders = files.Where(f => Path.GetFileName(f.Path) == manifestName)
-            .Select(f => Path.GetDirectoryName(f.Path)!.Replace('\\', '/'))
-            .Where(d => d.Length > 0)
+        // The templates repository also holds forms/ (form.yaml) and packs/ (pack.yaml) folders (§23.2).
+        var manifests = source == "connectors"
+            ? new Dictionary<string, string[]> { ["connector.yaml"] = ["CHANGELOG.md"] }
+            : new Dictionary<string, string[]> { ["template.yaml"] = ["workflow.yaml", "CHANGELOG.md"], ["form.yaml"] = [], ["pack.yaml"] = [] };
+        var folders = files.Where(f => manifests.ContainsKey(Path.GetFileName(f.Path)))
+            .Select(f => (Folder: Path.GetDirectoryName(f.Path)!.Replace('\\', '/'), Manifest: Path.GetFileName(f.Path)))
+            .Where(d => d.Folder.Length > 0)
             .Take(MaxFolders + 1)
             .ToList();
         if (folders.Count > MaxFolders)
@@ -67,10 +69,10 @@ public sealed class GitHubLibrarySource : ILibrarySource
 
         var sizes = files.ToDictionary(f => f.Path, f => f.Size);
         var items = new List<LibrarySourceItem>();
-        foreach (var folder in folders)
+        foreach (var (folder, manifestName) in folders)
         {
             var contents = new Dictionary<string, string>();
-            foreach (var name in companions.Prepend(manifestName))
+            foreach (var name in manifests[manifestName].Prepend(manifestName))
             {
                 var path = $"{folder}/{name}";
                 if (!sizes.TryGetValue(path, out var size)) continue;
