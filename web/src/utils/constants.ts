@@ -100,6 +100,14 @@ export function canDesign(role: string | null | undefined): boolean {
   return !role || role === 'Admin' || role === 'Designer';
 }
 
+/** Saving a credential is a workspace admin's job (CredentialsController: Admin). */
+export function canManageCredentials(role: string | null | undefined): boolean {
+  return !role || role === 'Admin';
+}
+
+export const CONNECTOR_INSTALL_ROLE_NEEDED =
+  'Installing connectors needs the Designer role. Ask a workspace admin to change your role in Settings → Members.';
+
 /** Shown instead of the creation methods to members who can't create workflows. */
 export const DESIGNER_ROLE_NEEDED =
   'Creating workflows needs the Designer role. Ask a workspace admin to change your role in Settings → Members.';

@@ -8,8 +8,9 @@ const installConnector = vi.fn();
 vi.mock('@/services/connector.service', () => ({
   connectorService: { installConnector: (...a: unknown[]) => installConnector(...a), initiateOAuth: vi.fn() },
 }));
+const role = { value: 'Admin' as string };
 vi.mock('@/composables/useWorkspace', () => ({
-  useWorkspace: () => ({ currentWorkspaceId: { value: 'ws-1' } }),
+  useWorkspace: () => ({ currentWorkspaceId: { value: 'ws-1' }, current: { value: { role: role.value } } }),
 }));
 
 const fileSystem: ConnectorDefinition = {
@@ -32,6 +33,7 @@ function clickContinue(): void {
 
 describe('CredentialSetupWizard install', () => {
   beforeEach(() => {
+    role.value = 'Admin';
     installConnector.mockReset();
     document.body.innerHTML = '';
   });
@@ -62,6 +64,27 @@ describe('CredentialSetupWizard install', () => {
     await flushPromises();
     expect(installConnector).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain('Connected to File System!');
+    w.unmount();
+  });
+
+  it("tells a Designer up front that a pasted credential needs an Admin", async () => {
+    role.value = 'Designer';
+    const slack = { ...fileSystem, connectorId: 'slack', displayName: 'Slack', manifestJson: JSON.stringify({ auth: { credential_types: ['ApiKey'] } }) };
+    const w = mount(CredentialSetupWizard, { props: { connector: slack, modelValue: true }, attachTo: document.body });
+    await flushPromises();
+    expect(document.querySelector('[data-testid="credential-admin-needed"]')?.textContent).toContain('needs the Admin role');
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+    w.unmount();
+  });
+
+  it('lets a Designer install a connector that needs no credential', async () => {
+    role.value = 'Designer';
+    installConnector.mockResolvedValue(undefined);
+    const w = mountWizard();
+    expect(document.querySelector('[data-testid="credential-admin-needed"]')).toBeNull();
+    clickContinue();
+    await flushPromises();
+    expect(installConnector).toHaveBeenCalled();
     w.unmount();
   });
 });

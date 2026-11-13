@@ -10,6 +10,7 @@ import { connectorService, formatInstalls } from '@/services/connector.service';
 import { libraryService, noticeDate, type LibraryConnectorDetail, type LibraryOutdatedItem } from '@/services/library.service';
 import { toUserFacingError } from '@/utils/error.util';
 import { useWorkspace } from '@/composables/useWorkspace';
+import { CONNECTOR_INSTALL_ROLE_NEEDED, canDesign } from '@/utils/constants';
 import { fromNow } from '@/utils/date.util';
 import type { ConnectorDefinition, ConnectorReview } from '@/services/connector.service';
 
@@ -52,6 +53,7 @@ const upgradeError = ref<string | null>(null);
 const upgradeDone = ref<string | null>(null);
 const isInstalled = computed(() => library.value?.connector.installed ?? connector.value?.isInstalled ?? false);
 // Upgrading to a new major is a workspace admin's call (FUNCTIONAL.md §23.8); the server checks too.
+const canInstall = computed(() => canDesign(ws.current.value?.role));
 const isAdmin = computed(() => {
   const role = ws.current.value?.role;
   return !role || role === 'Admin';
@@ -243,8 +245,15 @@ onMounted(load);
               {{ manifest.description ?? connector.displayName }}
             </p>
           </div>
+          <p
+            v-if="!isInstalled && !canInstall"
+            class="max-w-xs text-right text-xs text-slate-500"
+            data-testid="connector-install-role-note"
+          >
+            {{ CONNECTOR_INSTALL_ROLE_NEEDED }}
+          </p>
           <button
-            v-if="!isInstalled"
+            v-else-if="!isInstalled"
             class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors whitespace-nowrap"
             @click="wizardOpen = true"
           >

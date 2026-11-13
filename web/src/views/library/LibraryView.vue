@@ -12,6 +12,7 @@ import LibraryPacksPanel from '@/components/library/LibraryPacksPanel.vue';
 import { connectorService } from '@/services/connector.service';
 import { libraryService, type LibraryConnectorItem, type LibraryOutdatedItem } from '@/services/library.service';
 import { useWorkspace } from '@/composables/useWorkspace';
+import { canDesign } from '@/utils/constants';
 import type { ConnectorDefinition } from '@/services/connector.service';
 
 type LibTab = 'connectors' | 'templates' | 'forms' | 'packs';
@@ -22,7 +23,8 @@ type Category = (typeof CATEGORIES)[number];
 
 const route = useRoute();
 const router = useRouter();
-const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
+const { currentWorkspaceId, current, loadWorkspaces } = useWorkspace();
+const canInstall = computed(() => canDesign(current.value?.role));
 
 const activeTab = ref<LibTab>((route.query.tab as LibTab) ?? 'connectors');
 const searchQuery = ref('');
@@ -270,6 +272,7 @@ onMounted(load);
           :is-installed="libraryOf(c)?.installed ?? false"
           :library="libraryOf(c)"
           :outdated="outdatedOf(c)"
+          :can-install="canInstall"
           @install="openWizard"
         />
       </div>

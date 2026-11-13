@@ -4,6 +4,7 @@ import { Check, Loader2 } from 'lucide-vue-next';
 import FmModal from '@/components/common/FmModal.vue';
 import { connectorService } from '@/services/connector.service';
 import { useWorkspace } from '@/composables/useWorkspace';
+import { canManageCredentials } from '@/utils/constants';
 import type { ConnectorDefinition } from '@/services/connector.service';
 import {
   AUTH_TYPE_LABELS,
@@ -30,7 +31,12 @@ const emit = defineEmits<{
   installed: [credentialId: string];
 }>();
 
-const { currentWorkspaceId } = useWorkspace();
+const { currentWorkspaceId, current } = useWorkspace();
+// A pasted key or password is saved as a credential, which needs the Admin role on the server
+// (CredentialsController). Say so up front instead of failing after the form is filled in.
+const needsAdminForCredential = computed(
+  () => (authType.value === 'apikey' || authType.value === 'basic') && !canManageCredentials(current?.value?.role),
+);
 
 const step = ref<1 | 2 | 3>(1);
 const apiKey = ref('');
@@ -287,6 +293,15 @@ onBeforeUnmount(() => {
         >
           Connect with {{ connector.displayName }}
         </button>
+
+        <p
+          v-else-if="needsAdminForCredential"
+          class="rounded-lg bg-amber-50 p-3 text-sm text-amber-800"
+          data-testid="credential-admin-needed"
+        >
+          {{ connector.displayName }} needs a credential, and saving credentials needs the Admin role in this
+          workspace. Ask a workspace admin to install and connect it, or to change your role in Settings → Members.
+        </p>
 
         <!-- API key -->
         <div
