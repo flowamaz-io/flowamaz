@@ -97,7 +97,7 @@ public sealed partial class PublisherService : IPublisherService
         items.AddRange(templates
             .Where(t => t.DeprecatedAt is null || t.DeprecatedAt > cutoff)
             .Select(t => new PublisherItem("template", t.Slug, t.Name, t.Version, t.Category, t.InstallCount,
-                t.AverageRating, 0, t.DeprecatedAt, t.DeprecationNote, t.UpdatedAt)));
+                t.AverageRating, 0, t.DeprecatedAt, t.DeprecationNote, t.UpdatedAt, t.Id.ToString())));
 
         var forms = await _db.FormDefinitions.AsNoTracking()
             .Where(f => f.WorkspaceId == null && f.PublisherId == publisherId).ToListAsync(ct);

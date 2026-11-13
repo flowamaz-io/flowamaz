@@ -131,7 +131,20 @@ onMounted(load);
               {{ form.category }} · {{ form.fields.length }} {{ form.fields.length === 1 ? 'field' : 'fields' }}
             </p>
           </div>
-          <FmBadge :variant="form.isWorkspaceForm ? 'blue' : form.isOfficial ? 'primary' : 'slate'">
+          <router-link
+            v-if="form.publisher && !form.isWorkspaceForm"
+            :to="`/library/publishers/${form.publisher}`"
+            class="shrink-0"
+            :data-testid="`form-publisher-link`"
+          >
+            <FmBadge :variant="form.isWorkspaceForm ? 'blue' : form.isOfficial ? 'primary' : 'slate'">
+              {{ form.isWorkspaceForm ? 'This workspace' : form.isOfficial ? 'Official' : form.publisher }}
+            </FmBadge>
+          </router-link>
+          <FmBadge
+            v-else
+            :variant="form.isWorkspaceForm ? 'blue' : form.isOfficial ? 'primary' : 'slate'"
+          >
             {{ form.isWorkspaceForm ? 'This workspace' : form.isOfficial ? 'Official' : form.publisher }}
           </FmBadge>
         </div>

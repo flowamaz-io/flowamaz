@@ -233,7 +233,14 @@ onMounted(load);
               >{{ library?.connector.installedPin ?? library?.connector.pin }}</span>
             </div>
             <p class="text-sm text-slate-500">
-              by {{ connector.publisherId }}
+              by
+              <router-link
+                :to="`/library/publishers/${connector.publisherId}`"
+                class="text-indigo-600 hover:text-indigo-800 hover:underline"
+                data-testid="connector-publisher-link"
+              >
+                {{ connector.publisherId }}
+              </router-link>
             </p>
             <div class="mt-1 flex items-center gap-4 text-sm text-slate-500">
               <span>{{ formatInstalls(connector.installCount) }} installs</span>

@@ -97,6 +97,14 @@ function onCardClick(): void {
       <p class="font-semibold text-slate-900">
         {{ connector.displayName }}
       </p>
+      <router-link
+        :to="`/library/publishers/${connector.publisherId}`"
+        class="text-xs text-slate-500 hover:text-indigo-700 hover:underline"
+        data-testid="connector-publisher-link"
+        @click.stop
+      >
+        by {{ connector.publisherId }}
+      </router-link>
       <p class="mt-1 text-sm text-slate-500 leading-snug">
         {{ shortDescription }}
       </p>

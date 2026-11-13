@@ -133,7 +133,20 @@ onMounted(load);
               {{ pack.category }} · v{{ pack.version }}
             </p>
           </div>
-          <FmBadge :variant="pack.isOfficial ? 'primary' : 'slate'">
+          <router-link
+            v-if="pack.publisher"
+            :to="`/library/publishers/${pack.publisher}`"
+            class="shrink-0"
+            :data-testid="`pack-publisher-link`"
+          >
+            <FmBadge :variant="pack.isOfficial ? 'primary' : 'slate'">
+              {{ pack.isOfficial ? 'Official' : pack.publisher }}
+            </FmBadge>
+          </router-link>
+          <FmBadge
+            v-else
+            :variant="pack.isOfficial ? 'primary' : 'slate'"
+          >
             {{ pack.isOfficial ? 'Official' : pack.publisher }}
           </FmBadge>
         </div>

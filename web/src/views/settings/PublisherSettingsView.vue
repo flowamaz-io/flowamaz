@@ -13,6 +13,7 @@ import FmErrorState from '@/components/common/FmErrorState.vue';
 import TemplatePriceBadge from '@/components/library/TemplatePriceBadge.vue';
 import TemplatePricingFields from '@/components/library/TemplatePricingFields.vue';
 import StripeTestModeHint from '@/components/library/StripeTestModeHint.vue';
+import LibraryPublisherSection from '@/components/library/LibraryPublisherSection.vue';
 import { publisherService } from '@/services/publisher.service';
 import { useToast } from '@/composables/useToast';
 import { toUserFacingError } from '@/utils/error.util';
@@ -215,7 +216,7 @@ onMounted(async () => {
           Publisher
         </h1>
         <p class="text-sm text-slate-500">
-          Sell workflows in the template gallery. Flowamaz keeps {{ feePercent }}%, you receive {{ 100 - feePercent }}% — paid out by Stripe.
+          Your Library profile and submissions, and selling workflows in the template gallery. Flowamaz keeps {{ feePercent }}%, you receive {{ 100 - feePercent }}% — paid out by Stripe.
         </p>
       </div>
       <FmBadge
@@ -225,6 +226,8 @@ onMounted(async () => {
         {{ stateBadge.label }}
       </FmBadge>
     </header>
+
+    <LibraryPublisherSection v-if="!loading && !forbidden" />
 
     <StripeTestModeHint />
 

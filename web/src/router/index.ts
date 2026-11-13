@@ -71,6 +71,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'library/connectors/:connectorId', name: 'connector-detail', component: () => import('@/views/library/ConnectorDetailView.vue') },
       { path: 'library/health', name: 'connector-health', component: () => import('@/views/library/ConnectorHealthView.vue') },
       { path: 'library/submit', name: 'connector-submit', component: () => import('@/views/library/ConnectorSubmissionView.vue') },
+      { path: 'library/publishers/:publisherId', name: 'publisher-profile', component: () => import('@/views/library/PublisherProfileView.vue') },
       { path: 'library/templates/:id', name: 'template-detail', component: () => import('@/views/library/TemplateDetailView.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/views/workspace/WorkspaceSettingsView.vue') },
       { path: 'settings/members', name: 'members', component: () => import('@/views/workspace/MembersView.vue') },
@@ -83,6 +84,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'settings/purchases', name: 'purchases', component: () => import('@/views/settings/PurchasesView.vue') },
       { path: 'settings/audit', name: 'audit', component: () => import('@/views/settings/AuditLogView.vue') },
       // Flowamaz staff only; the page and the API both check (the API is what enforces it).
+      { path: 'platform/library-reviews', name: 'platform-library-reviews', component: () => import('@/views/platform/PlatformLibraryReviewView.vue') },
       { path: 'platform/api-limits', name: 'platform-api-limits', component: () => import('@/views/platform/PlatformApiLimitsView.vue') },
     ],
   },

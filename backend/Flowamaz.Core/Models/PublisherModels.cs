@@ -14,7 +14,9 @@ public sealed record PublisherItem(
     int RatingCount,
     DateTime? DeprecatedAt,
     string? DeprecationNote,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    // The id the item's page uses when it differs from Id (templates: their Guid).
+    string? DetailId = null);
 
 public sealed record PublisherTotals(int Items, int Installs, decimal AverageRating, int RatingCount);
 
