@@ -63,6 +63,22 @@ inside the API container.
 Verify after deploy: `docker compose logs connector-runner | grep "executing"` while running a workflow with
 an HTTP step, and `docker compose exec connector-runner curl -fsS -m5 http://169.254.169.254/` must fail (the proxy answers 403).
 
+### 1c. Library sync (FUNCTIONAL.md §23.7)
+
+The Library reads connectors and templates from GitHub every 15 minutes, and straight away on a push:
+
+- Set `Library__ConnectorsRepo` and `Library__TemplatesRepo` (owner/repo; blank turns that half off) and
+  `Library__Branch`. `Library__GitHubToken` is optional and only raises the API rate limit.
+- In each repo add a webhook: payload URL `https://<api host>/webhooks/library/github`, content type
+  `application/json`, the secret in `Library__WebhookSecret`, push events only.
+- Layout: `connectors/{publisher}/{id}/connector.yaml` (+ `CHANGELOG.md`) and
+  `templates/{publisher}/{name}/template.yaml` + `workflow.yaml`. A folder whose manifest claims another
+  publisher, or official status without being `flowamaz-io`, is skipped and listed in the sync report.
+  Official connectors ship with platform releases and are not synced.
+- A failed sync changes nothing (the Library serves its last state). After three failures in a row the owners
+  of the staff organisations (`Platform__StaffOrgIds`) get a notification. Status and a manual run:
+  `GET`/`POST /api/v1/platform/library/sync` (staff only).
+
 ## 2. TLS certificate
 Replace the self-signed dev cert with a real one.
 

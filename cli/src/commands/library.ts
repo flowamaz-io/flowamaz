@@ -5,84 +5,124 @@ import yaml from "js-yaml";
 import { createClient } from "../lib/api-client";
 import { outputOpts } from "../lib/opts";
 import { printFormatted, printTable, success, error } from "../lib/output";
-import { asArray, describeError, str, unwrap } from "../lib/util";
+import { asArray, describeError, requireWorkspaceId, str, unwrap } from "../lib/util";
 
-// ---- Marketplace (connectors + templates) ----
+// ---- Library (connectors + templates), FUNCTIONAL.md §23.5 ----
+// Every call is workspace-scoped: /api/v1/workspaces/{id}/library/...
 
-async function list(kind: string, cmd: Command): Promise<void> {
-  const opts = outputOpts(cmd);
-  const client = await createClient();
-  const resp = await client.get("/api/v1/library/" + kind);
-  if (opts.json || opts.yaml) {
-    printFormatted(resp.data, opts);
-    return;
-  }
-  const rows = asArray(resp.data).map((i) => [
-    str(i.id ?? i.slug),
-    str(i.name),
-    str(i.version),
-    str(i.publisher ?? i.author),
-  ]);
-  printTable(["ID", "Name", "Version", "Publisher"], rows);
+type Kind = "connectors" | "templates";
+
+interface LibraryOpts {
+  workspace?: string;
+  templates?: boolean;
+  template?: boolean;
+  type?: string;
+  category?: string;
+  name?: string;
 }
 
-async function search(kind: string, query: string, cmd: Command): Promise<void> {
-  const opts = outputOpts(cmd);
-  const client = await createClient();
-  const resp = await client.get("/api/v1/library/" + kind, {
-    params: { q: query },
-  });
-  if (opts.json || opts.yaml) {
-    printFormatted(resp.data, opts);
-    return;
-  }
-  const rows = asArray(resp.data).map((i) => [
-    str(i.id ?? i.slug),
-    str(i.name),
-    str(i.description),
-  ]);
-  printTable(["ID", "Name", "Description"], rows);
+/** --templates / --template / --type template all mean templates; connectors otherwise. */
+export function kindOf(o: LibraryOpts): Kind {
+  return o.templates || o.template || (o.type ?? "").toLowerCase().startsWith("template") ? "templates" : "connectors";
 }
 
-async function show(kind: string, id: string, cmd: Command): Promise<void> {
+async function base(o: LibraryOpts): Promise<string> {
+  const ws = await requireWorkspaceId(o.workspace);
+  return "/api/v1/workspaces/" + encodeURIComponent(ws) + "/library/";
+}
+
+function itemRow(kind: Kind, i: Record<string, unknown>): string[] {
+  if (kind === "templates") {
+    return [str(i.slug), str(i.name), str(i.version), str(i.publisher ?? (i.isOfficial ? "flowamaz-io" : "")), str(i.category)];
+  }
+  const installed = i.installed ? "installed " + str(i.installedVersion) + " (" + str(i.installedPin) + ")" : "";
+  const deprecated = i.deprecatedAt ? "deprecated, leaves " + str(i.removalAt).slice(0, 10) : "";
+  return [str(i.id), str(i.name), str(i.version), str(i.publisher), [installed, deprecated].filter(Boolean).join("; ")];
+}
+
+const HEADERS: Record<Kind, string[]> = {
+  connectors: ["ID", "Name", "Version", "Publisher", "This workspace"],
+  templates: ["Slug", "Name", "Version", "Publisher", "Category"],
+};
+
+async function list(o: LibraryOpts, cmd: Command, query?: string): Promise<void> {
+  const opts = outputOpts(cmd);
+  const kind = kindOf(o);
+  const client = await createClient();
+  const resp = await client.get((await base(o)) + kind, { params: { q: query, category: o.category } });
+  if (opts.json || opts.yaml) {
+    printFormatted(unwrap(resp.data), opts);
+    return;
+  }
+  const rows = asArray(resp.data).map((i) => itemRow(kind, i));
+  if (rows.length === 0) {
+    success(query ? "Nothing in the Library matches \"" + query + "\". Try fewer or different words." : "The Library has no " + kind + " yet.");
+    return;
+  }
+  printTable(HEADERS[kind], rows);
+}
+
+async function show(o: LibraryOpts, id: string, cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
   const client = await createClient();
-  const resp = await client.get(
-    "/api/v1/library/" + kind + "/" + encodeURIComponent(id)
-  );
+  const resp = await client.get((await base(o)) + kindOf(o) + "/" + id.split("/").map(encodeURIComponent).join("/"));
   printFormatted(unwrap(resp.data), opts);
 }
 
-async function install(kind: string, id: string): Promise<void> {
+async function install(o: LibraryOpts, id: string): Promise<void> {
+  const kind = kindOf(o);
   const client = await createClient();
-  await client.post(
-    "/api/v1/library/" + kind + "/" + encodeURIComponent(id) + "/install"
-  );
-  success("Installed " + kind.replace(/s$/, "") + ": " + id);
+  const resp = await client.post((await base(o)) + kind + "/install", { id, name: o.name });
+  const data = unwrap(resp.data) as Record<string, unknown>;
+  if (kind === "templates") {
+    success("Installed template " + id + " as a new workflow: " + str(data?.workflowId));
+  } else {
+    success("Installed " + str(data?.name ?? id) + " " + str(data?.installedVersion) + " (" + str(data?.installedPin) + ")");
+  }
 }
 
-async function outdated(kind: string, cmd: Command): Promise<void> {
+async function outdated(o: LibraryOpts, cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
   const client = await createClient();
-  const resp = await client.get("/api/v1/library/" + kind + "/outdated");
+  const resp = await client.get((await base(o)) + kindOf(o) + "/outdated");
   if (opts.json || opts.yaml) {
-    printFormatted(resp.data, opts);
+    printFormatted(unwrap(resp.data), opts);
     return;
   }
   const rows = asArray(resp.data).map((i) => [
-    str(i.id ?? i.slug),
-    str(i.installedVersion ?? i.current),
-    str(i.latestVersion ?? i.latest),
+    str(i.id),
+    str(i.installedVersion) + " (" + str(i.installedPin) + ")",
+    str(i.latestVersion ?? "—"),
+    i.deprecatedAt ? "deprecated: " + str(i.deprecationNote) + " Leaves the Library " + str(i.removalAt).slice(0, 10) + "." : "new major: run fmz library update " + str(i.id),
   ]);
-  printTable(["ID", "Installed", "Latest"], rows);
+  if (rows.length === 0) {
+    success("Everything installed is on its latest major. Minor and patch releases are applied automatically.");
+    return;
+  }
+  printTable(["ID", "Installed", "Latest", "What to do"], rows);
 }
 
-async function update(kind: string, id: string): Promise<void> {
+async function update(o: LibraryOpts, id: string): Promise<void> {
+  if (kindOf(o) === "templates") {
+    throw new Error(
+      "Templates are copied into your workspace when you install them, so they don't update in place. Install the new version again: fmz library install " + id + " --template"
+    );
+  }
   const client = await createClient();
-  await client.post(
-    "/api/v1/library/" + kind + "/" + encodeURIComponent(id) + "/update"
-  );
-  success("Updated " + kind.replace(/s$/, "") + ": " + id);
+  const resp = await client.post((await base(o)) + "connectors/update", { id });
+  const data = unwrap(resp.data) as Record<string, unknown>;
+  success("Upgraded " + id + " from " + str(data?.fromVersion) + " to " + str(data?.toVersion) + " (" + str(data?.pin) + ")");
+}
+
+function libraryAction<A extends unknown[]>(fn: (...args: A) => Promise<void>) {
+  return async (...args: A): Promise<void> => {
+    try {
+      await fn(...args);
+    } catch (err) {
+      error(describeError(err));
+      process.exitCode = 1;
+    }
+  };
 }
 
 // ---- Authoring: init / validate / publish ----
@@ -93,19 +133,24 @@ function scaffoldInit(kind: "connector" | "template", name: string): void {
     throw new Error("Directory already exists: " + dir);
   }
   fs.mkdirSync(dir, { recursive: true });
+  // The layout the Library sync reads (FUNCTIONAL.md §23.3-23.4). The publisher is your organisation,
+  // set when you publish.
   const manifest =
     kind === "connector"
       ? {
-          kind: "connector",
-          name,
+          id: name,
           version: "0.1.0",
+          display_name: name,
+          category: "generic",
           description: "A Flowamaz connector.",
-          actions: [],
+          auth: { type: "api_key" },
+          network: { allowed_domains: ["api.example.com"] },
+          operations: [],
         }
       : {
-          kind: "template",
           name,
           version: "0.1.0",
+          category: "Custom",
           description: "A Flowamaz workflow template.",
           workflow: {},
         };
@@ -131,16 +176,54 @@ function readManifest(kind: "connector" | "template", file?: string): {
 async function publishAuthored(
   kind: "connector" | "template",
   file: string | undefined,
-  cmd: Command
+  cmd: Command,
+  workspace?: string
 ): Promise<void> {
   const opts = outputOpts(cmd);
   const { content } = readManifest(kind, file);
   const client = await createClient();
-  const resp = await client.post("/api/v1/library/" + kind + "s/publish", {
+  const resp = await client.post((await base({ workspace })) + kind + "s/publish", {
     manifest: content,
   });
-  printFormatted(unwrap(resp.data), opts);
-  success(kind + " published.");
+  const data = unwrap(resp.data) as Record<string, unknown>;
+  if (opts.json || opts.yaml) {
+    printFormatted(data, opts);
+    return;
+  }
+  success(str(data?.message ?? kind + " submitted."));
+  if (data?.pullRequestUrl) success("Pull request: " + str(data.pullRequestUrl));
+}
+
+const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const SEMVER = /^v?\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
+
+/** The checks the Library sync applies, as messages that say what to fix. Empty = valid. */
+export function manifestProblems(kind: "connector" | "template", m: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+  const version = m.version;
+  if (typeof version !== "string" || !SEMVER.test(version)) {
+    problems.push("version must be semver, e.g. 1.0.0 (quote it if YAML reads it as a number).");
+  }
+  if (kind === "connector") {
+    const id = m.id ?? m.name;
+    if (typeof id !== "string" || !SLUG.test(id)) {
+      problems.push("id must be lowercase letters, numbers and hyphens, e.g. my-connector.");
+    }
+    if (m.tier === "official" || m.official === true) {
+      problems.push("Only flowamaz-io publishes official connectors. Remove tier/official.");
+    }
+    const domains = (m.network as Record<string, unknown> | undefined)?.allowed_domains;
+    if (Array.isArray(domains) && domains.some((d) => typeof d === "string" && d.includes("*"))) {
+      problems.push("network.allowed_domains has a wildcard. List each domain; wildcards need a human review.");
+    }
+  } else {
+    if (typeof m.name !== "string" || m.name.trim().length === 0) problems.push("name is required.");
+    const wf = m.workflow;
+    if (!(typeof m.workflow_yaml === "string" && m.workflow_yaml.trim()) && !(wf && typeof wf === "object" && Object.keys(wf).length > 0)) {
+      problems.push("workflow is empty. Put the complete workflow YAML under `workflow:`.");
+    }
+  }
+  return problems;
 }
 
 function validateAuthored(kind: "connector" | "template", file?: string): number {
@@ -156,12 +239,9 @@ function validateAuthored(kind: "connector" | "template", file?: string): number
     error("Manifest must be a YAML object.");
     return 1;
   }
-  const obj = parsed as Record<string, unknown>;
-  const missing: string[] = [];
-  if (typeof obj.name !== "string") missing.push("name");
-  if (typeof obj.version !== "string") missing.push("version");
-  if (missing.length > 0) {
-    error("Missing required field(s): " + missing.join(", "));
+  const problems = manifestProblems(kind, parsed as Record<string, unknown>);
+  if (problems.length > 0) {
+    for (const p of problems) error(p);
     return 1;
   }
   success(kind + " manifest is valid.");
@@ -203,28 +283,15 @@ function registerAuthoringGroup(
   group
     .command("publish [file]")
     .description("Publish a " + kind + " to the Library")
-    .action(async (file: string | undefined, _o, cmd: Command) => {
+    .option("-w, --workspace <workspace>", "Workspace id or slug (default: fmz workspace use)")
+    .action(async (file: string | undefined, o: { workspace?: string }, cmd: Command) => {
       try {
-        await publishAuthored(kind, file, cmd);
+        await publishAuthored(kind, file, cmd, o.workspace);
       } catch (err) {
         error(describeError(err));
         process.exitCode = 1;
       }
     });
-}
-
-function wrapKind(
-  fn: (kind: string, cmd: Command) => Promise<void>,
-  kind: string
-) {
-  return async (_o: unknown, cmd: Command): Promise<void> => {
-    try {
-      await fn(kind, cmd);
-    } catch (err) {
-      error(describeError(err));
-      process.exitCode = 1;
-    }
-  };
 }
 
 export function registerLibraryCommands(program: Command): void {
@@ -232,89 +299,33 @@ export function registerLibraryCommands(program: Command): void {
     .command("library")
     .description("Connector & template Library");
 
-  lib
-    .command("list")
-    .description("List installed/available items")
-    .option("--connectors", "List connectors", false)
-    .option("--templates", "List templates", false)
-    .action(
-      async (
-        options: { connectors?: boolean; templates?: boolean },
-        cmd: Command
-      ) => {
-        const kind = options.templates ? "templates" : "connectors";
-        await wrapKind(list, kind)(undefined, cmd);
-      }
-    );
+  const scoped = (c: Command): Command =>
+    c
+      .option("-w, --workspace <workspace>", "Workspace id or slug (default: fmz workspace use)")
+      .option("--templates", "Templates instead of connectors", false)
+      .option("--template", "Same as --templates", false);
 
-  lib
-    .command("search <query>")
-    .description("Search the Library")
-    .option("--templates", "Search templates instead of connectors", false)
-    .action(
-      async (query: string, options: { templates?: boolean }, cmd: Command) => {
-        const kind = options.templates ? "templates" : "connectors";
-        try {
-          await search(kind, query, cmd);
-        } catch (err) {
-          error(describeError(err));
-          process.exitCode = 1;
-        }
-      }
-    );
+  scoped(lib.command("list").description("List Library connectors (or --templates)"))
+    .option("--type <type>", "connector or template")
+    .option("--category <category>", "Only this category, e.g. finance")
+    .action(libraryAction((o: LibraryOpts, cmd: Command) => list(o, cmd)));
 
-  lib
-    .command("show <id>")
-    .description("Show Library item details")
-    .option("--templates", "Treat id as a template", false)
-    .action(
-      async (id: string, options: { templates?: boolean }, cmd: Command) => {
-        const kind = options.templates ? "templates" : "connectors";
-        try {
-          await show(kind, id, cmd);
-        } catch (err) {
-          error(describeError(err));
-          process.exitCode = 1;
-        }
-      }
-    );
+  scoped(lib.command("search <query>").description("Search the Library"))
+    .option("--category <category>", "Only this category")
+    .action(libraryAction((query: string, o: LibraryOpts, cmd: Command) => list(o, cmd, query)));
 
-  lib
-    .command("install <id>")
-    .description("Install a Library item into the workspace")
-    .option("--templates", "Install a template", false)
-    .action(async (id: string, options: { templates?: boolean }) => {
-      const kind = options.templates ? "templates" : "connectors";
-      try {
-        await install(kind, id);
-      } catch (err) {
-        error(describeError(err));
-        process.exitCode = 1;
-      }
-    });
+  scoped(lib.command("show <id>").description("Show a connector (id or publisher/id) or template (slug)"))
+    .action(libraryAction((id: string, o: LibraryOpts, cmd: Command) => show(o, id, cmd)));
 
-  lib
-    .command("outdated")
-    .description("Show installed items with newer versions")
-    .option("--templates", "Check templates", false)
-    .action(async (options: { templates?: boolean }, cmd: Command) => {
-      const kind = options.templates ? "templates" : "connectors";
-      await wrapKind(outdated, kind)(undefined, cmd);
-    });
+  scoped(lib.command("install <id>").description("Install a connector, or a template as a new workflow"))
+    .option("--name <name>", "Name for the workflow a template creates")
+    .action(libraryAction((id: string, o: LibraryOpts) => install(o, id)));
 
-  lib
-    .command("update <id>")
-    .description("Update an installed item")
-    .option("--templates", "Update a template", false)
-    .action(async (id: string, options: { templates?: boolean }) => {
-      const kind = options.templates ? "templates" : "connectors";
-      try {
-        await update(kind, id);
-      } catch (err) {
-        error(describeError(err));
-        process.exitCode = 1;
-      }
-    });
+  scoped(lib.command("outdated").description("Installed connectors with a new major or a deprecation notice"))
+    .action(libraryAction((o: LibraryOpts, cmd: Command) => outdated(o, cmd)));
+
+  scoped(lib.command("update <id>").description("Upgrade an installed connector to its latest major (workspace admin)"))
+    .action(libraryAction((id: string, o: LibraryOpts) => update(o, id)));
 
   registerAuthoringGroup(lib, "connector");
   registerAuthoringGroup(lib, "template");

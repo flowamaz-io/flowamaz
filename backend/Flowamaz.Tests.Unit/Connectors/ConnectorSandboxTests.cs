@@ -80,6 +80,24 @@ public class ConnectorSandboxTests
         return factory.Object;
     }
 
+    private static readonly Guid Ws = Guid.NewGuid();
+
+    [Fact]
+    public async Task ExecuteAsync_ConnectorNotInstalledInThisWorkspace_IsNotFound()
+    {
+        // Installed in another workspace only: this one may not run it (workspace isolation, rule 1).
+        var db = NewDb();
+        var def = MakeDefinition("my-api", ValidManifest);
+        db.ConnectorDefinitions.Add(def);
+        db.WorkspaceConnectors.Add(new WorkspaceConnector { WorkspaceId = Guid.NewGuid(), ConnectorDefinitionId = def.Id });
+        await db.SaveChangesAsync();
+
+        var result = await NewSandbox(db).ExecuteAsync(Ws, "my-api", "get-user", JsonDocument.Parse("{}"), Guid.Empty);
+
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("Install the connector in your workspace");
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -89,6 +107,7 @@ public class ConnectorSandboxTests
         var db = NewDb();
         var def = MakeDefinition("my-api", ValidManifest);
         db.ConnectorDefinitions.Add(def);
+        db.WorkspaceConnectors.Add(new WorkspaceConnector { WorkspaceId = Ws, ConnectorDefinitionId = def.Id, InstalledVersion = def.Version });
         await db.SaveChangesAsync();
 
         var handler = new CapturingHttpMessageHandler(HttpStatusCode.OK, """{"id":"u1"}""");
@@ -100,7 +119,7 @@ public class ConnectorSandboxTests
         var input = JsonDocument.Parse("""{"userId":"abc"}""");
 
         // Act
-        var result = await sandbox.ExecuteAsync(Guid.NewGuid(), "my-api", "get-user", input, Guid.Empty);
+        var result = await sandbox.ExecuteAsync(Ws, "my-api", "get-user", input, Guid.Empty);
 
         // Assert
         result.Success.Should().BeTrue();
@@ -116,6 +135,7 @@ public class ConnectorSandboxTests
         var db = NewDb();
         var def = MakeDefinition("my-api", ValidManifest);
         db.ConnectorDefinitions.Add(def);
+        db.WorkspaceConnectors.Add(new WorkspaceConnector { WorkspaceId = Ws, ConnectorDefinitionId = def.Id, InstalledVersion = def.Version });
         await db.SaveChangesAsync();
 
         var httpCallMade = false;
@@ -130,7 +150,7 @@ public class ConnectorSandboxTests
         var input = JsonDocument.Parse("""{}""");
 
         // Act
-        var result = await sandbox.ExecuteAsync(Guid.NewGuid(), "my-api", "get-user", input, Guid.Empty);
+        var result = await sandbox.ExecuteAsync(Ws, "my-api", "get-user", input, Guid.Empty);
 
         // Assert
         result.Success.Should().BeFalse();
@@ -145,13 +165,14 @@ public class ConnectorSandboxTests
         var db = NewDb();
         var def = MakeDefinition("my-api", ValidManifest);
         db.ConnectorDefinitions.Add(def);
+        db.WorkspaceConnectors.Add(new WorkspaceConnector { WorkspaceId = Ws, ConnectorDefinitionId = def.Id, InstalledVersion = def.Version });
         await db.SaveChangesAsync();
 
         var sandbox = NewSandbox(db, httpFactory: FakeHttpFactory(HttpStatusCode.InternalServerError, "server error"));
         var input = JsonDocument.Parse("""{"userId":"abc"}""");
 
         // Act
-        var result = await sandbox.ExecuteAsync(Guid.NewGuid(), "my-api", "get-user", input, Guid.Empty);
+        var result = await sandbox.ExecuteAsync(Ws, "my-api", "get-user", input, Guid.Empty);
 
         // Assert
         result.Success.Should().BeFalse();
@@ -165,13 +186,14 @@ public class ConnectorSandboxTests
         var db = NewDb();
         var def = MakeDefinition("my-api", ValidManifest);
         db.ConnectorDefinitions.Add(def);
+        db.WorkspaceConnectors.Add(new WorkspaceConnector { WorkspaceId = Ws, ConnectorDefinitionId = def.Id, InstalledVersion = def.Version });
         await db.SaveChangesAsync();
 
         var sandbox = NewSandbox(db, httpFactory: FakeHttpFactory(HttpStatusCode.OK, """{"id":"user-123"}"""));
         var input = JsonDocument.Parse("""{"userId":"user-123"}""");
 
         // Act
-        var result = await sandbox.ExecuteAsync(Guid.NewGuid(), "my-api", "get-user", input, Guid.Empty);
+        var result = await sandbox.ExecuteAsync(Ws, "my-api", "get-user", input, Guid.Empty);
 
         // Assert
         result.Success.Should().BeTrue();
@@ -186,13 +208,14 @@ public class ConnectorSandboxTests
         var db = NewDb();
         var def = MakeDefinition("my-api", ValidManifest);
         db.ConnectorDefinitions.Add(def);
+        db.WorkspaceConnectors.Add(new WorkspaceConnector { WorkspaceId = Ws, ConnectorDefinitionId = def.Id, InstalledVersion = def.Version });
         await db.SaveChangesAsync();
 
         var sandbox = NewSandbox(db, httpFactory: ThrowingHttpFactory(new TaskCanceledException("timeout")));
         var input = JsonDocument.Parse("""{"userId":"abc"}""");
 
         // Act
-        var result = await sandbox.ExecuteAsync(Guid.NewGuid(), "my-api", "get-user", input, Guid.Empty);
+        var result = await sandbox.ExecuteAsync(Ws, "my-api", "get-user", input, Guid.Empty);
 
         // Assert
         result.Success.Should().BeFalse();

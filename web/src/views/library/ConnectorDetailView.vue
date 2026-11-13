@@ -7,6 +7,8 @@ import FmErrorState from '@/components/common/FmErrorState.vue';
 import CredentialSetupWizard from '@/components/library/CredentialSetupWizard.vue';
 import RateConnectorModal from '@/components/library/RateConnectorModal.vue';
 import { connectorService, formatInstalls } from '@/services/connector.service';
+import { libraryService, noticeDate, type LibraryConnectorDetail, type LibraryOutdatedItem } from '@/services/library.service';
+import { toUserFacingError } from '@/utils/error.util';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { fromNow } from '@/utils/date.util';
 import type { ConnectorDefinition, ConnectorReview } from '@/services/connector.service';
@@ -31,7 +33,8 @@ interface ConnectorManifest {
 
 const route = useRoute();
 const router = useRouter();
-const { currentWorkspaceId, loadWorkspaces } = useWorkspace();
+const ws = useWorkspace();
+const { currentWorkspaceId, loadWorkspaces } = ws;
 
 const connectorId = route.params.connectorId as string;
 const connector = ref<ConnectorDefinition | null>(null);
@@ -41,6 +44,18 @@ const wizardOpen = ref(false);
 const expandedOps = ref<Set<number>>(new Set());
 const reviews = ref<ConnectorReview[]>([]);
 const rateOpen = ref(false);
+// This workspace's view: installed version/pin, changelog, a newer major, deprecation.
+const library = ref<LibraryConnectorDetail | null>(null);
+const outdated = ref<LibraryOutdatedItem | null>(null);
+const upgrading = ref(false);
+const upgradeError = ref<string | null>(null);
+const upgradeDone = ref<string | null>(null);
+const isInstalled = computed(() => library.value?.connector.installed ?? connector.value?.isInstalled ?? false);
+// Upgrading to a new major is a workspace admin's call (FUNCTIONAL.md §23.8); the server checks too.
+const isAdmin = computed(() => {
+  const role = ws.current.value?.role;
+  return !role || role === 'Admin';
+});
 
 const manifest = computed<ConnectorManifest>(() => {
   if (!connector.value) return {};
@@ -93,6 +108,7 @@ async function load(): Promise<void> {
       connectorId,
     );
     reviews.value = await connectorService.getReviews(currentWorkspaceId.value, connectorId);
+    await loadLibrary();
   } catch (err: unknown) {
     error.value =
       err instanceof Error
@@ -100,6 +116,31 @@ async function load(): Promise<void> {
         : 'Failed to load connector details. Try again or contact support.';
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadLibrary(): Promise<void> {
+  if (!currentWorkspaceId.value) return;
+  const [detail, outdatedList] = await Promise.all([
+    libraryService.getConnector(currentWorkspaceId.value, connectorId),
+    libraryService.outdated(currentWorkspaceId.value),
+  ]);
+  library.value = detail;
+  outdated.value = outdatedList.find((o) => o.id === connectorId && o.publisher === detail.connector.publisher) ?? null;
+}
+
+async function upgrade(): Promise<void> {
+  if (!currentWorkspaceId.value || !outdated.value?.latestVersion) return;
+  upgrading.value = true;
+  upgradeError.value = null;
+  try {
+    const result = await libraryService.upgrade(currentWorkspaceId.value, connectorId);
+    upgradeDone.value = `Upgraded from ${result.fromVersion} to ${result.toVersion} (${result.pin}). Check the workflows that use it in a test run.`;
+    await loadLibrary();
+  } catch (e) {
+    upgradeError.value = toUserFacingError(e).message;
+  } finally {
+    upgrading.value = false;
   }
 }
 
@@ -112,6 +153,7 @@ function toggleOp(idx: number): void {
 }
 
 function onInstalled(_credentialId: string): void {
+  void loadLibrary();
   if (connector.value) {
     connector.value = { ...connector.value, isInstalled: true, installCount: connector.value.installCount + 1 };
   }
@@ -178,7 +220,15 @@ onMounted(load);
               >
                 Community
               </span>
-              <span class="text-xs text-slate-400">v{{ connector.version }}</span>
+              <span
+                class="text-xs text-slate-400"
+                data-test="connector-detail-version"
+              >v{{ library?.connector.installedVersion ?? library?.connector.version ?? connector.version }}</span>
+              <span
+                v-if="library?.connector.installedPin ?? library?.connector.pin"
+                class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-500"
+                :title="isInstalled ? 'This workspace runs this major; minor and patch releases apply automatically.' : 'New installs get this major.'"
+              >{{ library?.connector.installedPin ?? library?.connector.pin }}</span>
             </div>
             <p class="text-sm text-slate-500">
               by {{ connector.publisherId }}
@@ -194,7 +244,7 @@ onMounted(load);
             </p>
           </div>
           <button
-            v-if="!connector.isInstalled"
+            v-if="!isInstalled"
             class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors whitespace-nowrap"
             @click="wizardOpen = true"
           >
@@ -208,6 +258,91 @@ onMounted(load);
           </span>
         </div>
       </div>
+
+      <!-- Deprecation notice -->
+      <div
+        v-if="library?.connector.deprecatedAt"
+        class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        role="status"
+        data-test="connector-deprecation"
+      >
+        <p class="font-medium">
+          This connector is deprecated and leaves the Library on {{ noticeDate(library.connector.removalAt) }}.
+        </p>
+        <p class="mt-1">
+          {{ library.connector.deprecationNote }}
+          {{ isInstalled ? 'It keeps working here; move the workflows that use it to another connector before then.' : 'Choose another connector for new workflows.' }}
+        </p>
+      </div>
+
+      <!-- New major available -->
+      <div
+        v-if="outdated?.latestVersion"
+        class="rounded-xl border border-indigo-200 bg-indigo-50 p-5"
+        data-test="connector-upgrade"
+      >
+        <h2 class="text-sm font-semibold text-indigo-900">
+          Version {{ outdated.latestVersion }} is available
+        </h2>
+        <p class="mt-1 text-sm text-indigo-900">
+          This workspace runs {{ outdated.installedVersion }} ({{ outdated.installedPin }}). A new major release can change how
+          actions behave, so it isn't applied automatically. Review what changed, then upgrade and run your workflows in test mode.
+        </p>
+        <ul
+          v-if="outdated.changes.length > 0"
+          class="mt-3 space-y-2"
+        >
+          <li
+            v-for="c in outdated.changes"
+            :key="c.version"
+            class="text-sm text-slate-700"
+          >
+            <span class="font-mono font-medium">{{ c.version }}</span>
+            <span
+              v-if="c.releasedOn"
+              class="text-slate-500"
+            > · {{ c.releasedOn }}</span>
+            <p class="whitespace-pre-line">
+              {{ c.notes || 'No release notes.' }}
+            </p>
+          </li>
+        </ul>
+        <p
+          v-else
+          class="mt-2 text-sm text-slate-600"
+        >
+          The publisher didn't add release notes. Check the connector's README before upgrading.
+        </p>
+        <p
+          v-if="upgradeError"
+          class="mt-3 text-sm text-red-700"
+          role="alert"
+        >
+          {{ upgradeError }}
+        </p>
+        <button
+          v-if="isAdmin"
+          type="button"
+          class="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+          :disabled="upgrading"
+          @click="upgrade"
+        >
+          {{ upgrading ? 'Upgrading…' : `Upgrade to ${outdated.latestVersion}` }}
+        </button>
+        <p
+          v-else
+          class="mt-3 text-sm text-slate-600"
+        >
+          Upgrading is up to a workspace admin. Ask one to upgrade it from this page.
+        </p>
+      </div>
+      <p
+        v-if="upgradeDone"
+        class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
+        role="status"
+      >
+        {{ upgradeDone }}
+      </p>
 
       <!-- Auth section -->
       <div class="rounded-xl border border-slate-200 bg-white p-5">
@@ -304,6 +439,32 @@ onMounted(load);
           </div>
         </div>
       </div>
+      <!-- Changelog -->
+      <div
+        v-if="library && library.changelog.length > 0"
+        class="rounded-xl border border-slate-200 bg-white p-5"
+      >
+        <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-900">
+          Release notes
+        </h2>
+        <ul class="space-y-3">
+          <li
+            v-for="c in library.changelog"
+            :key="c.version"
+            class="text-sm text-slate-700"
+          >
+            <span class="font-mono font-medium">{{ c.version }}</span>
+            <span
+              v-if="c.releasedOn"
+              class="text-slate-500"
+            > · {{ c.releasedOn }}</span>
+            <p class="whitespace-pre-line text-slate-600">
+              {{ c.notes || 'No release notes.' }}
+            </p>
+          </li>
+        </ul>
+      </div>
+
       <!-- Reviews -->
       <div class="rounded-xl border border-slate-200 bg-white">
         <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4">
@@ -311,7 +472,7 @@ onMounted(load);
             Reviews ({{ connector.ratingCount }})
           </h2>
           <button
-            v-if="connector.isInstalled"
+            v-if="isInstalled"
             class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
             @click="rateOpen = true"
           >
@@ -323,7 +484,7 @@ onMounted(load);
           class="px-5 py-6 text-center text-sm text-slate-400"
         >
           No reviews yet.
-          <template v-if="connector.isInstalled">
+          <template v-if="isInstalled">
             Be the first to review this connector.
           </template>
           <template v-else>

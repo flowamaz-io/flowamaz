@@ -1442,6 +1442,13 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("category");
 
+                    b.Property<string>("ChangelogJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("changelog_json")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<string>("ConnectorId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1459,6 +1466,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
+
+                    b.Property<DateTime?>("DeprecatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deprecated_at");
+
+                    b.Property<string>("DeprecationNote")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("deprecation_note");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
@@ -1482,6 +1498,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_installed");
 
+                    b.Property<bool>("IsLatestMajor")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_latest_major");
+
                     b.Property<bool>("IsOfficial")
                         .HasColumnType("boolean")
                         .HasColumnName("is_official");
@@ -1489,6 +1509,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("LastUpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_updated_at");
+
+                    b.Property<int>("MajorVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("major_version");
 
                     b.Property<string>("ManifestJson")
                         .IsRequired()
@@ -1551,6 +1575,9 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.HasIndex("Tier")
                         .HasDatabaseName("ix_connector_definitions_tier");
 
+                    b.HasIndex("PublisherId", "ConnectorId", "MajorVersion")
+                        .HasDatabaseName("ix_connector_definitions_publisher_id_connector_id_major_versi~");
+
                     b.ToTable("connector_definitions");
 
                     b.HasData(
@@ -1559,6 +1586,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000001"),
                             AverageRating = 0m,
                             Category = "generic",
+                            ChangelogJson = "[]",
                             ConnectorId = "http-rest",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "HTTP/REST",
@@ -1566,8 +1594,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"http-rest\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"optional\",\"credential_types\":[\"BearerToken\",\"ApiKey\",\"BasicAuth\"]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":true},\"operations\":[{\"id\":\"GET\",\"name\":\"HTTP GET\",\"description\":\"Send an HTTP GET request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"POST\",\"name\":\"HTTP POST\",\"description\":\"Send an HTTP POST request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"PUT\",\"name\":\"HTTP PUT\",\"description\":\"Send an HTTP PUT request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"PATCH\",\"name\":\"HTTP PATCH\",\"description\":\"Send an HTTP PATCH request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"DELETE\",\"name\":\"HTTP DELETE\",\"description\":\"Send an HTTP DELETE request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}},{\"id\":\"HEAD\",\"name\":\"HTTP HEAD\",\"description\":\"Send an HTTP HEAD request\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Full https URL to call\"},\"headers\":{\"type\":\"object\",\"description\":\"Extra request headers\"},\"body\":{\"type\":\"string\",\"description\":\"Request body (JSON text)\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout in seconds (default 30, max 120)\"},\"api_key_header\":{\"type\":\"string\",\"description\":\"Header for an ApiKey credential (default X-API-Key)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1581,6 +1611,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000002"),
                             AverageRating = 0m,
                             Category = "database",
+                            ChangelogJson = "[]",
                             ConnectorId = "postgresql",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "PostgreSQL",
@@ -1588,8 +1619,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"postgresql\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"connection-string\",\"credential_types\":[\"ConnectionString\"]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"query\",\"name\":\"Run query\",\"description\":\"Run a SELECT and return rows\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"sql\"],\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL with @named parameters \\u2014 never concatenate values into the SQL\"},\"parameters\":{\"type\":\"object\",\"description\":\"Parameter values by name\"}}}},{\"id\":\"execute\",\"name\":\"Execute statement\",\"description\":\"Run INSERT/UPDATE/DELETE and return affected rows\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"sql\"],\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL with @named parameters \\u2014 never concatenate values into the SQL\"},\"parameters\":{\"type\":\"object\",\"description\":\"Parameter values by name\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1603,6 +1636,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000003"),
                             AverageRating = 0m,
                             Category = "database",
+                            ChangelogJson = "[]",
                             ConnectorId = "mysql",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "MySQL",
@@ -1610,8 +1644,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"mysql\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"connection-string\",\"credential_types\":[\"ConnectionString\"]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"query\",\"name\":\"Run query\",\"description\":\"Run a SELECT and return rows\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"sql\"],\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL with @named parameters \\u2014 never concatenate values into the SQL\"},\"parameters\":{\"type\":\"object\",\"description\":\"Parameter values by name\"}}}},{\"id\":\"execute\",\"name\":\"Execute statement\",\"description\":\"Run INSERT/UPDATE/DELETE and return affected rows\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"sql\"],\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL with @named parameters \\u2014 never concatenate values into the SQL\"},\"parameters\":{\"type\":\"object\",\"description\":\"Parameter values by name\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1625,6 +1661,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000004"),
                             AverageRating = 0m,
                             Category = "messaging",
+                            ChangelogJson = "[]",
                             ConnectorId = "slack",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Slack",
@@ -1632,8 +1669,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"slack\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"oauth2-auth-code\",\"credential_types\":[\"OAuth2AuthCode\",\"BearerToken\"]},\"triggers\":[],\"network\":{\"allowed_domains\":[\"slack.com\"],\"sandboxed\":true},\"operations\":[{\"id\":\"send-message\",\"name\":\"Send message\",\"description\":\"Post a message to a channel\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"channel\",\"text\"],\"properties\":{\"channel\":{\"type\":\"string\",\"description\":\"Channel name or id, e.g. #approvals\"},\"text\":{\"type\":\"string\",\"description\":\"Message text\"},\"blocks\":{\"type\":\"array\",\"description\":\"Optional Block Kit blocks\"}}}},{\"id\":\"send-dm\",\"name\":\"Send direct message\",\"description\":\"Send a direct message to a user\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"user_id\",\"text\"],\"properties\":{\"user_id\":{\"type\":\"string\",\"description\":\"Slack user id, e.g. U0123\"},\"text\":{\"type\":\"string\",\"description\":\"Message text\"}}}},{\"id\":\"post-approval-message\",\"name\":\"Post approval message\",\"description\":\"Approval card for a human gate\",\"requires_credential\":true,\"internal\":true,\"input_schema\":{\"type\":\"object\",\"required\":[\"channel\",\"gate_decision_id\"],\"properties\":{\"channel\":{\"type\":\"string\",\"description\":\"Channel\"},\"gate_decision_id\":{\"type\":\"string\",\"description\":\"Gate id\"},\"workflow_name\":{\"type\":\"string\",\"description\":\"Workflow\"},\"gate_summary\":{\"type\":\"string\",\"description\":\"Summary\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1647,6 +1686,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000005"),
                             AverageRating = 0m,
                             Category = "messaging",
+                            ChangelogJson = "[]",
                             ConnectorId = "microsoft-teams",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Microsoft Teams",
@@ -1654,8 +1694,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"microsoft-teams\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"oauth2-auth-code\",\"credential_types\":[\"OAuth2AuthCode\"]},\"triggers\":[],\"network\":{\"allowed_domains\":[\"graph.microsoft.com\",\"webhook.office.com\",\"logic.azure.com\",\"powerplatform.com\"],\"sandboxed\":true},\"operations\":[{\"id\":\"send-message\",\"name\":\"Send channel message\",\"description\":\"Post a message to a Teams channel (Microsoft Graph)\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"team_id\",\"channel_id\",\"text\"],\"properties\":{\"team_id\":{\"type\":\"string\",\"description\":\"Team id\"},\"channel_id\":{\"type\":\"string\",\"description\":\"Channel id\"},\"text\":{\"type\":\"string\",\"description\":\"Message text (HTML allowed)\"}}}},{\"id\":\"send-webhook-message\",\"name\":\"Send via incoming webhook\",\"description\":\"Post to a channel through an incoming-webhook URL\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"webhook_url\",\"text\"],\"properties\":{\"webhook_url\":{\"type\":\"string\",\"description\":\"Incoming webhook URL\"},\"text\":{\"type\":\"string\",\"description\":\"Message text\"}}}},{\"id\":\"post-adaptive-card\",\"name\":\"Post approval card\",\"description\":\"Adaptive Card for a human gate\",\"requires_credential\":false,\"internal\":true,\"input_schema\":{\"type\":\"object\",\"required\":[\"webhook_url\",\"gate_id\"],\"properties\":{\"webhook_url\":{\"type\":\"string\",\"description\":\"Webhook\"},\"gate_id\":{\"type\":\"string\",\"description\":\"Gate id\"},\"gate_summary\":{\"type\":\"string\",\"description\":\"Summary\"},\"platform_url\":{\"type\":\"string\",\"description\":\"Platform URL\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1669,6 +1711,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000006"),
                             AverageRating = 0m,
                             Category = "messaging",
+                            ChangelogJson = "[]",
                             ConnectorId = "email-smtp",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Email (SMTP/Resend)",
@@ -1676,8 +1719,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"email-smtp\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"platform\",\"credential_types\":[]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"send-email\",\"name\":\"Send email\",\"description\":\"Send a transactional email from the platform sender\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"to\",\"subject\",\"body\"],\"properties\":{\"to\":{\"type\":\"string\",\"description\":\"Recipient address\"},\"subject\":{\"type\":\"string\",\"description\":\"Subject\"},\"body\":{\"type\":\"string\",\"description\":\"Body\"},\"is_html\":{\"type\":\"boolean\",\"description\":\"Body is HTML (default false)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1691,6 +1736,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000007"),
                             AverageRating = 0m,
                             Category = "generic",
+                            ChangelogJson = "[]",
                             ConnectorId = "webhook-emit",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Webhook Emit",
@@ -1698,8 +1744,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"webhook-emit\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"hmac\",\"credential_types\":[\"HmacSecret\"]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":true},\"operations\":[{\"id\":\"send-webhook\",\"name\":\"Send webhook\",\"description\":\"POST a JSON payload, HMAC-signed when a credential is set\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"url\",\"payload\"],\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"Destination https URL\"},\"payload\":{\"type\":\"object\",\"description\":\"JSON payload\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1713,6 +1761,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000008"),
                             AverageRating = 0m,
                             Category = "generic",
+                            ChangelogJson = "[]",
                             ConnectorId = "webhook-receive",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Webhook Receive",
@@ -1720,8 +1769,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"webhook-receive\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"hmac\",\"credential_types\":[\"HmacSecret\"]},\"triggers\":[\"webhook\"],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1735,6 +1786,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000009"),
                             AverageRating = 0m,
                             Category = "generic",
+                            ChangelogJson = "[]",
                             ConnectorId = "file-system",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "File System",
@@ -1742,8 +1794,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"file-system\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"none\",\"credential_types\":[]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"read-file\",\"name\":\"Read file\",\"description\":\"Read a text file from the workspace file area\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"path\"],\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Path relative to the workspace file area\"}}}},{\"id\":\"write-file\",\"name\":\"Write file\",\"description\":\"Write a text file to the workspace file area\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"path\",\"content\"],\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Path relative to the workspace file area\"},\"content\":{\"type\":\"string\",\"description\":\"Text content\"},\"overwrite\":{\"type\":\"boolean\",\"description\":\"Replace an existing file (default false)\"}}}},{\"id\":\"list-files\",\"name\":\"List files\",\"description\":\"List files in a folder of the workspace file area\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[],\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"Folder (default: root)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1757,6 +1811,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000010"),
                             AverageRating = 0m,
                             Category = "generic",
+                            ChangelogJson = "[]",
                             ConnectorId = "schedule-cron",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Schedule/Cron",
@@ -1764,8 +1819,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"schedule-cron\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"none\",\"credential_types\":[]},\"triggers\":[\"schedule\"],\"network\":{\"allowed_domains\":null,\"sandboxed\":false},\"operations\":[{\"id\":\"validate-cron\",\"name\":\"Validate cron\",\"description\":\"Check a cron expression and return its next run times\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"expression\"],\"properties\":{\"expression\":{\"type\":\"string\",\"description\":\"Cron expression (5 or 6 fields)\"},\"timezone\":{\"type\":\"string\",\"description\":\"IANA time zone (default UTC)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1779,6 +1836,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000011"),
                             AverageRating = 0m,
                             Category = "generic",
+                            ChangelogJson = "[]",
                             ConnectorId = "script-shell",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Script/Shell",
@@ -1786,8 +1844,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"script-shell\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"none\",\"credential_types\":[]},\"triggers\":[],\"network\":{\"allowed_domains\":null,\"sandboxed\":true},\"operations\":[{\"id\":\"run-script\",\"name\":\"Run script\",\"description\":\"Run a bash or python script (self-hosted only; disabled on Cloud)\",\"requires_credential\":false,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"interpreter\",\"script\"],\"properties\":{\"interpreter\":{\"type\":\"string\",\"description\":\"bash or python3\"},\"script\":{\"type\":\"string\",\"description\":\"Script text (passed on stdin, never through a shell string)\"},\"args\":{\"type\":\"array\",\"description\":\"Arguments\"},\"timeout_seconds\":{\"type\":\"integer\",\"description\":\"Timeout (default 30, max 300)\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1801,6 +1861,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000012"),
                             AverageRating = 0m,
                             Category = "devops",
+                            ChangelogJson = "[]",
                             ConnectorId = "github",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "GitHub",
@@ -1808,8 +1869,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"github\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"oauth2-auth-code\",\"credential_types\":[\"OAuth2AuthCode\",\"BearerToken\"]},\"triggers\":[],\"network\":{\"allowed_domains\":[\"api.github.com\"],\"sandboxed\":true},\"operations\":[{\"id\":\"create-issue\",\"name\":\"Create issue\",\"description\":\"Open an issue\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"owner\",\"repo\",\"title\"],\"properties\":{\"owner\":{\"type\":\"string\",\"description\":\"Owner\"},\"repo\":{\"type\":\"string\",\"description\":\"Repository\"},\"title\":{\"type\":\"string\",\"description\":\"Title\"},\"body\":{\"type\":\"string\",\"description\":\"Body\"},\"labels\":{\"type\":\"array\",\"description\":\"Labels\"}}}},{\"id\":\"get-issue\",\"name\":\"Get issue\",\"description\":\"Fetch an issue\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"owner\",\"repo\",\"issue_number\"],\"properties\":{\"owner\":{\"type\":\"string\",\"description\":\"Owner\"},\"repo\":{\"type\":\"string\",\"description\":\"Repository\"},\"issue_number\":{\"type\":\"integer\",\"description\":\"Issue number\"}}}},{\"id\":\"create-pr\",\"name\":\"Create pull request\",\"description\":\"Open a pull request\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"owner\",\"repo\",\"title\",\"head\",\"base\"],\"properties\":{\"owner\":{\"type\":\"string\",\"description\":\"Owner\"},\"repo\":{\"type\":\"string\",\"description\":\"Repository\"},\"title\":{\"type\":\"string\",\"description\":\"Title\"},\"head\":{\"type\":\"string\",\"description\":\"Source branch\"},\"base\":{\"type\":\"string\",\"description\":\"Target branch\"},\"body\":{\"type\":\"string\",\"description\":\"Description\"}}}},{\"id\":\"add-comment\",\"name\":\"Add comment\",\"description\":\"Comment on an issue or pull request\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"owner\",\"repo\",\"issue_number\",\"body\"],\"properties\":{\"owner\":{\"type\":\"string\",\"description\":\"Owner\"},\"repo\":{\"type\":\"string\",\"description\":\"Repository\"},\"issue_number\":{\"type\":\"integer\",\"description\":\"Issue or PR number\"},\"body\":{\"type\":\"string\",\"description\":\"Comment\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1823,6 +1886,7 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             Id = new Guid("00000000-0000-0000-0001-000000000013"),
                             AverageRating = 0m,
                             Category = "productivity",
+                            ChangelogJson = "[]",
                             ConnectorId = "microsoft-365",
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Microsoft 365",
@@ -1830,8 +1894,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                             IsDeleted = false,
                             IsEnabled = true,
                             IsInstalled = false,
+                            IsLatestMajor = true,
                             IsOfficial = true,
                             LastUpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MajorVersion = 1,
                             ManifestJson = "{\"id\":\"microsoft-365\",\"version\":\"1.1.0\",\"auth\":{\"type\":\"oauth2-auth-code\",\"credential_types\":[\"OAuth2AuthCode\"]},\"triggers\":[],\"network\":{\"allowed_domains\":[\"graph.microsoft.com\"],\"sandboxed\":true},\"operations\":[{\"id\":\"send-mail\",\"name\":\"Send email\",\"description\":\"Send email from the connected mailbox (Microsoft Graph)\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"to\",\"subject\",\"body\"],\"properties\":{\"to\":{\"type\":\"string\",\"description\":\"Recipients, comma-separated\"},\"subject\":{\"type\":\"string\",\"description\":\"Subject\"},\"body\":{\"type\":\"string\",\"description\":\"Body\"},\"is_html\":{\"type\":\"boolean\",\"description\":\"Body is HTML (default false)\"}}}},{\"id\":\"create-calendar-event\",\"name\":\"Create calendar event\",\"description\":\"Create an event in the connected calendar\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"subject\",\"start\",\"end\"],\"properties\":{\"subject\":{\"type\":\"string\",\"description\":\"Title\"},\"start\":{\"type\":\"string\",\"description\":\"Start, ISO 8601\"},\"end\":{\"type\":\"string\",\"description\":\"End, ISO 8601\"},\"timezone\":{\"type\":\"string\",\"description\":\"IANA or Windows time zone (default UTC)\"},\"attendees\":{\"type\":\"string\",\"description\":\"Attendee emails, comma-separated\"},\"body\":{\"type\":\"string\",\"description\":\"Description\"}}}},{\"id\":\"upload-file\",\"name\":\"Upload file to OneDrive\",\"description\":\"Create or replace a text file in the connected OneDrive\",\"requires_credential\":true,\"internal\":false,\"input_schema\":{\"type\":\"object\",\"required\":[\"path\",\"content\"],\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"OneDrive path, e.g. Reports/summary.txt\"},\"content\":{\"type\":\"string\",\"description\":\"Text content\"}}}}]}",
                             PublisherId = "flowamaz-io",
                             RatingCount = 0,
@@ -1876,6 +1942,14 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("InstalledBy")
                         .HasColumnType("uuid")
                         .HasColumnName("installed_by");
+
+                    b.Property<string>("InstalledVersion")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("")
+                        .HasColumnName("installed_version");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
@@ -2414,6 +2488,77 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.ToTable("connector_submissions");
                 });
 
+            modelBuilder.Entity("Flowamaz.Core.Entities.Library.LibrarySyncState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("AlertedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("alerted_at");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer")
+                        .HasColumnName("consecutive_failures");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_attempt_at");
+
+                    b.Property<string>("LastCommitSha")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("last_commit_sha");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTime?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_success_at");
+
+                    b.Property<string>("Repository")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("repository");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_library_sync_states");
+
+                    b.HasIndex("Source")
+                        .IsUnique()
+                        .HasDatabaseName("ix_library_sync_states_source");
+
+                    b.ToTable("library_sync_states");
+                });
+
             modelBuilder.Entity("Flowamaz.Core.Entities.Library.WorkflowTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2450,6 +2595,15 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
+
+                    b.Property<DateTime?>("DeprecatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deprecated_at");
+
+                    b.Property<string>("DeprecationNote")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("deprecation_note");
 
                     b.Property<string>("Description")
                         .IsRequired()
@@ -2501,6 +2655,11 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasDefaultValue("free")
                         .HasColumnName("pricing_model");
+
+                    b.Property<string>("PublisherId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("publisher_id");
 
                     b.Property<string>("ReviewStatus")
                         .IsRequired()

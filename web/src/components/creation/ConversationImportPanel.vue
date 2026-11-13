@@ -127,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import ConversationReview from './ConversationReview.vue';
 import {
@@ -166,6 +166,10 @@ const extraction = ref<ConversationExtraction | null>(null);
 const warnings = ref<string[]>([]);
 
 const hint = computed(() => HINTS[sourceType.value]);
+// An error is about the text that was sent; once it changes, the message no longer applies.
+watch([text, sourceType], () => {
+  if (stage.value === 'input') error.value = null;
+});
 const problems = computed(() => (extraction.value ? conversationProblems(extraction.value) : []));
 
 async function extract(): Promise<void> {

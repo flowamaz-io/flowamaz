@@ -8,6 +8,7 @@ import ConnectorCard from '@/components/library/ConnectorCard.vue';
 import CredentialSetupWizard from '@/components/library/CredentialSetupWizard.vue';
 import TemplateGalleryView from '@/views/library/TemplateGalleryView.vue';
 import { connectorService } from '@/services/connector.service';
+import { libraryService, type LibraryConnectorItem, type LibraryOutdatedItem } from '@/services/library.service';
 import { useWorkspace } from '@/composables/useWorkspace';
 import type { ConnectorDefinition } from '@/services/connector.service';
 
@@ -27,6 +28,12 @@ const activeCategory = ref<Category>('all');
 const sortKey = ref<SortKey>('installed');
 
 const connectors = ref<ConnectorDefinition[]>([]);
+// Per-workspace state (installed version, pin, deprecation, upgrades), keyed publisher/id.
+const libraryItems = ref<Map<string, LibraryConnectorItem>>(new Map());
+const outdatedItems = ref<Map<string, LibraryOutdatedItem>>(new Map());
+const libKey = (publisher: string, id: string): string => `${publisher}/${id}`;
+const libraryOf = (c: ConnectorDefinition): LibraryConnectorItem | undefined => libraryItems.value.get(libKey(c.publisherId, c.connectorId));
+const outdatedOf = (c: ConnectorDefinition): LibraryOutdatedItem | undefined => outdatedItems.value.get(libKey(c.publisherId, c.connectorId));
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -72,7 +79,15 @@ async function load(): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    connectors.value = await connectorService.getAllConnectors(currentWorkspaceId.value);
+    const [all, items, outdated] = await Promise.all([
+      connectorService.getAllConnectors(currentWorkspaceId.value),
+      libraryService.listConnectors(currentWorkspaceId.value),
+      libraryService.outdated(currentWorkspaceId.value),
+    ]);
+    libraryItems.value = new Map(items.map((i) => [libKey(i.publisher, i.id), i]));
+    outdatedItems.value = new Map(outdated.map((i) => [libKey(i.publisher, i.id), i]));
+    // A connector that left the Library (and isn't installed here) isn't offered.
+    connectors.value = all.filter((c) => libraryItems.value.has(libKey(c.publisherId, c.connectorId)));
   } catch (err: unknown) {
     error.value =
       err instanceof Error
@@ -96,6 +111,9 @@ function onInstalled(_credentialId: string): void {
     const idx = connectors.value.findIndex((c) => c.connectorId === installingId.value);
     if (idx !== -1) {
       connectors.value[idx] = { ...connectors.value[idx], isInstalled: true };
+      const c = connectors.value[idx];
+      const item = libraryOf(c);
+      if (item) libraryItems.value.set(libKey(c.publisherId, c.connectorId), { ...item, installed: true, installedVersion: item.version, installedPin: item.pin });
     }
   }
   installingId.value = null;
@@ -256,7 +274,9 @@ onMounted(load);
           v-for="c in filteredConnectors"
           :key="c.connectorId"
           :connector="c"
-          :is-installed="c.isInstalled"
+          :is-installed="libraryOf(c)?.installed ?? false"
+          :library="libraryOf(c)"
+          :outdated="outdatedOf(c)"
           @install="openWizard"
         />
       </div>

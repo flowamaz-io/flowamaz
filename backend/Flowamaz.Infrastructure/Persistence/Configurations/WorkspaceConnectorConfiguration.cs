@@ -12,6 +12,7 @@ public sealed class WorkspaceConnectorConfiguration : IEntityTypeConfiguration<W
 
         builder.HasIndex(wc => new { wc.WorkspaceId, wc.ConnectorDefinitionId }).IsUnique();
         builder.HasIndex(wc => wc.WorkspaceId);
+        builder.Property(wc => wc.InstalledVersion).HasMaxLength(64).HasDefaultValue("").IsRequired();
 
         builder.HasOne(wc => wc.ConnectorDefinition)
             .WithMany()

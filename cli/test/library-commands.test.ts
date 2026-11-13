@@ -17,3 +17,27 @@ describe("library authoring commands", () => {
     }
   });
 });
+
+import { kindOf, manifestProblems } from "../src/commands/library";
+
+describe("library manifests and options", () => {
+  it("validates connector manifests with the Library sync's rules", () => {
+    expect(manifestProblems("connector", { id: "my-connector", version: "1.0.0" })).toEqual([]);
+    expect(manifestProblems("connector", { id: "My Connector", version: "1.0" })).toHaveLength(2);
+    expect(manifestProblems("connector", { id: "x", version: "1.0.0", tier: "official" })[0]).toMatch(/Only flowamaz-io/);
+    expect(manifestProblems("connector", { id: "x", version: "1.0.0", network: { allowed_domains: ["*.acme.test"] } })[0]).toMatch(/wildcard/);
+  });
+
+  it("needs a workflow in a template manifest", () => {
+    expect(manifestProblems("template", { name: "T", version: "0.1.0", workflow: {} })[0]).toMatch(/workflow is empty/);
+    expect(manifestProblems("template", { name: "T", version: "0.1.0", workflow: { apiVersion: "flowamaz/v1" } })).toEqual([]);
+  });
+
+  it("reads --templates, --template and --type template as templates", () => {
+    expect(kindOf({})).toBe("connectors");
+    expect(kindOf({ templates: true })).toBe("templates");
+    expect(kindOf({ template: true })).toBe("templates");
+    expect(kindOf({ type: "template" })).toBe("templates");
+    expect(kindOf({ type: "connector" })).toBe("connectors");
+  });
+});

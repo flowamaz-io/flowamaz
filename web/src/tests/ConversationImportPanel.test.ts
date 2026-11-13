@@ -108,3 +108,16 @@ describe('ConversationImportPanel', () => {
     expect((createWorkflow.mock.calls[0][1] as { name: string }).name).toBe('My approvals');
   });
 });
+
+describe('ConversationImportPanel errors', () => {
+  it('clears an extraction error once the text or source changes', async () => {
+    previewConversation.mockReset().mockRejectedValue(new Error("This conversation doesn't describe a process"));
+    createWorkflow.mockReset();
+    const wrapper = await extract();
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+
+    await wrapper.get('textarea').setValue('Anita: new thread');
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  });
+});

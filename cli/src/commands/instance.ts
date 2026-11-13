@@ -3,7 +3,7 @@ import { AxiosInstance } from "axios";
 import { createClient } from "../lib/api-client";
 import { outputOpts } from "../lib/opts";
 import { printFormatted, info, success, error } from "../lib/output";
-import { describeError, requireWorkspace, str, unwrap } from "../lib/util";
+import { describeError, requireWorkspaceId, str, unwrap } from "../lib/util";
 
 const TERMINAL_STATES = new Set([
   "completed",
@@ -47,7 +47,7 @@ async function trigger(
   wait?: boolean
 ): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   const payload = parsePayload(payloadRaw);
   const resp = await client.post(
@@ -78,14 +78,14 @@ async function trigger(
 
 async function status(id: string, cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   printFormatted(await getStatus(client, ws, id), opts);
 }
 
 async function logs(id: string, cmd: Command, follow: boolean): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   const path =
     "/api/v1/workspaces/" + encodeURIComponent(ws) + "/instances/" + encodeURIComponent(id) + "/events";
@@ -116,7 +116,7 @@ async function logs(id: string, cmd: Command, follow: boolean): Promise<void> {
 }
 
 async function cancel(id: string): Promise<void> {
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   await client.post(
     "/api/v1/workspaces/" + encodeURIComponent(ws) + "/instances/" + encodeURIComponent(id) + "/cancel"
@@ -126,7 +126,7 @@ async function cancel(id: string): Promise<void> {
 
 async function retry(id: string, cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   const resp = await client.post(
     "/api/v1/workspaces/" + encodeURIComponent(ws) + "/instances/" + encodeURIComponent(id) + "/retry"

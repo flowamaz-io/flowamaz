@@ -10,7 +10,8 @@ namespace Flowamaz.Infrastructure.Services;
 
 /// <summary>
 /// Opens a PR against flowamaz-io/connectors via the GitHub REST API: branch off the default
-/// branch, commit the submitted manifest under <c>community/{name}/manifest.yaml</c>, open the PR.
+/// branch, commit the submitted manifest under <c>connectors/{publisher}/{id}/connector.yaml</c> (the layout the
+/// Library sync reads), open the PR.
 /// Requires the <c>GITHUB_CONNECTORS_TOKEN</c> credential (GitHub App installation token).
 /// </summary>
 public sealed class ConnectorSubmissionPrService : IConnectorSubmissionPrService
@@ -32,16 +33,17 @@ public sealed class ConnectorSubmissionPrService : IConnectorSubmissionPrService
     }
 
     public async Task<string> CreatePullRequestAsync(
-        string connectorName, string manifestYaml, string submitterOrgId, CancellationToken cancellationToken = default)
+        string connectorName, string connectorId, string publisherId, string manifestYaml, string submitterOrgId,
+        CancellationToken cancellationToken = default)
     {
         var token = _configuration["GITHUB_CONNECTORS_TOKEN"]
             ?? throw new InvalidOperationException(
                 "Community connector submissions require GITHUB_CONNECTORS_TOKEN to be configured. " +
                 "Ask a platform admin to set the GitHub App installation token.");
 
-        var slug = Slugify(connectorName);
-        var branch = $"submission/{slug}-{submitterOrgId[..Math.Min(8, submitterOrgId.Length)]}";
-        var path = $"community/{slug}/manifest.yaml";
+        var slug = Slugify(connectorId);
+        var branch = $"submission/{Slugify(publisherId)}-{slug}-{submitterOrgId[..Math.Min(8, submitterOrgId.Length)]}";
+        var path = $"connectors/{Slugify(publisherId)}/{slug}/connector.yaml";
 
         using var http = CreateClient(token);
 

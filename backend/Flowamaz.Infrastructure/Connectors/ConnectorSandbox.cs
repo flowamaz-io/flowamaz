@@ -55,9 +55,11 @@ public sealed class ConnectorSandbox : IConnectorSandbox
         try
         {
             // 1. Look up connector definition
-            var definition = await _db.ConnectorDefinitions
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.ConnectorId == connectorId && !c.IsDeleted, ct)
+            // The version this workspace installed (its pinned major); never another workspace's private connector.
+            var definition = await _db.WorkspaceConnectors.AsNoTracking()
+                .Where(wc => wc.WorkspaceId == workspaceId && wc.IsEnabled && wc.ConnectorDefinition!.ConnectorId == connectorId)
+                .Select(wc => wc.ConnectorDefinition)
+                .FirstOrDefaultAsync(ct)
                 ?? throw new InvalidOperationException(
                     $"Connector '{connectorId}' not found. Install the connector in your workspace before executing it.");
 

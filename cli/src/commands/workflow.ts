@@ -5,7 +5,7 @@ import chalk from "chalk";
 import { createClient } from "../lib/api-client";
 import { outputOpts } from "../lib/opts";
 import { printFormatted, printTable, success, error } from "../lib/output";
-import { asArray, describeError, requireWorkspace, str, unwrap } from "../lib/util";
+import { asArray, describeError, requireWorkspaceId, str, unwrap } from "../lib/util";
 
 export interface ValidationIssue {
   message: string;
@@ -82,7 +82,7 @@ export async function runValidate(
 
 async function list(cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   const resp = await client.get(
     "/api/v1/workspaces/" + encodeURIComponent(ws) + "/workflows"
@@ -102,7 +102,7 @@ async function list(cmd: Command): Promise<void> {
 
 async function get(id: string, cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   const resp = await client.get(
     "/api/v1/workspaces/" + encodeURIComponent(ws) + "/workflows/" + encodeURIComponent(id)
@@ -112,7 +112,7 @@ async function get(id: string, cmd: Command): Promise<void> {
 
 async function create(file: string, cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const yamlContent = fs.readFileSync(file, "utf8");
   const client = await createClient();
   const resp = await client.post(
@@ -125,7 +125,7 @@ async function create(file: string, cmd: Command): Promise<void> {
 
 async function update(id: string, file: string, cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const yamlContent = fs.readFileSync(file, "utf8");
   const client = await createClient();
   const resp = await client.put(
@@ -138,7 +138,7 @@ async function update(id: string, file: string, cmd: Command): Promise<void> {
 
 async function publish(id: string, cmd: Command, environment?: string): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   const resp = await client.post(
     "/api/v1/workspaces/" + encodeURIComponent(ws) + "/workflows/" + encodeURIComponent(id) + "/publish",
@@ -154,7 +154,7 @@ async function deploy(
   environment: string,
   test: boolean
 ): Promise<void> {
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   await client.post(
     "/api/v1/workspaces/" + encodeURIComponent(ws) + "/workflows/" + encodeURIComponent(id) + "/publish",
@@ -224,7 +224,7 @@ export function registerWorkflowCommands(program: Command): void {
     .description("Validate a workflow YAML file via the API")
     .action(async (file: string, _o, cmd: Command) => {
       try {
-        const ws = requireWorkspace();
+        const ws = await requireWorkspaceId();
         const client = await createClient();
         const code = await runValidate(client, ws, file, (line) =>
           process.stdout.write(line + "\n")

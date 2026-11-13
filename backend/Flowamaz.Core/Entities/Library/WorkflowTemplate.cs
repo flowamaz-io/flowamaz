@@ -47,6 +47,14 @@ public class WorkflowTemplate : AuditableEntity
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Publisher slug for templates synced from the Library repository (e.g. "flowamaz-io").</summary>
+    public string? PublisherId { get; set; }
+
+    /// <summary>Start of the 90-day deprecation notice (or removal from the Library repository).</summary>
+    public DateTime? DeprecatedAt { get; set; }
+
+    public string? DeprecationNote { get; set; }
+
     /// <summary>
     /// Review state for community templates: "pending", "approved", "rejected".
     /// Official templates are always "approved".

@@ -164,6 +164,16 @@ onMounted(reload);
       </template>
     </FmEmptyState>
 
+    <FmEmptyState
+      v-else-if="filtered.length === 0"
+      :icon="Workflow"
+      title="No workflows match these filters"
+      :description="`None of the ${workflows.length} workflows in this workspace match${search ? ` “${search}”` : ''}${statusFilter ? ` with status ${statusFilter}` : ''}. Change the search or status, or clear the filters to see them all.`"
+      cta-label="Clear filters"
+      data-test="workflows-filtered-empty"
+      @cta="search = ''; statusFilter = ''"
+    />
+
     <div
       v-else
       class="overflow-hidden rounded-xl border border-slate-200 bg-white"

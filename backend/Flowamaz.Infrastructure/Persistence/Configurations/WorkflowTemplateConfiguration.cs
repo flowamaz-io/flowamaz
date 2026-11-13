@@ -39,6 +39,9 @@ public sealed class WorkflowTemplateConfiguration : IEntityTypeConfiguration<Wor
             .HasConversion(tagsConverter, tagsComparer)
             .HasColumnType("jsonb");
 
+        builder.Property(t => t.PublisherId).HasMaxLength(128);
+        builder.Property(t => t.DeprecationNote).HasMaxLength(1024);
+
         builder.HasIndex(t => t.Slug).IsUnique();
         builder.HasIndex(t => t.Category);
         builder.HasIndex(t => t.IsOfficial);
