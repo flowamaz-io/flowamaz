@@ -18,7 +18,7 @@ describe("library authoring commands", () => {
   });
 });
 
-import { kindOf, manifestProblems } from "../src/commands/library";
+import { kindOf, manifestProblems, publisherRows } from "../src/commands/library";
 import { noOpMessage } from "../src/lib/util";
 
 describe("library manifests and options", () => {
@@ -64,5 +64,16 @@ describe("noOpMessage", () => {
     expect(noOpMessage(axiosError(409, { code: "LIBRARY_ITEM_REMOVED", message: "gone" }), ["LIBRARY_CONNECTOR_INSTALLED"])).toBeNull();
     expect(noOpMessage(axiosError(400, { code: "LIBRARY_CONNECTOR_INSTALLED" }), ["LIBRARY_CONNECTOR_INSTALLED"])).toBeNull();
     expect(noOpMessage(new Error("boom"), ["LIBRARY_CONNECTOR_INSTALLED"])).toBeNull();
+  });
+});
+
+describe("publisherRows", () => {
+  it("prints installs and ratings only where they apply", () => {
+    const rows = publisherRows([
+      { kind: "connector", id: "invoice-sync", name: "Invoice Sync", version: "1.2.0", installs: 12, averageRating: 4.5, ratingCount: 4, deprecatedAt: null },
+      { kind: "form", id: "acme-po", name: "PO details", version: "1.0.0", installs: 0, averageRating: 0, ratingCount: 0, deprecatedAt: "2026-11-01" },
+    ]);
+    expect(rows[0]).toEqual(["connector", "invoice-sync", "Invoice Sync", "1.2.0", "12", "4.5 (4)", "live"]);
+    expect(rows[1]).toEqual(["form", "acme-po", "PO details", "1.0.0", "-", "-", "deprecated"]);
   });
 });

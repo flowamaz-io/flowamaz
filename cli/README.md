@@ -68,6 +68,8 @@ fmz library install slack
 fmz library install purchase-approval --template --name "Q4 purchase approval"
 fmz library outdated              # installed connectors with a new major, or a deprecation notice
 fmz library update acme/invoice-sync   # move to the latest major (workspace admin); minor/patch apply automatically
+fmz library publisher acme          # a publisher's profile and everything they publish
+fmz library submissions             # your organisation's submissions and where each stands (org owner)
 
 # Author a connector (`fmz library connector …` works too; same for `template`)
 fmz connector init my-connector

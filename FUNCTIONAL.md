@@ -1127,6 +1127,23 @@ Requires human review (do NOT auto-merge):
 - Phase 5: fmz connector/template publish (auto-PR flow), contributor profiles, Library → Marketplace upgrade path
 - Phase 6: Marketplace as paid tier, Packs component type, publisher portal, Stripe Connect payouts
 
+> **Built (Nov 2026): contributor profiles and the publisher portal.**
+> - **Profiles.** `/library/publishers/{id}` (API `GET /api/v1/library/publishers/{id}`, any signed-in user) shows a publisher's name, description, website, GitHub, verified badge and every live item: connectors, templates, forms and packs, with versions, installs and ratings.
+>   - An organisation publishes under its slug, the first part of a pin (`acme` in `acme/invoice-sync@1`).
+>   - Only items anyone can install are listed. A workspace's own forms and pending or rejected templates never appear.
+>   - Publisher names on Library pages link to the profile.
+> - **Portal.** Settings → Publisher, for the org owner (API `GET /api/v1/publisher/portal`, `PUT /api/v1/publisher/profile`):
+>   - edit the profile (`IsVerified` is set by staff only);
+>   - item stats;
+>   - every submission with its status and what happens next.
+> - **How connector submissions progress.** A connector submission follows its pull request on GitHub: open → merged → live once the Library sync has it. A pull request closed without merging becomes rejected.
+>   - GitHub is checked at most every 10 minutes per submission. If GitHub can't be reached, the last known status is kept.
+> - **Template reviews.** Templates published from the app wait in a staff review queue (`/platform/library-reviews`; API `/api/v1/platform/library/reviews`).
+>   - Staff approve them, or reject them with a note of at least 10 characters. The org owners are notified either way, and an approved template appears in the Library.
+>   - Approved templates stay owned by the organisation (`OrgId`), not the repository sync.
+> - **CLI:** `fmz library publisher <id>` and `fmz library submissions`.
+> - **Paid side.** Stripe Connect payouts and paid template listings were built with the Workflow Economy (§8.9). A separate application for paid Marketplace publishers is not built.
+
 ---
 
 ## 24. GITHUB REPOSITORY STRATEGY
