@@ -1,10 +1,10 @@
 <template>
   <div class="space-y-6">
     <div>
-      <h2 class="text-lg font-semibold text-gray-100 mb-1">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1">
         Create from Conversation
       </h2>
-      <p class="text-sm text-gray-400">
+      <p class="text-sm text-gray-600">
         Paste a Slack thread, Teams transcript, email chain, or meeting notes. You'll check what was read out of it before the workflow is generated.
       </p>
     </div>
@@ -25,8 +25,8 @@
           :class="[
             'px-3 py-1.5 rounded text-xs font-medium transition-colors',
             sourceType === src.value
-              ? 'bg-indigo-600 text-white'
-              : 'bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700'
+              ? 'bg-teal-600 text-white'
+              : 'bg-white text-gray-600 hover:text-gray-800 border border-gray-200'
           ]"
           @click="sourceType = src.value"
         >
@@ -34,7 +34,7 @@
         </button>
       </div>
 
-      <div class="text-xs text-gray-500 p-2 bg-gray-800 rounded border border-gray-700">
+      <div class="text-xs text-gray-500 p-2 bg-white rounded border border-gray-200">
         {{ hint }}
       </div>
 
@@ -42,7 +42,7 @@
       <div class="space-y-1">
         <label
           for="conversation-text"
-          class="text-xs font-medium text-gray-400"
+          class="text-xs font-medium text-gray-600"
         >Conversation text</label>
         <textarea
           id="conversation-text"
@@ -50,7 +50,7 @@
           rows="10"
           :disabled="stage === 'extracting'"
           placeholder="Paste your Slack thread, email chain, or meeting notes here..."
-          class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-gray-100 outline-none focus:border-indigo-500 resize-none transition-colors font-mono placeholder-gray-600"
+          class="w-full bg-white border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 outline-none focus:border-teal-500 resize-none transition-colors font-mono placeholder-gray-400"
         />
       </div>
     </template>
@@ -59,7 +59,7 @@
     <div
       v-if="error"
       role="alert"
-      class="p-3 bg-red-950 border border-red-700 rounded text-sm text-red-400"
+      class="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700"
     >
       {{ error }}
     </div>
@@ -67,10 +67,10 @@
     <!-- Working -->
     <div
       v-if="stage === 'extracting' || stage === 'creating'"
-      class="flex items-center gap-3 p-3 bg-gray-800 border border-gray-700 rounded text-sm text-indigo-400"
+      class="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded text-sm text-teal-700"
       role="status"
     >
-      <div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+      <div class="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
       {{ stage === 'extracting' ? 'Reading the process out of the conversation… (10–15 seconds)' : 'Generating your workflow… (10–20 seconds)' }}
     </div>
 
@@ -78,7 +78,7 @@
       v-if="stage === 'input'"
       type="button"
       :disabled="!text.trim()"
-      class="w-full py-2 px-4 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
+      class="w-full py-2 px-4 rounded bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
       @click="extract"
     >
       Extract process
@@ -93,7 +93,7 @@
 
       <ul
         v-if="problems.length > 0"
-        class="space-y-1 text-sm text-amber-300"
+        class="space-y-1 text-sm text-amber-700"
       >
         <li
           v-for="p in problems"
@@ -107,7 +107,7 @@
         <button
           type="button"
           :disabled="stage === 'creating'"
-          class="py-2 px-4 rounded border border-gray-600 text-sm font-medium text-gray-300 hover:bg-gray-800 disabled:opacity-40"
+          class="py-2 px-4 rounded border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-40"
           @click="backToText"
         >
           Back to the conversation
@@ -115,7 +115,7 @@
         <button
           type="button"
           :disabled="problems.length > 0 || stage === 'creating'"
-          class="flex-1 py-2 px-4 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
+          class="flex-1 py-2 px-4 rounded bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium text-white transition-colors"
           data-test="create-from-conversation"
           @click="create"
         >

@@ -5,7 +5,7 @@
       <span
         :class="[
           'rounded-full px-2 py-0.5 font-medium',
-          lowConfidence ? 'bg-amber-900/60 text-amber-300' : 'bg-emerald-900/60 text-emerald-300',
+          lowConfidence ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700',
         ]"
         data-test="conversation-confidence"
       >
@@ -14,7 +14,7 @@
       <span
         v-for="p in model.participants"
         :key="p.name"
-        class="rounded-full bg-gray-800 px-2 py-0.5 text-gray-300 ring-1 ring-gray-700"
+        class="rounded-full bg-white px-2 py-0.5 text-gray-700 ring-1 ring-gray-200"
       >
         {{ p.name }} · {{ p.messageCount }} {{ p.messageCount === 1 ? 'message' : 'messages' }}
       </span>
@@ -23,7 +23,7 @@
     <div
       v-if="warnings.length > 0"
       role="status"
-      class="rounded border border-amber-700 bg-amber-950/50 p-3 text-sm text-amber-200"
+      class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
     >
       <p class="mb-1 font-medium">
         Check before generating
@@ -43,7 +43,7 @@
       <div class="space-y-1">
         <label
           for="conv-name"
-          class="text-xs font-medium text-gray-400"
+          class="text-xs font-medium text-gray-600"
         >Workflow name</label>
         <input
           id="conv-name"
@@ -55,7 +55,7 @@
       <div class="space-y-1">
         <label
           for="conv-trigger"
-          class="text-xs font-medium text-gray-400"
+          class="text-xs font-medium text-gray-600"
         >What starts it</label>
         <input
           id="conv-trigger"
@@ -68,7 +68,7 @@
       <div class="space-y-1 sm:col-span-2">
         <label
           for="conv-summary"
-          class="text-xs font-medium text-gray-400"
+          class="text-xs font-medium text-gray-600"
         >Summary</label>
         <input
           id="conv-summary"
@@ -83,7 +83,7 @@
     <section aria-labelledby="conv-steps-heading">
       <h3
         id="conv-steps-heading"
-        class="mb-2 text-sm font-semibold text-gray-200"
+        class="mb-2 text-sm font-semibold text-gray-800"
       >
         Steps, in order
       </h3>
@@ -91,7 +91,7 @@
         <li
           v-for="(step, i) in model.steps"
           :key="i"
-          class="rounded border border-gray-700 bg-gray-800/60 p-2"
+          class="rounded border border-gray-200 bg-gray-50 p-2"
           data-test="conversation-step"
         >
           <div class="flex items-start gap-2">
@@ -171,7 +171,7 @@
     <section aria-labelledby="conv-decisions-heading">
       <h3
         id="conv-decisions-heading"
-        class="mb-2 text-sm font-semibold text-gray-200"
+        class="mb-2 text-sm font-semibold text-gray-800"
       >
         Conditions
       </h3>
@@ -226,7 +226,7 @@
     <section aria-labelledby="conv-approvers-heading">
       <h3
         id="conv-approvers-heading"
-        class="mb-2 text-sm font-semibold text-gray-200"
+        class="mb-2 text-sm font-semibold text-gray-800"
       >
         Approvers
       </h3>
@@ -280,7 +280,7 @@
     <div class="space-y-1">
       <label
         for="conv-systems"
-        class="text-xs font-medium text-gray-400"
+        class="text-xs font-medium text-gray-600"
       >Systems (comma separated)</label>
       <input
         id="conv-systems"
@@ -299,7 +299,7 @@
     >
       <h3
         id="conv-agreed-heading"
-        class="mb-2 text-sm font-semibold text-gray-200"
+        class="mb-2 text-sm font-semibold text-gray-800"
       >
         What was agreed
       </h3>
@@ -307,9 +307,9 @@
         <li
           v-for="(text, i) in model.agreements"
           :key="i"
-          class="flex items-center gap-2 text-sm text-gray-300"
+          class="flex items-center gap-2 text-sm text-gray-700"
         >
-          <Check class="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+          <Check class="h-3.5 w-3.5 shrink-0 text-emerald-600" />
           <span class="flex-1">{{ text }}</span>
           <button
             type="button"
@@ -337,9 +337,9 @@ const model = defineModel<ConversationExtraction>({ required: true });
 const lowConfidence = computed(() => model.value.confidence < 0.6);
 
 const inputClass =
-  'w-full rounded border border-gray-600 bg-gray-800 px-2 py-1.5 text-sm text-gray-100 placeholder-gray-600 outline-none transition-colors focus:border-indigo-500';
+  'w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-teal-500';
 const iconButtonClass =
-  'rounded p-1.5 text-gray-400 hover:bg-gray-700 hover:text-gray-100 disabled:cursor-not-allowed disabled:opacity-30';
+  'rounded p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-30';
 const addButtonClass =
-  'mt-2 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-indigo-300 hover:bg-gray-800';
+  'mt-2 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-teal-700 hover:bg-gray-100';
 </script>

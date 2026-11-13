@@ -108,6 +108,7 @@ public sealed class ConversationExtractionValidator : AbstractValidator<Conversa
         RuleFor(x => x.Steps)
             .NotNull().WithMessage("Keep at least one step before generating the workflow.")
             .Must(s => s is not null && s.Count > 0).WithMessage("Every step was removed. Keep or add at least one step, or describe the process in plain English instead.")
+            .Must(s => s is null || s.Count != 1).WithMessage("A workflow needs at least two steps. Add the step before or after this one (who does what next).")
             .Must(s => s is null || s.Count <= MaxSteps).WithMessage($"More than {MaxSteps} steps. Split the process into smaller workflows.");
         RuleForEach(x => x.Steps).ChildRules(step =>
         {

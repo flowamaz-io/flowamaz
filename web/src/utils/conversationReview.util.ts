@@ -6,7 +6,7 @@ import type {
 } from '@/services/creation.service';
 
 /** Limits the server enforces on a reviewed extraction (ConversationExtractionValidator). */
-export const MAX_STEPS = 50;
+export const MAX_STEPS = 23;
 const MAX_TEXT = 500;
 
 /** A deep copy the review form can edit freely. */
@@ -87,6 +87,9 @@ export function conversationProblems(e: ConversationExtraction): string[] {
   const problems: string[] = [];
   if (s.steps.length === 0) {
     problems.push('Every step is removed. Add at least one step, or describe the process in plain English instead.');
+  }
+  if (s.steps.length === 1) {
+    problems.push('A workflow needs at least two steps. Add the step before or after this one (who does what next).');
   }
   if (s.steps.length > MAX_STEPS) {
     problems.push(`There are more than ${MAX_STEPS} steps. Split the process into smaller workflows.`);

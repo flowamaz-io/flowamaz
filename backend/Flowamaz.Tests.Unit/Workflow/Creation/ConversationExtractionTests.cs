@@ -234,6 +234,18 @@ public sealed class ConversationExtractionTests
         (await act.Should().ThrowAsync<ConversationExtractionException>()).Which.ErrorCode.Should().Be("CONVERSATION_EXTRACTION_FAILED");
     }
 
+    [Theory]
+    [InlineData("""{"is_process": false, "workflow_name": "Lunch", "steps": [], "confidence": 0.9}""")]
+    // CC test, live model: a lunch chat came back as two steps at 10% confidence, flagged as not a process.
+    [InlineData("""{"workflow_name": "Lunch plan", "steps": [{"title": "Propose lunch time"}, {"title": "Confirm the place"}], "confidence": 0.1}""")]
+    [InlineData("""{"is_process": false, "workflow_name": "Lunch plan", "steps": [{"title": "Propose lunch time"}], "confidence": 0.6}""")]
+    public void ParseExtraction_SmallTalk_IsRejectedAsNotAProcess(string answer)
+    {
+        var act = () => ConversationImportService.ParseExtraction(answer, []);
+
+        act.Should().Throw<ConversationExtractionException>().Which.Message.Should().StartWith("This conversation doesn't describe a process");
+    }
+
     [Fact]
     public void ParseExtraction_AcceptsTheEarlierFlatShape()
     {
@@ -271,6 +283,7 @@ public sealed class ConversationExtractionTests
             .And.Contain("Agreed: Rajan approves up to $5,000");
         sent.SystemsAndAi.Should().Be("SAP");
         sent.ExistingContext.Should().Contain("People in the thread: Anita.");
+        sent.ExistingContext.Should().Contain("follow them: one node per step, in this order").And.Contain("Do not add other steps");
         result.ExtractedProcess.Steps.Should().Equal("Submit purchase request", "Raise PO");
         result.TokensUsed.Should().Be(400);
     }
@@ -301,7 +314,9 @@ public sealed class ConversationExtractionTests
             .WithErrorMessage("Every step was removed. Keep or add at least one step, or describe the process in plain English instead.");
         validator.TestValidate(ok with { Steps = [new ConversationStep(" ")] }).IsValid.Should().BeFalse();
         validator.TestValidate(ok with { Decisions = [new ConversationDecision("amount above $5,000", "")] }).IsValid.Should().BeFalse();
-        validator.TestValidate(ok with { Steps = Enumerable.Range(0, 51).Select(i => new ConversationStep($"Step {i}")).ToList() })
+        validator.TestValidate(ok with { Steps = [new ConversationStep("Approve")] }).ShouldHaveValidationErrorFor(x => x.Steps)
+            .WithErrorMessage("A workflow needs at least two steps. Add the step before or after this one (who does what next).");
+        validator.TestValidate(ok with { Steps = Enumerable.Range(0, 24).Select(i => new ConversationStep($"Step {i}")).ToList() })
             .ShouldHaveValidationErrorFor(x => x.Steps);
     }
 

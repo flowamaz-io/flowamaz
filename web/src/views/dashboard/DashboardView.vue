@@ -10,12 +10,13 @@ import { useAuth } from '@/composables/useAuth';
 import { useWorkspace } from '@/composables/useWorkspace';
 import { useWorkflowStore } from '@/stores/workflow.store';
 import { analyticsService } from '@/services/analytics.service';
-import { CREATION_METHODS } from '@/utils/constants';
+import { CREATION_METHODS, DESIGNER_ROLE_NEEDED, canDesign } from '@/utils/constants';
 import type { WeatherResponse, WorkspaceRoiSummary } from '@/types';
 
 const { user } = useAuth();
 const ws = useWorkspace();
 const { current } = ws;
+const canCreate = computed(() => canDesign(current.value?.role));
 
 // The product tour gates itself on the `tour_completed_{workspaceId}` preference, so it
 // shows at most once per workspace — first arrival on the dashboard after the wizard.
@@ -127,10 +128,23 @@ onMounted(async () => {
       <h2 class="text-lg font-semibold text-slate-900">
         What would you like to automate?
       </h2>
-      <p class="mt-1 text-sm text-slate-500">
+      <p
+        v-if="!canCreate"
+        class="mt-1 text-sm text-slate-500"
+        data-test="designer-role-needed"
+      >
+        {{ DESIGNER_ROLE_NEEDED }}
+      </p>
+      <p
+        v-else
+        class="mt-1 text-sm text-slate-500"
+      >
         Choose a creation method to build your next workflow.
       </p>
-      <div class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div
+        v-if="canCreate"
+        class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3"
+      >
         <button
           v-for="m in CREATION_METHODS"
           :key="m.id"

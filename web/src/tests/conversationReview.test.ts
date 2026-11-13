@@ -78,3 +78,13 @@ describe('conversation review', () => {
     expect(parseList('SAP, Slack , ,sap,Jira')).toEqual(['SAP', 'Slack', 'Jira']);
   });
 });
+
+describe('canDesign', () => {
+  it('lets Designers and Admins create workflows, and nobody else', async () => {
+    const { canDesign } = await import('@/utils/constants');
+    expect(['Admin', 'Designer'].every(canDesign)).toBe(true);
+    expect(['Operator', 'Runner', 'Viewer'].some(canDesign)).toBe(false);
+    // Unknown role (not loaded yet): allowed; the server checks.
+    expect(canDesign(undefined)).toBe(true);
+  });
+});

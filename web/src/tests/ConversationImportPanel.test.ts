@@ -67,6 +67,8 @@ describe('ConversationImportPanel', () => {
 
     await wrapper.get('input[aria-label="Step 2"]').setValue('Approve or reject');
     await wrapper.get('button[aria-label="Remove step 1"]').trigger('click');
+    await wrapper.findAll('button').find((b) => b.text().includes('Add step'))!.trigger('click');
+    await wrapper.get('input[aria-label="Step 2"]').setValue('Notify the requester');
     await wrapper.get('[data-test="create-from-conversation"]').trigger('click');
     await flushPromises();
 
@@ -74,7 +76,7 @@ describe('ConversationImportPanel', () => {
     expect(req.method).toBe('conversation');
     expect(req.name).toBe('Purchase approval');
     expect(req.conversationText).toBeUndefined();
-    expect(req.conversationExtraction.steps.map((s) => s.title)).toEqual(['Approve or reject']);
+    expect(req.conversationExtraction.steps.map((s) => s.title)).toEqual(['Approve or reject', 'Notify the requester']);
     expect(push).toHaveBeenCalledWith({ name: 'workflow-editor', params: { id: 'wf-1' }, query: { workspaceId: 'ws-1' } });
   });
 

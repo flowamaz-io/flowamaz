@@ -15,6 +15,6 @@ public sealed class ConversationExtractionException : AppException
         "Results vary between attempts, so try Extract again. If it keeps failing, describe the process in plain English instead.");
 
     public static ConversationExtractionException NoSteps() => new(
-        "No process steps were found in this conversation, so no workflow was generated. " +
-        "Paste the part of the thread where the steps are discussed (who does what, in which order), or describe the process in plain English instead.");
+        "This conversation doesn't describe a process (who does what, in which order), so no workflow was generated. " +
+        "Paste the part of the thread where the steps are discussed, or describe the process in plain English instead.");
 }
