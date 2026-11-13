@@ -283,7 +283,7 @@ public sealed class ConversationExtractionTests
             .And.Contain("Agreed: Rajan approves up to $5,000");
         sent.SystemsAndAi.Should().Be("SAP");
         sent.ExistingContext.Should().Contain("People in the thread: Anita.");
-        sent.ExistingContext.Should().Contain("follow them: one node per step, in this order").And.Contain("Do not add other steps");
+        sent.ExistingContext.Should().Contain("follow them: one node per step, in this order").And.Contain("Do not add other steps").And.Contain("keeps who in its label");
         result.ExtractedProcess.Steps.Should().Equal("Submit purchase request", "Raise PO");
         result.TokensUsed.Should().Be(400);
     }

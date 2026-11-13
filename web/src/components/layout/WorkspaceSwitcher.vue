@@ -14,6 +14,8 @@ defineProps<{ collapsed?: boolean }>();
 const ws = useWorkspace();
 const { allWorkspaces, current } = ws;
 const auth = useAuth();
+// Only the organisation owner can create workspaces (the API refuses everyone else).
+const canCreateWorkspace = computed(() => auth.user.value?.isOrgOwner === true);
 const { user } = auth;
 
 const createOpen = ref(false);
@@ -178,10 +180,11 @@ function onSearchKeydown(event: KeyboardEvent): void {
           v-if="filtered.length === 0"
           class="px-3 py-3 text-sm text-sidebar-text-muted"
         >
-          No workspaces match "{{ query }}". Try a different name or create one below.
+          No workspaces match "{{ query }}". Try a different name{{ canCreateWorkspace ? ' or create one below' : '' }}.
         </li>
       </ul>
       <button
+        v-if="canCreateWorkspace"
         type="button"
         class="flex w-full items-center gap-2 border-t border-sidebar-border px-3 py-2 text-left text-sm font-medium text-sidebar-active transition-colors hover:bg-sidebar-hover"
         @click="openCreate"

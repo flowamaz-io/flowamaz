@@ -261,7 +261,9 @@ public sealed partial class ConversationImportService : IConversationImportServi
             SystemsAndAi: systems.Count > 0 ? string.Join(", ", systems) : "None specified",
             ExistingContext: (
                 "The steps above were extracted from a conversation and reviewed by the user, so follow them: one node per " +
-                "step, in this order, keeping the step names as written. Add only what makes it run: a human-gate for each " +
+                "step, in this order, keeping the step names as written. A step done by someone (\"done by …\") keeps " +
+                "who in its label, e.g. \"Notify the requester (Anita)\"; an approval names its approver in gate_label. " +
+                "Add only what makes it run: a human-gate for each " +
                 "approval (with a router per the conditions) and a rejected path to an end node. Do not add other steps, " +
                 $"notifications or checks. {people}").Trim());
     }
