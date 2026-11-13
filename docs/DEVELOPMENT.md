@@ -45,7 +45,8 @@ Needs Docker, the .NET SDK and Node 22. The script starts Postgres/Redis/Mailpit
 recreates the `flowamaz_e2e` database, builds and starts the API (8317), the web app (5183) and the marketing site
 (5184), builds the CLI, then runs `web/e2e`. It uses its own ports and database, so a dev stack on 8307/5173 keeps
 running. Keys are generated per run and never written to disk. Reports land in `web/e2e/playwright-report/` and
-`web/e2e/e2e-results.json`; server logs in `web/e2e/.local-run/`.
+`web/e2e/e2e-results.json` (failure screenshots, traces and videos in `web/test-results/`); server logs in
+`web/e2e/.local-run/`.
 
 Against a stack you already started, run Playwright directly from `web/`:
 `E2E_API_URL=http://localhost:8307 npx playwright test --config e2e/playwright.config.ts` (`E2E_BASE_URL` and

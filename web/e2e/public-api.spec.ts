@@ -17,10 +17,13 @@ test.describe('Public API (S51–S52)', () => {
 
     // Mint an API key via the settings UI.
     await page.goto('/settings/api-keys');
-    await page.getByRole('button', { name: /Create key/i }).click();
-    await page.getByLabel('Name').fill('e2e-public');
-    await page.getByRole('button', { name: 'Create key' }).click();
-    const apiKey = (await page.locator('code').first().innerText()).trim();
+    await page.getByRole('button', { name: /Create key/i }).first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Name').fill('e2e-public');
+    await dialog.getByRole('button', { name: 'Create key' }).click();
+    // The one-time reveal shows the full key (the table only shows its prefix).
+    const apiKey = (await page.getByRole('alert').locator('code').first().innerText()).trim();
+    expect(apiKey).not.toContain('…');
 
     const api = await request.newContext();
     const res = await api.get(`${API_URL}/api/public/v1/workflows`, {

@@ -24,6 +24,7 @@ test.describe('Authentication (S1–S6)', () => {
     await page.getByPlaceholder('Jane Doe').fill('E2E Owner');
     await page.getByPlaceholder('jane@acme.com').fill(email);
     await page.getByPlaceholder('At least 8 characters').fill('Sup3rSecret!23');
+    await page.getByPlaceholder('Re-enter your password').fill('Sup3rSecret!23');
     await page.getByRole('button', { name: 'Create organisation' }).click();
 
     await page.waitForURL('**/onboarding');
@@ -104,10 +105,9 @@ test.describe('Authentication (S1–S6)', () => {
     const { org } = await setupReadyOrg(page);
     await page.waitForURL((url) => new URL(url).pathname === '/');
 
-    // The "Sign out" item lives in the avatar dropdown — open it via the avatar trigger
-    // (last button in the header), then click Sign out.
-    await page.locator('header').getByRole('button').last().click();
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    // The "Logout" item lives in the account menu (the avatar button).
+    await page.getByRole('button', { name: /^Account/ }).click();
+    await page.getByRole('button', { name: 'Logout' }).click();
     await page.waitForURL('**/login');
 
     // Re-seed onboarding so a guard redirect can only be auth-driven, then hit /settings directly.

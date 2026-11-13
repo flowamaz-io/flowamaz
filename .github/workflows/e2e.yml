@@ -40,6 +40,6 @@ jobs:
           path: |
             web/e2e/playwright-report/
             web/e2e/e2e-results.json
-            web/e2e/test-results/
+            web/test-results/
             web/e2e/.local-run/*.log
           retention-days: 14

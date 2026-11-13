@@ -46,7 +46,7 @@ test.describe('Instance detail (S21–S23)', () => {
     const instanceId = await setup(page);
     await page.goto(`/instances/${instanceId}`);
     await page.getByRole('button', { name: 'narrative' }).click();
-    await page.getByRole('button', { name: 'CEO' }).click();
+    await page.getByRole('button', { name: 'CEO', exact: true }).click();
     await expect(page.getByText(/Completed/)).toBeVisible();
   });
 

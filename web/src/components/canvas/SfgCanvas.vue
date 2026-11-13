@@ -469,6 +469,17 @@ onMounted(async () => {
     const id = evt.target.id();
     if (id) openConfigPanel(id);
   });
+  // Dev server only (never in a build): lets the Playwright suite find where a node is drawn, since Cytoscape
+  // paints nodes on a <canvas> with no DOM element to target.
+  if (import.meta.env.DEV) {
+    (window as unknown as { __fmzCanvasNodeCenter?: (id: string) => { x: number; y: number } | null }).__fmzCanvasNodeCenter = (id) => {
+      const node = canvas.cy.value?.getElementById(id);
+      const box = containerRef.value?.getBoundingClientRect();
+      if (!node || node.empty() || !box) return null;
+      const p = node.renderedPosition();
+      return { x: box.left + p.x, y: box.top + p.y };
+    };
+  }
 });
 
 onUnmounted(() => {

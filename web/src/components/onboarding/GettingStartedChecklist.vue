@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { RouterLink } from 'vue-router';
 import { Check, X } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import { useWorkspace } from '@/composables/useWorkspace';
@@ -14,7 +14,6 @@ const props = defineProps<{
 const ws = useWorkspace();
 const workflowStore = useWorkflowStore();
 const { workflows } = storeToRefs(workflowStore);
-const router = useRouter();
 
 const workspaceId = computed(() => ws.currentWorkspaceId.value ?? 'default');
 const prefKey = computed(() => `checklist_${workspaceId.value}`);
@@ -129,19 +128,23 @@ function dismiss(): void {
       <li
         v-for="item in items.filter((i) => !i.done)"
         :key="item.id"
-        class="-mx-2 flex cursor-pointer items-center gap-3 rounded-lg px-2 py-4 transition-colors hover:bg-gray-50"
-        @click="router.push(item.to)"
       >
-        <div class="h-6 w-6 shrink-0 rounded-full border-2 border-gray-300" />
-        <div class="flex-1">
-          <p class="text-sm font-medium text-gray-900">
-            {{ item.title }}
-          </p>
-          <p class="text-xs text-gray-500">
-            {{ item.description }}
-          </p>
-        </div>
-        <span class="shrink-0 text-sm font-medium text-teal-600">Start →</span>
+        <!-- A real link, so the step is reachable by keyboard and screen readers, not only by mouse. -->
+        <RouterLink
+          :to="item.to"
+          class="-mx-2 flex items-center gap-3 rounded-lg px-2 py-4 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+        >
+          <div class="h-6 w-6 shrink-0 rounded-full border-2 border-gray-300" />
+          <div class="flex-1">
+            <p class="text-sm font-medium text-gray-900">
+              {{ item.title }}
+            </p>
+            <p class="text-xs text-gray-500">
+              {{ item.description }}
+            </p>
+          </div>
+          <span class="shrink-0 text-sm font-medium text-teal-600">Start →</span>
+        </RouterLink>
       </li>
     </ul>
   </section>

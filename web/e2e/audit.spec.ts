@@ -16,7 +16,7 @@ test.describe('Audit (S63–S64)', () => {
     await page.goto('/settings/audit');
     await expect(page.getByRole('heading', { name: /Audit/ })).toBeVisible();
     // The workflow.created event is recorded fire-and-forget; it shows up shortly.
-    await expect(page.getByText(/created/i).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('cell', { name: "Created workflow 'Audited Flow'" })).toBeVisible({ timeout: 10000 });
   });
 
   // S64: exporting the audit log triggers a CSV file download.

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createWorkflowFor, setupReadyOrg, uniqueSuffix } from './fixtures/test-factories';
+import { E2E_WORKFLOW_YAML, createWorkflowFor, setupReadyOrg, uniqueSuffix, updateWorkflowFor } from './fixtures/test-factories';
 
 // Git versioning E2E (prompt 05-08, S40–S41). Runs against the full stack in the nightly e2e job.
 test.describe('Git versioning (S40–S41)', () => {
@@ -20,8 +20,9 @@ test.describe('Git versioning (S40–S41)', () => {
   test('S41: diff modal renders colour-coded lines', async ({ page }) => {
     const org = await setupReadyOrg(page);
     const wf = await createWorkflowFor(org, `gitdiff-${uniqueSuffix()}`);
+    // Edit once so there are two commits to diff (same steps, new version and name).
+    await updateWorkflowFor(org, wf.id, E2E_WORKFLOW_YAML.replace('version: v1, name: E2E', 'version: v2, name: E2E edited'));
 
-    // Edit once so there are two commits to diff.
     await page.goto(`/workflows/${wf.id}`);
     await page.getByRole('button', { name: 'versions' }).click();
 

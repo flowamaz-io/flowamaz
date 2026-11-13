@@ -44,8 +44,10 @@ test.describe('Workflow Editor (S26–S30)', () => {
 
     await page.goto(`/workflows/${id}/edit`);
     await page.getByText('Edit workflow').waitFor();
+    const toggle = page.locator('[data-test="copilot-toggle"]');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await page.keyboard.press('Control+k');
-    await expect(page.getByText('✦ Co-pilot')).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 
   // S30: Help button opens the help panel.
@@ -57,8 +59,8 @@ test.describe('Workflow Editor (S26–S30)', () => {
 
     await page.goto(`/workflows/${id}/edit`);
     await page.getByText('Edit workflow').waitFor();
-    await page.getByRole('button', { name: 'Help' }).click();
-    // Help panel or article should be visible
-    await expect(page.getByText(/canvas/i)).toBeVisible({ timeout: 5_000 });
+    // The editor toolbar's Help (the sidebar has its own "Open help").
+    await page.getByRole('button', { name: 'Help', exact: true }).click();
+    await expect(page.getByRole('complementary', { name: 'Help panel' })).toBeVisible();
   });
 });

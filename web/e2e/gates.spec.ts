@@ -8,13 +8,9 @@ test.describe('Human Gates (S37–S38)', () => {
     await page.goto('/gates');
     await page.waitForLoadState('networkidle');
     // GatesView renders either a table of pending gates or the "No pending gates" empty state.
-    await expect(
-      page
-        .getByRole('table')
-        .first()
-        .or(page.getByText(/no pending|no gates|pending approvals/i).first())
-        .or(page.getByRole('heading', { name: /approvals|gates/i }).first()),
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: 'Approval Gates', level: 1 })).toBeVisible();
+    // A new workspace has no gates waiting, so the empty state shows.
+    await expect(page.getByRole('heading', { name: 'No pending approvals' })).toBeVisible();
   });
 
   // S38: approving a gate from the portal shows a success toast or removes the gate from the list.

@@ -42,12 +42,7 @@ test.describe('Connector Library (S34–S36)', () => {
 
     await installButton.click();
     // CredentialSetupWizard should become visible (it's a modal/overlay)
-    await expect(
-      page
-        .getByText(/credential|configure|connect|wizard/i)
-        .first()
-        .or(page.locator('[role="dialog"]')),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('dialog', { name: /^Connect / })).toBeVisible();
   });
 
   // S36: /library/health renders the health table or empty state.

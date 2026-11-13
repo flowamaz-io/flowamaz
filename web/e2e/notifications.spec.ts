@@ -15,7 +15,7 @@ test.describe('Notifications (S53–S55)', () => {
     await setupReadyOrg(page);
     await page.goto('/');
     await page.getByRole('button', { name: /Open notifications/i }).click();
-    await expect(page.getByText(/Notifications|You're all caught up/i)).toBeVisible();
+    await expect(page.getByText("You're all caught up")).toBeVisible();
   });
 
   // S55: Mark all read clears the unread badge.

@@ -216,6 +216,20 @@ export async function createWorkflowFor(
 }
 
 /** Publishes a workflow of a ready org through the API. */
+/** Saves new YAML for a workflow (a new commit in its history). */
+export async function updateWorkflowFor(ready: ReadyOrg, workflowId: string, yamlContent: string): Promise<void> {
+  const api = await request.newContext();
+  try {
+    const res = await api.put(`${API_URL}/api/v1/workspaces/${ready.workspace.id}/workflows/${workflowId}`, {
+      headers: { Authorization: `Bearer ${ready.org.accessToken}` },
+      data: { yamlContent },
+    });
+    if (!res.ok()) throw new Error(`updateWorkflowFor failed (${res.status()}): ${await res.text()}`);
+  } finally {
+    await api.dispose();
+  }
+}
+
 export async function publishWorkflowFor(ready: ReadyOrg, workflowId: string): Promise<void> {
   const api = await request.newContext();
   try {
@@ -236,6 +250,16 @@ export async function publishWorkflow(
     data: {},
   });
   if (!res.ok()) throw new Error(`publishWorkflow failed (${res.status()}): ${await res.text()}`);
+}
+
+/** Triggers an instance of a published workflow for a setupReadyOrg() org; returns the instance id. */
+export async function triggerInstanceFor(ready: ReadyOrg, workflowId: string): Promise<string> {
+  const api = await request.newContext();
+  try {
+    return await triggerInstance(api, ready.org.accessToken, ready.workspace.id, workflowId);
+  } finally {
+    await api.dispose();
+  }
 }
 
 /** Triggers an instance via the API and returns its id. */
@@ -298,4 +322,26 @@ export async function setupReadyOrg(
   } finally {
     await api.dispose();
   }
+}
+
+/**
+ * Where a workflow node is drawn on the canvas, in page coordinates. Cytoscape paints nodes on a <canvas>, so the
+ * editor exposes this on the Vite dev server only (window.__fmzCanvasNodeCenter, see SfgCanvas.vue).
+ */
+export async function canvasNodeCenter(page: Page, nodeId: string): Promise<{ x: number; y: number }> {
+  const read = () =>
+    page.evaluate((id) => {
+      const fn = (window as unknown as { __fmzCanvasNodeCenter?: (n: string) => { x: number; y: number } | null })
+        .__fmzCanvasNodeCenter;
+      return fn ? fn(id) : null;
+    }, nodeId);
+  // The editor lays the graph out (and fits it) after loading, so wait until the node stops moving.
+  let last: { x: number; y: number } | null = null;
+  for (let i = 0; i < 50; i++) {
+    const now = await read();
+    if (now && last && Math.abs(now.x - last.x) < 0.5 && Math.abs(now.y - last.y) < 0.5) return now;
+    last = now;
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`canvasNodeCenter: node "${nodeId}" is not on the canvas, or never stopped moving.`);
 }

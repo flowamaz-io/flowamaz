@@ -9,7 +9,7 @@ test.describe('App shell UX fixes (S60)', () => {
     const wf = await createWorkflowFor(org, `title-${uniqueSuffix()}`);
 
     await page.goto(`/workflows/${wf.id}/edit?workspaceId=${org.workspace.id}`);
-    await expect(page.getByText(wf.name)).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Workflow name' })).toHaveValue(wf.name);
     await expect(page.getByText('Untitled Workflow')).toHaveCount(0);
   });
 });
