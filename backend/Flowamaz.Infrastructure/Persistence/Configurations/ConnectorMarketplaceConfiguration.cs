@@ -23,6 +23,10 @@ public sealed class ConnectorSubmissionConfiguration : IEntityTypeConfiguration<
         builder.Property(s => s.ConnectorName).HasMaxLength(128).IsRequired();
         builder.Property(s => s.ManifestYaml).IsRequired();
         builder.Property(s => s.Status).HasMaxLength(16).IsRequired();
+        builder.Property(s => s.ConnectorId).HasMaxLength(100);
+        builder.Property(s => s.PublisherId).HasMaxLength(64);
+        builder.Property(s => s.ReviewerNotes).HasMaxLength(1000);
         builder.HasIndex(s => s.OrgId);
+        builder.HasIndex(s => s.Status);
     }
 }

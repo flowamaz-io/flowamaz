@@ -2434,6 +2434,11 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ConnectorId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("connector_id");
+
                     b.Property<string>("ConnectorName")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -2443,6 +2448,10 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2465,8 +2474,18 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
+                    b.Property<DateTime?>("PrCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pr_checked_at");
+
+                    b.Property<string>("PublisherId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("publisher_id");
+
                     b.Property<string>("ReviewerNotes")
-                        .HasColumnType("text")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
                         .HasColumnName("reviewer_notes");
 
                     b.Property<string>("Status")
@@ -2484,6 +2503,9 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrgId")
                         .HasDatabaseName("ix_connector_submissions_org_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_connector_submissions_status");
 
                     b.ToTable("connector_submissions");
                 });
@@ -2861,6 +2883,101 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flowamaz.Core.Entities.Library.PublisherProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Bio")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)")
+                        .HasColumnName("bio");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("GithubLogin")
+                        .HasMaxLength(39)
+                        .HasColumnType("character varying(39)")
+                        .HasColumnName("github_login");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsVerified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_verified");
+
+                    b.Property<Guid?>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("PublisherId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("publisher_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("WebsiteUrl")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("website_url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_publisher_profiles");
+
+                    b.HasIndex("OrgId")
+                        .HasDatabaseName("ix_publisher_profiles_org_id");
+
+                    b.HasIndex("PublisherId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_publisher_profiles_publisher_id");
+
+                    b.ToTable("publisher_profiles");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0007-000000000001"),
+                            Bio = "Official connectors, templates, forms and packs, built and maintained by the Flowamaz team.",
+                            CreatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Flowamaz",
+                            GithubLogin = "flowamaz-io",
+                            IsDeleted = false,
+                            IsVerified = true,
+                            PublisherId = "flowamaz-io",
+                            UpdatedAt = new DateTime(2026, 11, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            WebsiteUrl = "https://flowamaz.com"
+                        });
+                });
+
             modelBuilder.Entity("Flowamaz.Core.Entities.Library.WorkflowTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2963,11 +3080,20 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("publisher_id");
 
+                    b.Property<string>("ReviewNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("review_notes");
+
                     b.Property<string>("ReviewStatus")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("review_status");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
 
                     b.Property<string>("Slug")
                         .IsRequired()
@@ -3007,6 +3133,9 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("IsOfficial")
                         .HasDatabaseName("ix_workflow_templates_is_official");
+
+                    b.HasIndex("ReviewStatus")
+                        .HasDatabaseName("ix_workflow_templates_review_status");
 
                     b.HasIndex("Slug")
                         .IsUnique()

@@ -1,3 +1,4 @@
+using Flowamaz.Application.Library;
 using Flowamaz.Core.Entities.Library;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Repositories;
@@ -104,7 +105,7 @@ public sealed class ConnectorMarketplaceService
         // The publisher is the submitting organisation (its slug), never what the manifest claims; the folder is
         // the manifest's id. Checked with the same rules the Library sync applies after the PR merges.
         var org = _organisations is null ? null : await _organisations.GetByIdAsync(orgId, ct);
-        var publisher = org?.Slug is { Length: > 0 } orgSlug ? orgSlug : $"org-{orgId.ToString("N")[..8]}";
+        var publisher = PublisherIds.ForOrg(org?.Slug, orgId);
         var connectorId = LibraryManifestParser.DeclaredId(manifestYaml) ?? Slugify(connectorName);
         try
         {
@@ -124,6 +125,8 @@ public sealed class ConnectorMarketplaceService
             ManifestYaml = manifestYaml,
             GithubPrUrl = prUrl,
             Status = "pending",
+            PublisherId = publisher,
+            ConnectorId = connectorId,
         };
         await _repo.AddSubmissionAsync(submission, ct);
         await _unitOfWork.SaveChangesAsync(ct);

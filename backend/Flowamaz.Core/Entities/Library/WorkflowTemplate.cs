@@ -61,6 +61,11 @@ public class WorkflowTemplate : AuditableEntity
     /// </summary>
     public string ReviewStatus { get; set; } = "approved";
 
+    /// <summary>What the reviewer said, shown to the publisher (required when rejecting).</summary>
+    public string? ReviewNotes { get; set; }
+
+    public DateTime? ReviewedAt { get; set; }
+
     // ── Workflow Economy (FUNCTIONAL.md §8.9) ──
     /// <summary>free | one_time | monthly (see <c>TemplatePricing</c>).</summary>
     public string PricingModel { get; set; } = "free";

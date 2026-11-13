@@ -57,6 +57,38 @@ public sealed class ConnectorSubmissionPrService : IConnectorSubmissionPrService
         return prUrl;
     }
 
+    public async Task<string?> GetPullRequestStateAsync(string pullRequestUrl, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("ConnectorSubmissionPrService.GetPullRequestStateAsync entry pr={Pr}", pullRequestUrl);
+        var token = _configuration["GITHUB_CONNECTORS_TOKEN"];
+        // Only pull requests on the connectors repository: the URL comes from our own database, but never follow
+        // anything else with the token attached.
+        var match = System.Text.RegularExpressions.Regex.Match(pullRequestUrl ?? "",
+            $"^https://github\\.com/{Owner}/{Repo}/pull/(\\d+)$");
+        if (string.IsNullOrEmpty(token) || !match.Success)
+        {
+            _logger.LogInformation("ConnectorSubmissionPrService.GetPullRequestStateAsync exit state=unknown (no token or not a connectors PR)");
+            return null;
+        }
+        try
+        {
+            using var http = CreateClient(token);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(10));
+            using var doc = await GetJsonAsync(http, $"https://api.github.com/repos/{Owner}/{Repo}/pulls/{match.Groups[1].Value}", cts.Token);
+            var root = doc.RootElement;
+            var state = root.TryGetProperty("merged", out var merged) && merged.ValueKind == JsonValueKind.True ? "merged"
+                : root.GetProperty("state").GetString() == "closed" ? "closed" : "open";
+            _logger.LogInformation("ConnectorSubmissionPrService.GetPullRequestStateAsync exit state={State}", state);
+            return state;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or KeyNotFoundException)
+        {
+            _logger.LogWarning("ConnectorSubmissionPrService.GetPullRequestStateAsync could not read pr={Pr}: {Error}", pullRequestUrl, ex.GetType().Name);
+            return null;
+        }
+    }
+
     private HttpClient CreateClient(string token)
     {
         var http = _httpClientFactory.CreateClient(HttpClientName);
