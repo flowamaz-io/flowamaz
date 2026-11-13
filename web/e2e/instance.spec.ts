@@ -47,7 +47,8 @@ test.describe('Instance detail (S21–S23)', () => {
     await page.goto(`/instances/${instanceId}`);
     await page.getByRole('button', { name: 'narrative' }).click();
     await page.getByRole('button', { name: 'CEO', exact: true }).click();
-    await expect(page.getByText(/Completed/)).toBeVisible();
+    // The status badge (the timeline can say "Completed" too, once its rows load).
+    await expect(page.getByText(/Completed/).first()).toBeVisible();
   });
 
   // S23: switching to the Auditor narrative shows different (event-log) content.

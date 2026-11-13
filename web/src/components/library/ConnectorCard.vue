@@ -2,10 +2,15 @@
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { formatInstalls, type ConnectorDefinition } from '@/services/connector.service';
+import { noticeDate, type LibraryConnectorItem, type LibraryOutdatedItem } from '@/services/library.service';
 
 interface Props {
   connector: ConnectorDefinition;
   isInstalled: boolean;
+  /** This workspace's view: installed version and pin, deprecation notice. */
+  library?: LibraryConnectorItem;
+  /** Set when an installed connector has a newer major to upgrade to. */
+  outdated?: LibraryOutdatedItem;
 }
 
 const props = defineProps<Props>();
@@ -94,10 +99,33 @@ function onCardClick(): void {
       </p>
     </div>
 
-    <!-- Category -->
-    <span class="w-fit rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 capitalize">
-      {{ connector.category }}
-    </span>
+    <!-- Category + version -->
+    <div class="flex flex-wrap items-center gap-1.5">
+      <span class="w-fit rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600 capitalize">
+        {{ connector.category }}
+      </span>
+      <span
+        class="rounded-full bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600"
+        data-test="connector-version"
+      >
+        v{{ library?.installedVersion ?? library?.version ?? connector.version }}
+      </span>
+      <span
+        v-if="outdated?.latestVersion"
+        class="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700"
+        data-test="connector-update-available"
+      >
+        v{{ outdated.latestVersion }} available
+      </span>
+    </div>
+
+    <p
+      v-if="library?.deprecatedAt"
+      class="rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800"
+      data-test="connector-deprecated"
+    >
+      Deprecated. Leaves the Library on {{ noticeDate(library.removalAt) }}.
+    </p>
 
     <!-- Footer: rating + installs + action -->
     <div class="flex items-center justify-between mt-auto pt-1">

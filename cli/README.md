@@ -61,6 +61,14 @@ fmz workflow deploy 4f8c... --environment staging --test
 # Trigger and wait
 fmz instance trigger 4f8c... --payload '{"orderId":"123"}' --wait
 
+# Library: browse, install, keep connectors up to date (add --template for templates, -w <ws> for another workspace)
+fmz library search "invoice"
+fmz library show acme/invoice-sync
+fmz library install slack
+fmz library install purchase-approval --template --name "Q4 purchase approval"
+fmz library outdated              # installed connectors with a new major, or a deprecation notice
+fmz library update acme/invoice-sync   # move to the latest major (workspace admin); minor/patch apply automatically
+
 # Author a connector (`fmz library connector …` works too; same for `template`)
 fmz connector init my-connector
 fmz connector validate my-connector/connector.yaml

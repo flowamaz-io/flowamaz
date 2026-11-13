@@ -23,11 +23,10 @@ export function describeError(err: unknown): string {
       return "Not authenticated. Run: fmz auth login";
     }
     if (status === 404) {
-      return (
-        "Resource not found (404)" +
-        (detail ? ": " + detail : "") +
-        ". The endpoint may not be available on this backend."
-      );
+      // The API's 404s say what is missing and what to do; only a bare 404 means the route itself is missing.
+      return detail
+        ? "Not found (404): " + detail
+        : "Resource not found (404). The endpoint may not be available on this backend.";
     }
     if (status) {
       return "Request failed (" + status + ")" + (detail ? ": " + detail : "");
@@ -67,21 +66,40 @@ export function requireWorkspace(override?: string): string {
   );
 }
 
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The selected workspace's id. The API addresses workspaces by id; `fmz workspace use` and FMZ_WORKSPACE
+ * accept a slug too, which is looked up in the workspaces this account can see.
+ */
+export async function requireWorkspaceId(override?: string): Promise<string> {
+  const value = requireWorkspace(override);
+  if (GUID.test(value)) return value;
+  // Imported here so util stays free of the HTTP client for its synchronous helpers.
+  const { createClient } = await import("./api-client");
+  const client = await createClient();
+  const resp = await client.get("/api/v1/workspaces", { params: { pageSize: 100 } });
+  const match = asArray(resp.data).find((w) => w.slug === value || w.id === value);
+  if (!match || typeof match.id !== "string") {
+    throw new Error(
+      "No workspace '" + value + "' in this account. Run `fmz workspace list` to see the slugs, then `fmz workspace use <slug>`."
+    );
+  }
+  return match.id;
+}
+
 /**
  * Coerce an unknown API payload into an array of records for table rendering.
  * Handles both bare arrays and AutoWrapper-style { result: [...] } envelopes.
  */
 export function asArray(data: unknown): Record<string, unknown>[] {
   let value: unknown = data;
-  if (value && typeof value === "object" && !Array.isArray(value)) {
+  // Envelopes nest: { success, data: [...] } or, for paged lists, { success, data: { data: [...], pagination } }.
+  for (let depth = 0; depth < 3 && value && typeof value === "object" && !Array.isArray(value); depth++) {
     const obj = value as Record<string, unknown>;
-    if (Array.isArray(obj.result)) {
-      value = obj.result;
-    } else if (Array.isArray(obj.data)) {
-      value = obj.data;
-    } else if (Array.isArray(obj.items)) {
-      value = obj.items;
-    }
+    const next = obj.result ?? obj.data ?? obj.items;
+    if (next === undefined) break;
+    value = next;
   }
   if (Array.isArray(value)) {
     return value.filter(
@@ -97,6 +115,10 @@ export function unwrap(data: unknown): unknown {
     const obj = data as Record<string, unknown>;
     if ("result" in obj) {
       return obj.result;
+    }
+    // AutoWrapper envelope: { success, statusCode, data }.
+    if ("data" in obj && ("success" in obj || "statusCode" in obj)) {
+      return obj.data;
     }
   }
   return data;

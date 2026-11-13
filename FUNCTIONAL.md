@@ -1093,12 +1093,23 @@ Requires human review (do NOT auto-merge):
 - Sync failure: serve last known state, alert platform team after 3 retries
 - Deprecation: 90-day notice, warning badge, then removal from install list
 
+> Implemented (13 Nov 2026): `LibrarySyncService` (Quartz every 15 minutes + signed push webhook at
+> `/webhooks/library/github`), one transaction per repository, last known state kept on failure, staff notified
+> after three failures in a row. Folders that spoof a publisher or claim official status are skipped and reported.
+> Removed folders get the 90-day notice below; official connectors are not synced (they ship with releases).
+
 ### 23.8 Connector Versioning
 - Independent semver per connector in connector.yaml
 - Workspace pins to major version: `publisher/connector@1`
 - Minor/patch: auto-applied with changelog notification
 - Major: workspace admin must explicitly upgrade
 - Deprecated connectors: 90-day notice before removal
+
+> Implemented (13 Nov 2026): one connector row per major. Minor/patch releases update it in place and notify
+> the workspace admins with the release notes from CHANGELOG.md; a new major is a new row, and workspaces stay
+> pinned (`publisher/connector@1`) until an admin upgrades (Library → connector page, or `fmz library update`).
+> `fmz library outdated` lists new majors and deprecation notices. Runs resolve the connector through the
+> workspace's own install, so a pinned workspace keeps the major it chose.
 
 ### 23.9 Phase Plan for Library
 - Phase 4: Library section UI (Connectors + Templates tabs), GitHub sync service, template install flow with setup guide, fmz library commands

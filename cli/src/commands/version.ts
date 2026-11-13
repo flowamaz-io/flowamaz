@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { createClient } from "../lib/api-client";
 import { outputOpts } from "../lib/opts";
 import { printFormatted, printTable, success, error } from "../lib/output";
-import { asArray, describeError, requireWorkspace, str, unwrap } from "../lib/util";
+import { asArray, describeError, requireWorkspaceId, str, unwrap } from "../lib/util";
 
 function wfPath(ws: string, id: string): string {
   return (
@@ -16,7 +16,7 @@ function wfPath(ws: string, id: string): string {
 
 async function history(id: string, cmd: Command): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   const resp = await client.get(wfPath(ws, id) + "/history");
   if (opts.json || opts.yaml) {
@@ -39,7 +39,7 @@ async function diff(
   cmd: Command
 ): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   const resp = await client.get(wfPath(ws, id) + "/diff", {
     params: { from: fromSha, to: toSha },
@@ -54,7 +54,7 @@ async function checkout(
   outFile?: string
 ): Promise<void> {
   const opts = outputOpts(cmd);
-  const ws = requireWorkspace();
+  const ws = await requireWorkspaceId();
   const client = await createClient();
   const resp = await client.get(wfPath(ws, id) + "/at/" + encodeURIComponent(sha));
   const body = unwrap(resp.data);

@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import WorkspaceSwitcher from '@/components/layout/WorkspaceSwitcher.vue';
 import { useWorkspaceStore } from '@/stores/workspace.store';
+import { useAuthStore } from '@/stores/auth.store';
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -27,6 +28,7 @@ describe('WorkspaceSwitcher', () => {
       { id: 'w2', name: 'Marketing', slug: 'marketing', role: 'Designer' },
     ];
     store.currentWorkspaceId = 'w1';
+    useAuthStore().user = { id: 'u1', email: 'o@x.test', name: 'Owner', orgId: 'o1', orgSlug: 'org', isOrgOwner: true, isPlatformStaff: false };
   });
 
   it('shows the current workspace name in the trigger', () => {
@@ -42,6 +44,13 @@ describe('WorkspaceSwitcher', () => {
     expect(wrapper.text()).toContain('Finance Team');
     expect(wrapper.text()).toContain('Marketing');
     expect(wrapper.text()).toContain('Create workspace');
+  });
+
+  it('offers Create workspace only to the organisation owner (the API refuses others)', async () => {
+    useAuthStore().user = { id: 'u2', email: 'v@x.test', name: 'Viewer', orgId: 'o1', orgSlug: 'org', isOrgOwner: false, isPlatformStaff: false };
+    const wrapper = mountSwitcher();
+    await wrapper.find('button').trigger('click');
+    expect(wrapper.text()).not.toContain('Create workspace');
   });
 
   it('filters workspaces by the search query', async () => {
