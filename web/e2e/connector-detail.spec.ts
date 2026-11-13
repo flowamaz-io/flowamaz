@@ -9,7 +9,8 @@ test.describe('Connector detail (S56–S57)', () => {
     await page.goto('/library');
     const firstCard = page.locator('.cursor-pointer', { hasText: /installs/i }).first();
     await firstCard.click();
-    await expect(page.getByText(/installs/i)).toBeVisible();
+    await page.waitForURL(/\/library\/connectors\/.+/);
+    await expect(page.getByText(/installs/i).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: /Reviews/i })).toBeVisible();
   });
 

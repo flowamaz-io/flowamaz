@@ -52,7 +52,17 @@ function unwrap<T>(body: unknown): T {
  */
 export async function resetRateLimits(): Promise<void> {
   if (process.env.E2E_SKIP_RATELIMIT_RESET === '1') return;
-  const container = process.env.E2E_REDIS_CONTAINER || 'flowamaz-e2e-redis';
+  const script = "redis-cli --scan --pattern 'ratelimit:*' | xargs -r redis-cli del >/dev/null 2>&1 || true";
+  // Redis on this machine (CI service container, local install): run redis-cli directly.
+  if (process.env.E2E_REDIS_LOCAL === '1') {
+    try {
+      await execFileAsync('sh', ['-c', script]);
+    } catch {
+      // Non-fatal, as below.
+    }
+    return;
+  }
+  const container = process.env.E2E_REDIS_CONTAINER || 'flowamaz-dev-redis';
   try {
     // Delete all ratelimit:* keys (KEYS is fine for a tiny dev dataset).
     await execFileAsync('docker', [
@@ -184,6 +194,51 @@ export async function createTestWorkflow(
   return unwrap<{ id: string }>(await res.json()).id;
 }
 
+/** What setupReadyOrg() returns: a signed-in org with one workspace. */
+export interface ReadyOrg {
+  org: TestOrg;
+  workspace: TestWorkspace;
+}
+
+/** Creates a workflow in a ready org's workspace through the API (no UI); returns its id and name. */
+export async function createWorkflowFor(
+  ready: ReadyOrg,
+  name = `WF ${uniqueSuffix()}`,
+  yamlContent = E2E_WORKFLOW_YAML,
+): Promise<{ id: string; name: string }> {
+  const api = await request.newContext();
+  try {
+    const id = await createTestWorkflow(api, ready.org.accessToken, ready.workspace.id, name, yamlContent);
+    return { id, name };
+  } finally {
+    await api.dispose();
+  }
+}
+
+/** Publishes a workflow of a ready org through the API. */
+/** Saves new YAML for a workflow (a new commit in its history). */
+export async function updateWorkflowFor(ready: ReadyOrg, workflowId: string, yamlContent: string): Promise<void> {
+  const api = await request.newContext();
+  try {
+    const res = await api.put(`${API_URL}/api/v1/workspaces/${ready.workspace.id}/workflows/${workflowId}`, {
+      headers: { Authorization: `Bearer ${ready.org.accessToken}` },
+      data: { yamlContent },
+    });
+    if (!res.ok()) throw new Error(`updateWorkflowFor failed (${res.status()}): ${await res.text()}`);
+  } finally {
+    await api.dispose();
+  }
+}
+
+export async function publishWorkflowFor(ready: ReadyOrg, workflowId: string): Promise<void> {
+  const api = await request.newContext();
+  try {
+    await publishWorkflow(api, ready.org.accessToken, ready.workspace.id, workflowId);
+  } finally {
+    await api.dispose();
+  }
+}
+
 export async function publishWorkflow(
   api: APIRequestContext,
   token: string,
@@ -195,6 +250,16 @@ export async function publishWorkflow(
     data: {},
   });
   if (!res.ok()) throw new Error(`publishWorkflow failed (${res.status()}): ${await res.text()}`);
+}
+
+/** Triggers an instance of a published workflow for a setupReadyOrg() org; returns the instance id. */
+export async function triggerInstanceFor(ready: ReadyOrg, workflowId: string): Promise<string> {
+  const api = await request.newContext();
+  try {
+    return await triggerInstance(api, ready.org.accessToken, ready.workspace.id, workflowId);
+  } finally {
+    await api.dispose();
+  }
 }
 
 /** Triggers an instance via the API and returns its id. */
@@ -228,22 +293,55 @@ export async function seedOnboardingComplete(page: Page, orgId: string): Promise
   );
 }
 
+/** Records the per-workspace product-tour preference, as finishing the tour does. */
+export async function markTourSeen(api: APIRequestContext, token: string, workspaceId: string): Promise<void> {
+  const res = await api.put(`${API_URL}/api/v1/preferences/${encodeURIComponent(`tour_completed_${workspaceId}`)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { value: 'true' },
+  });
+  if (!res.ok()) throw new Error(`markTourSeen failed (${res.status()}): ${await res.text()}`);
+}
+
 /**
  * Full "ready to use the app" setup: registers an org, creates a workspace, re-logs-in so the
  * JWT carries the workspace membership, seeds onboarding-complete, and logs the SPA in.
  */
 export async function setupReadyOrg(
   page: Page,
-  options: { plan?: string } = {},
+  options: { plan?: string; showTour?: boolean } = {},
 ): Promise<{ org: TestOrg; workspace: TestWorkspace }> {
   const api = await request.newContext();
   try {
     const org = await createTestOrg(api, { plan: options.plan });
     const workspace = await createTestWorkspace(api, org.accessToken);
+    // The first-visit product tour covers the page with an overlay; mark it seen unless a test is about the tour.
+    if (!options.showTour) await markTourSeen(api, org.accessToken, workspace.id);
     await seedOnboardingComplete(page, org.orgId);
     await loginViaUi(page, org);
     return { org, workspace };
   } finally {
     await api.dispose();
   }
+}
+
+/**
+ * Where a workflow node is drawn on the canvas, in page coordinates. Cytoscape paints nodes on a <canvas>, so the
+ * editor exposes this on the Vite dev server only (window.__fmzCanvasNodeCenter, see SfgCanvas.vue).
+ */
+export async function canvasNodeCenter(page: Page, nodeId: string): Promise<{ x: number; y: number }> {
+  const read = () =>
+    page.evaluate((id) => {
+      const fn = (window as unknown as { __fmzCanvasNodeCenter?: (n: string) => { x: number; y: number } | null })
+        .__fmzCanvasNodeCenter;
+      return fn ? fn(id) : null;
+    }, nodeId);
+  // The editor lays the graph out (and fits it) after loading, so wait until the node stops moving.
+  let last: { x: number; y: number } | null = null;
+  for (let i = 0; i < 50; i++) {
+    const now = await read();
+    if (now && last && Math.abs(now.x - last.x) < 0.5 && Math.abs(now.y - last.y) < 0.5) return now;
+    last = now;
+    await page.waitForTimeout(200);
+  }
+  throw new Error(`canvasNodeCenter: node "${nodeId}" is not on the canvas, or never stopped moving.`);
 }

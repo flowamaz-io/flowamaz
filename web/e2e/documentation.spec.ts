@@ -11,6 +11,8 @@ test.describe('Documentation (S77–S78)', () => {
     const panel = page.getByRole('complementary', { name: 'Help panel' });
     await expect(panel).toBeVisible();
 
+    // The panel opens on the page's own article; the search sits on the article list behind it.
+    await panel.getByRole('button', { name: 'All help articles' }).click();
     await panel.getByPlaceholder(/Search help articles/i).fill('connector');
 
     // At least one connector-related article is surfaced.

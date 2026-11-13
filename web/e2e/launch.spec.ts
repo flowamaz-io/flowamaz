@@ -17,7 +17,8 @@ test.describe('Launch readiness (S79–S80)', () => {
     for (const name of ['database', 'redis', 'stripe', 'anthropic', 'resend']) {
       expect(deps).toHaveProperty(name);
     }
-    expect(['Healthy', 'Degraded']).toContain(body.status);
+    // The endpoint reports lower-case statuses (healthy | degraded | unhealthy).
+    expect(['healthy', 'degraded']).toContain(String(body.status).toLowerCase());
     await api.dispose();
   });
 

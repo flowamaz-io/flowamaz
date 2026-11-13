@@ -27,7 +27,18 @@ test.describe('Monitoring (S68–S69)', () => {
   async function setupCompletedInstance(page: Page): Promise<{ workspaceId: string; instanceId: string }> {
     const { org, workspace } = await setupReadyOrg(page);
     const api = await request.newContext();
-    const workflowId = await createTestWorkflow(api, org.accessToken, workspace.id);
+    // An HTTP step (calling the API's own health check) so the run records a step with inputs and outputs;
+    // Trigger and End steps record none.
+    const workflowId = await createTestWorkflow(api, org.accessToken, workspace.id, undefined, [
+      'workflow: { id: e2e-io, version: v1, name: E2E io }',
+      'nodes:',
+      '  - { id: start, type: Trigger }',
+      `  - { id: ping, type: Action, label: Ping, config: { method: GET, url: "${API_URL}/health" } }`,
+      '  - { id: done, type: End }',
+      'edges:',
+      '  - { id: e1, from: start, to: ping }',
+      '  - { id: e2, from: ping, to: done }',
+    ].join('\n'));
     await publishWorkflow(api, org.accessToken, workspace.id, workflowId);
     const instanceId = await triggerInstance(api, org.accessToken, workspace.id, workflowId);
     await waitForCompletion(api, org.accessToken, workspace.id, instanceId);
@@ -41,9 +52,9 @@ test.describe('Monitoring (S68–S69)', () => {
     await page.goto(`/instances/${instanceId}`);
     await page.getByRole('button', { name: 'timeline' }).click();
 
-    // Expand the first node row to reveal its I/O snapshot.
-    await page.getByText(/ms$/).first().click();
-    await expect(page.getByText(/Input|Output/i).first()).toBeVisible();
+    // Expand the HTTP step's row to reveal its I/O snapshot.
+    await page.getByRole('button', { name: /^ping\b/ }).click();
+    await expect(page.getByText('Inputs', { exact: true })).toBeVisible();
   });
 
   // S69: replaying a completed instance creates a new test instance.
@@ -51,9 +62,11 @@ test.describe('Monitoring (S68–S69)', () => {
     const { instanceId } = await setupCompletedInstance(page);
     await page.goto(`/instances/${instanceId}`);
 
-    await page.getByRole('button', { name: /Replay/i }).click();
+    await page.getByRole('button', { name: 'Replay' }).click();
+    // A dialog explains the test replay and offers the payload to override; confirm it.
+    await page.getByRole('dialog', { name: 'Replay as a test run' }).getByRole('button', { name: 'Replay' }).click();
     // The replay lands on a new instance flagged as a test run.
-    await page.waitForURL((url) => /\/instances\/.+/.test(new URL(url).pathname) && !url.includes(instanceId));
+    await page.waitForURL((url) => /\/instances\/.+/.test(url.pathname) && !url.pathname.includes(instanceId));
     await expect(page.getByText(/Test/i).first()).toBeVisible();
   });
 });

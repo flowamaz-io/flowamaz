@@ -79,11 +79,15 @@ async function save(): Promise<void> {
       class="space-y-4"
     >
       <div>
-        <label class="mb-1 block text-sm font-medium text-slate-700">
+        <label
+          for="roi-manual-minutes"
+          class="mb-1 block text-sm font-medium text-slate-700"
+        >
           How long did this process take manually?
         </label>
         <div class="flex items-center gap-2">
           <input
+            id="roi-manual-minutes"
             v-model.number="manualMinutes"
             type="number"
             min="0"
@@ -94,10 +98,14 @@ async function save(): Promise<void> {
       </div>
 
       <div>
-        <label class="mb-1 block text-sm font-medium text-slate-700">
+        <label
+          for="roi-manual-cost"
+          class="mb-1 block text-sm font-medium text-slate-700"
+        >
           Fully-loaded cost per manual run
         </label>
         <input
+          id="roi-manual-cost"
           v-model.number="manualCost"
           type="number"
           min="0"
@@ -107,10 +115,14 @@ async function save(): Promise<void> {
       </div>
 
       <div>
-        <label class="mb-1 block text-sm font-medium text-slate-700">
+        <label
+          for="roi-automation-cost"
+          class="mb-1 block text-sm font-medium text-slate-700"
+        >
           Automated cost per run (connectors + AI + platform)
         </label>
         <input
+          id="roi-automation-cost"
           v-model.number="automationCost"
           type="number"
           min="0"
@@ -120,10 +132,14 @@ async function save(): Promise<void> {
       </div>
 
       <div>
-        <label class="mb-1 block text-sm font-medium text-slate-700">
+        <label
+          for="roi-currency"
+          class="mb-1 block text-sm font-medium text-slate-700"
+        >
           Currency
         </label>
         <select
+          id="roi-currency"
           v-model="currency"
           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none"
         >

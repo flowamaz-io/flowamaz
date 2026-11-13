@@ -61,10 +61,10 @@ fmz workflow deploy 4f8c... --environment staging --test
 # Trigger and wait
 fmz instance trigger 4f8c... --payload '{"orderId":"123"}' --wait
 
-# Author a connector
-fmz library connector init my-connector
-fmz library connector validate my-connector/connector.yaml
-fmz library connector publish my-connector/connector.yaml
+# Author a connector (`fmz library connector …` works too; same for `template`)
+fmz connector init my-connector
+fmz connector validate my-connector/connector.yaml
+fmz connector publish my-connector/connector.yaml
 ```
 
 ## Development

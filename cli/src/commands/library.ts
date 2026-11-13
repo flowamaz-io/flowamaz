@@ -318,4 +318,8 @@ export function registerLibraryCommands(program: Command): void {
 
   registerAuthoringGroup(lib, "connector");
   registerAuthoringGroup(lib, "template");
+  // FUNCTIONAL.md §23 documents the authoring commands at the top level (`fmz connector validate …`);
+  // both spellings work.
+  registerAuthoringGroup(program, "connector");
+  registerAuthoringGroup(program, "template");
 }

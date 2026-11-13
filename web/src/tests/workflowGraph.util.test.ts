@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseWorkflowGraph } from '@/utils/workflowGraph.util';
+import { canvasNodeType, parseWorkflowGraph } from '@/utils/workflowGraph.util';
 
 describe('parseWorkflowGraph', () => {
   it('reads flow-style edges, quoted labels, comments and router branches (spec shape)', () => {
@@ -69,7 +69,20 @@ edges:
 `;
     const graph = parseWorkflowGraph(yaml)!;
     expect(graph.nodes).toHaveLength(2);
+    expect(graph.nodes.map((n) => n.type)).toEqual(['trigger', 'end']);
     expect(graph.edges).toEqual([{ id: 'e1', from: 'start', to: 'done' }]);
+  });
+
+  it('maps the engine spelling of node types to the canvas types', () => {
+    expect(canvasNodeType('HumanGate')).toBe('human-gate');
+    expect(canvasNodeType('human_gate')).toBe('human-gate');
+    expect(canvasNodeType('TryCatch')).toBe('try-catch');
+    expect(canvasNodeType('SubWorkflow')).toBe('sub-workflow');
+    expect(canvasNodeType('ForEach')).toBe('foreach');
+    expect(canvasNodeType('human-gate')).toBe('human-gate');
+    // Types the canvas has no shape for are kept as written; a missing type is an action.
+    expect(canvasNodeType('IfElse')).toBe('IfElse');
+    expect(canvasNodeType(undefined)).toBe('action');
   });
 
   it('returns null for invalid YAML or a document without nodes', () => {

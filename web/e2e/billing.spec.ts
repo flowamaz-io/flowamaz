@@ -13,8 +13,8 @@ test.describe('Billing (S61–S62)', () => {
     await page.goto('/pricing');
     await expect(page.getByRole('heading', { name: /Plans|Pricing/ })).toBeVisible();
     // The four standard plans are listed.
-    await expect(page.getByText('Pro', { exact: false })).toBeVisible();
-    await expect(page.getByText('Enterprise', { exact: false })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Pro', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Enterprise', exact: true })).toBeVisible();
   });
 
   // S62: clicking Upgrade kicks off the Stripe Checkout hand-off (or the not-configured message).
@@ -22,7 +22,10 @@ test.describe('Billing (S61–S62)', () => {
     await setupReadyOrg(page);
     await page.goto('/settings/billing');
 
-    const upgrade = page.getByRole('button', { name: /Upgrade/i }).first();
+    // Billing settings' Upgrade opens the plan grid; the Pro card's Upgrade starts checkout.
+    await page.getByRole('button', { name: /Upgrade/i }).first().click();
+    await page.waitForURL('**/pricing');
+    const upgrade = page.getByRole('button', { name: 'Upgrade', exact: true });
     await expect(upgrade).toBeVisible();
 
     // The click either navigates to a Stripe Checkout URL or shows the not-configured notice.
@@ -31,7 +34,7 @@ test.describe('Billing (S61–S62)', () => {
     const navigated = await navigation;
 
     if (!navigated) {
-      await expect(page.getByText(/billing is not configured|not configured/i)).toBeVisible();
+      await expect(page.getByText(/Billing is not configured on this deployment/)).toBeVisible();
     } else {
       expect(page.url()).toContain('checkout.stripe.com');
     }

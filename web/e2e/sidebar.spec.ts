@@ -9,10 +9,7 @@ test.describe('Dark sidebar (S44–S46)', () => {
     await page.goto('/');
 
     // The switcher lives in the sidebar header; clicking it reveals the workspace list + search.
-    await page.getByTestId('workspace-switcher').click().catch(async () => {
-      // Fallback if no test-id: click the current workspace name region.
-      await page.locator('aside').getByText(/workspace/i).first().click();
-    });
+    await page.getByRole('button', { name: /^Workspace: / }).click();
     await expect(page.getByPlaceholder(/Search/i)).toBeVisible();
   });
 

@@ -3,6 +3,23 @@ import type { CanvasEdge, CanvasNode } from '@/types/canvas.types';
 
 type Dict = Record<string, unknown>;
 
+/**
+ * Canvas node types keyed by the type with case, dashes and underscores removed, so YAML written in the engine's
+ * spelling (`HumanGate`, `TryCatch`, `human_gate`) loads as the canvas type (`human-gate`, `try-catch`).
+ */
+const CANVAS_TYPES: Record<string, CanvasNode['type']> = {
+  trigger: 'trigger', action: 'action', ai: 'ai', humangate: 'human-gate', router: 'router', end: 'end',
+  foreach: 'foreach', parallel: 'parallel', trycatch: 'try-catch', wait: 'wait', subworkflow: 'sub-workflow',
+  annotation: 'annotation',
+};
+
+/** The canvas type for a YAML node type; a type the canvas has no shape for is kept as written. */
+export function canvasNodeType(raw: string | undefined): CanvasNode['type'] {
+  const value = raw?.trim();
+  if (!value) return 'action';
+  return CANVAS_TYPES[value.toLowerCase().replace(/[-_\s]/g, '')] ?? (value as CanvasNode['type']);
+}
+
 const isDict = (v: unknown): v is Dict => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | undefined =>
   typeof v === 'string' ? v : typeof v === 'number' || typeof v === 'boolean' ? String(v) : undefined;
@@ -35,7 +52,7 @@ export function parseWorkflowGraph(yaml: string): { nodes: CanvasNode[]; edges: 
       : undefined;
     nodes.push({
       id,
-      type: (str(raw.type)?.trim() || 'action') as CanvasNode['type'],
+      type: canvasNodeType(str(raw.type)),
       label: str(raw.label)?.trim() || id,
       config: isDict(raw.config) ? raw.config : {},
       ...(typeof raw.content === 'string' ? { content: raw.content } : {}),

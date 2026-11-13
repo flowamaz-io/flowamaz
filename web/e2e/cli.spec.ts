@@ -1,14 +1,16 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 
 // fmz CLI E2E (prompt 05-08, S47–S48). Exercises the CLI's local YAML validation exit codes via a
 // subprocess. The built CLI (cli/dist/index.js) must exist — the nightly e2e job runs `npm run build
 // --prefix cli` first. Workflow validation that hits the API is covered by backend integration tests;
 // here we assert the CLI's exit-code contract on local connector-manifest validation (no backend).
-const CLI = resolve(__dirname, '../../cli/dist/index.js');
+// The web package is an ES module, so there's no __dirname.
+const CLI = resolve(dirname(fileURLToPath(import.meta.url)), '../../cli/dist/index.js');
 
 function runCli(args: string[]): { code: number; output: string } {
   try {

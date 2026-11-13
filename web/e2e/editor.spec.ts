@@ -26,10 +26,9 @@ test.describe('Workflow Editor (S26–S30)', () => {
   // S28: canvas page loads for an existing workflow editor route.
   test('S28: workflow editor view loads canvas and YAML panels', async ({ page, request }) => {
     const { org, workspace } = await setupReadyOrg(page);
-    const api = await request.newContext();
+    const api = request; // the test's own API context (Playwright disposes it)
     const { createTestWorkflow } = await import('./fixtures/test-factories');
     const id = await createTestWorkflow(api, org.accessToken, workspace.id, 'Editor Test');
-    await api.dispose();
 
     await page.goto(`/workflows/${id}/edit`);
     // Wait for the toolbar to confirm editor loaded
@@ -39,29 +38,29 @@ test.describe('Workflow Editor (S26–S30)', () => {
   // S29: Ctrl+K opens the Co-pilot panel.
   test('S29: Ctrl+K opens Co-pilot panel', async ({ page, request }) => {
     const { org, workspace } = await setupReadyOrg(page);
-    const api = await request.newContext();
+    const api = request; // the test's own API context (Playwright disposes it)
     const { createTestWorkflow } = await import('./fixtures/test-factories');
     const id = await createTestWorkflow(api, org.accessToken, workspace.id, 'Copilot Test');
-    await api.dispose();
 
     await page.goto(`/workflows/${id}/edit`);
     await page.getByText('Edit workflow').waitFor();
+    const toggle = page.locator('[data-test="copilot-toggle"]');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await page.keyboard.press('Control+k');
-    await expect(page.getByText('✦ Co-pilot')).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 
   // S30: Help button opens the help panel.
   test('S30: Help button opens help panel in editor', async ({ page, request }) => {
     const { org, workspace } = await setupReadyOrg(page);
-    const api = await request.newContext();
+    const api = request; // the test's own API context (Playwright disposes it)
     const { createTestWorkflow } = await import('./fixtures/test-factories');
     const id = await createTestWorkflow(api, org.accessToken, workspace.id, 'Help Test');
-    await api.dispose();
 
     await page.goto(`/workflows/${id}/edit`);
     await page.getByText('Edit workflow').waitFor();
-    await page.getByRole('button', { name: 'Help' }).click();
-    // Help panel or article should be visible
-    await expect(page.getByText(/canvas/i)).toBeVisible({ timeout: 5_000 });
+    // The editor toolbar's Help (the sidebar has its own "Open help").
+    await page.getByRole('button', { name: 'Help', exact: true }).click();
+    await expect(page.getByRole('complementary', { name: 'Help panel' })).toBeVisible();
   });
 });

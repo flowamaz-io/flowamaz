@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createTestWorkflow, setupReadyOrg, uniqueSuffix } from './fixtures/test-factories';
+import { createWorkflowFor, publishWorkflowFor, setupReadyOrg, triggerInstanceFor, uniqueSuffix } from './fixtures/test-factories';
 
 // ROI analytics E2E (prompt 05-08, S42–S43). Runs against the full stack in the nightly e2e job.
 test.describe('ROI Analytics (S42–S43)', () => {
@@ -16,7 +16,10 @@ test.describe('ROI Analytics (S42–S43)', () => {
   // S43: Configure ROI for a workflow → numbers appear in the table.
   test('S43: configuring ROI surfaces the workflow in the table', async ({ page }) => {
     const org = await setupReadyOrg(page);
-    const wf = await createTestWorkflow(page, org, `roi-${uniqueSuffix()}`);
+    const wf = await createWorkflowFor(org, `roi-${uniqueSuffix()}`);
+    // The table lists workflows that ran in the period, so give it one run.
+    await publishWorkflowFor(org, wf.id);
+    await triggerInstanceFor(org, wf.id);
 
     await page.goto('/analytics');
     // The workflow row exposes a Configure action.
@@ -24,11 +27,12 @@ test.describe('ROI Analytics (S42–S43)', () => {
     await row.getByRole('button', { name: /Configure|Edit/ }).click();
 
     await page.getByLabel(/How long did this process take manually/i).fill('30');
-    await page.locator('input[type="number"]').nth(1).fill('20');
-    await page.locator('input[type="number"]').nth(2).fill('2');
+    await page.getByLabel(/Fully-loaded cost per manual run/i).fill('20');
+    await page.getByLabel(/Automated cost per run/i).fill('2');
     await page.getByRole('button', { name: 'Save baseline' }).click();
 
-    await expect(page.getByText('Configure ROI')).toBeHidden();
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(row.getByRole('button', { name: 'Edit' })).toBeVisible();
     await expect(row).toBeVisible();
   });
 });

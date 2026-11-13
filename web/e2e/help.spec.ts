@@ -19,6 +19,8 @@ test.describe('Help (S15–S17)', () => {
     const panel = page.getByRole('complementary', { name: 'Help panel' });
     await expect(panel).toBeVisible();
 
+    // The panel opens on the page's own article; the search sits on the article list behind it.
+    await panel.getByRole('button', { name: 'All help articles' }).click();
     await panel.getByPlaceholder(/Search help articles/i).fill('invite');
 
     // First result is the invite-team-members article.

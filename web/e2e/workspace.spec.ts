@@ -14,8 +14,9 @@ test.describe('Workspace (S7–S11)', () => {
     await expect(checklist.getByText('Connect a system')).toBeVisible();
     await expect(checklist.getByText('Trigger your first run')).toBeVisible();
     await expect(checklist.getByText('Invite a team member')).toBeVisible();
-    // Only "Invite a team member" is actionable in Phase 1 (a "Start →" link).
-    await expect(checklist.getByRole('link', { name: /Start/ })).toHaveCount(1);
+    // A new org has done none of them, so each is a "Start →" link to where it is done.
+    await expect(checklist.getByRole('link', { name: /Start/ })).toHaveCount(4);
+    await expect(checklist.getByRole('link', { name: /Invite a team member/ })).toHaveAttribute('href', '/settings/members');
   });
 
   // S8: AI model settings — dropdowns populated; F1 Co-pilot shows Anthropic / claude-haiku-4-5.
@@ -233,8 +234,8 @@ test.describe('Multi-workspace (S73–S74)', () => {
     await page.getByRole('button', { name: /Workspace:|Select workspace/ }).click();
     await page.getByPlaceholder('Search workspaces…').fill(`Alpha-${suffix}`);
 
-    await expect(page.getByText(`Alpha-${suffix}`)).toBeVisible();
-    await expect(page.getByText(`Beta-${suffix}`)).toHaveCount(0);
+    await expect(page.getByText(`Alpha-${suffix}`, { exact: true })).toBeVisible();
+    await expect(page.getByText(`Beta-${suffix}`, { exact: true })).toHaveCount(0);
   });
 
   // S74: Creating a workspace from the switcher makes it the active workspace.
