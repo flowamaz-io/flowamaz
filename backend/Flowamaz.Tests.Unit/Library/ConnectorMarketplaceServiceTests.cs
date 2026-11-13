@@ -74,7 +74,7 @@ public class ConnectorMarketplaceServiceTests
     {
         var db = NewDb();
         var pr = new Mock<IConnectorSubmissionPrService>();
-        pr.Setup(p => p.CreatePullRequestAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        pr.Setup(p => p.CreatePullRequestAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("https://github.com/flowamaz-io/connectors/pull/42");
         var service = NewService(db, pr);
 
@@ -82,7 +82,7 @@ public class ConnectorMarketplaceServiceTests
 
         result.GithubPrUrl.Should().Be("https://github.com/flowamaz-io/connectors/pull/42");
         result.Status.Should().Be("pending");
-        pr.Verify(p => p.CreatePullRequestAsync("My Connector", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        pr.Verify(p => p.CreatePullRequestAsync("My Connector", "my-connector", It.Is<string>(pub => pub.StartsWith("org-")), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         (await db.ConnectorSubmissions.CountAsync()).Should().Be(1);
     }
 
@@ -96,7 +96,7 @@ public class ConnectorMarketplaceServiceTests
         var act = () => service.SubmitConnectorAsync(Guid.NewGuid(), "Bad", "key: value:\n  - broken: : :");
 
         await act.Should().ThrowAsync<InvalidOperationException>();
-        pr.Verify(p => p.CreatePullRequestAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        pr.Verify(p => p.CreatePullRequestAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

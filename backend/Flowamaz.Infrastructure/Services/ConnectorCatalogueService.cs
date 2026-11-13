@@ -46,6 +46,49 @@ public sealed class ConnectorCatalogueService : IConnectorCatalogueService
         }
     }
 
+    public async Task<IReadOnlyList<ConnectorDefinition>> GetVisibleAsync(Guid workspaceId, CancellationToken ct = default)
+    {
+        _logger.LogDebug("ConnectorCatalogueService.GetVisibleAsync enter workspace={WorkspaceId}", workspaceId);
+        try
+        {
+            var definitions = await _db.ConnectorDefinitions.AsNoTracking()
+                .Where(c => c.WorkspaceId == null || c.WorkspaceId == workspaceId)
+                .OrderBy(c => c.DisplayName).ThenByDescending(c => c.MajorVersion)
+                .ToListAsync(ct);
+            _logger.LogInformation("ConnectorCatalogueService.GetVisibleAsync exit workspace={WorkspaceId} count={Count}", workspaceId, definitions.Count);
+            return definitions;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ConnectorCatalogueService.GetVisibleAsync error workspace={WorkspaceId}", workspaceId);
+            throw;
+        }
+    }
+
+    public async Task<ConnectorDefinition?> ResolveForWorkspaceAsync(Guid workspaceId, string connectorId, CancellationToken ct = default)
+    {
+        _logger.LogDebug("ConnectorCatalogueService.ResolveForWorkspaceAsync enter workspace={WorkspaceId} connector={ConnectorId}", workspaceId, connectorId);
+        try
+        {
+            var installed = await _db.WorkspaceConnectors.AsNoTracking()
+                .Where(wc => wc.WorkspaceId == workspaceId && wc.ConnectorDefinition!.ConnectorId == connectorId)
+                .Select(wc => wc.ConnectorDefinition)
+                .FirstOrDefaultAsync(ct);
+            var definition = installed ?? await _db.ConnectorDefinitions.AsNoTracking()
+                .Where(c => c.ConnectorId == connectorId && (c.WorkspaceId == null || c.WorkspaceId == workspaceId))
+                .OrderByDescending(c => c.WorkspaceId == workspaceId).ThenByDescending(c => c.IsLatestMajor).ThenByDescending(c => c.MajorVersion)
+                .FirstOrDefaultAsync(ct);
+            _logger.LogInformation("ConnectorCatalogueService.ResolveForWorkspaceAsync exit connector={ConnectorId} installed={Installed} version={Version}",
+                connectorId, installed is not null, definition?.Version);
+            return definition;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ConnectorCatalogueService.ResolveForWorkspaceAsync error connector={ConnectorId}", connectorId);
+            throw;
+        }
+    }
+
     public async Task<ConnectorDefinition?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         _logger.LogDebug("ConnectorCatalogueService.GetByIdAsync enter id={Id}", id);
@@ -112,7 +155,8 @@ public sealed class ConnectorCatalogueService : IConnectorCatalogueService
                 CredentialId = credentialId,
                 IsEnabled = true,
                 InstalledAt = DateTime.UtcNow,
-                InstalledBy = installedBy
+                InstalledBy = installedBy,
+                InstalledVersion = definition.Version,
             };
 
             await _db.WorkspaceConnectors.AddAsync(connector, ct);

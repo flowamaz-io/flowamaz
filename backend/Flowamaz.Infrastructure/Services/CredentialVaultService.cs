@@ -60,7 +60,9 @@ public sealed class CredentialVaultService : ICredentialVaultService
         {
             var connectorDef = await _db.ConnectorDefinitions
                 .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.ConnectorId == connectorId && !c.IsDeleted, ct)
+                .Where(c => c.ConnectorId == connectorId && (c.WorkspaceId == null || c.WorkspaceId == workspaceId))
+                .OrderByDescending(c => c.IsLatestMajor)
+                .FirstOrDefaultAsync(ct)
                 ?? throw new InvalidOperationException(
                     $"Connector '{connectorId}' not found. Ensure the connector is installed before storing credentials.");
 

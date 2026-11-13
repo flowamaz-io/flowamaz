@@ -230,6 +230,11 @@ public static class DependencyInjection
                 sp.GetRequiredService<IConfiguration>().GetValue<bool>(Services.Sso.OidcClient.AllowInsecureConfigKey)));
         services.AddScoped<IOidcClient, Services.Sso.OidcClient>();
         services.AddScoped<IConnectorCatalogueService, ConnectorCatalogueService>();
+        // Library GitHub sync + versioning (FUNCTIONAL.md §23.7–23.8) and the workspace Library API (§23.5).
+        services.AddHttpClient(Services.Library.GitHubLibrarySource.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddScoped<Core.Interfaces.Library.ILibrarySource, Services.Library.GitHubLibrarySource>();
+        services.AddScoped<Core.Interfaces.Library.ILibrarySyncService, Services.Library.LibrarySyncService>();
+        services.AddScoped<Core.Interfaces.Library.ILibraryService, Services.Library.LibraryService>();
         services.AddHttpClient(ConnectorSandbox.HttpClientName).ConfigurePrimaryHttpMessageHandler(Flowamaz.Application.DependencyInjection.GuardedHandler);
         services.AddScoped<IConnectorSandbox, ConnectorSandbox>();
     }

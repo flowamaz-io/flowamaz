@@ -43,7 +43,14 @@ public sealed class ConnectorsController : ControllerBase
     [ResponseCache(Duration = 3600, VaryByHeader = "Authorization")]
     public async Task<IActionResult> List(Guid workspaceId, CancellationToken cancellationToken)
     {
-        var connectors = await _catalogue.GetAllAsync(cancellationToken);
+        // Platform-wide and this workspace's own connectors only; one row per connector (the latest major,
+        // or the major this workspace is pinned to).
+        var visible = await _catalogue.GetVisibleAsync(workspaceId, cancellationToken);
+        var installed = (await _catalogue.GetInstalledAsync(workspaceId, cancellationToken)).Select(i => i.ConnectorDefinitionId).ToHashSet();
+        var connectors = visible
+            .GroupBy(c => (c.PublisherId, c.ConnectorId))
+            .Select(g => g.FirstOrDefault(c => installed.Contains(c.Id)) ?? g.OrderByDescending(c => c.IsLatestMajor).ThenByDescending(c => c.MajorVersion).First())
+            .ToList();
         return Ok(connectors);
     }
 
@@ -52,8 +59,7 @@ public sealed class ConnectorsController : ControllerBase
     [RequireWorkspaceRole(WorkspaceRole.Viewer)]
     public async Task<IActionResult> GetById(Guid workspaceId, string connectorId, CancellationToken cancellationToken)
     {
-        var all = await _catalogue.GetAllAsync(cancellationToken);
-        var connector = all.FirstOrDefault(c => c.ConnectorId == connectorId);
+        var connector = await _catalogue.ResolveForWorkspaceAsync(workspaceId, connectorId, cancellationToken);
         return connector is null ? NotFound() : Ok(connector);
     }
 
@@ -66,8 +72,7 @@ public sealed class ConnectorsController : ControllerBase
         [FromBody] InstallConnectorRequest request,
         CancellationToken cancellationToken)
     {
-        var all = await _catalogue.GetAllAsync(cancellationToken);
-        var def = all.FirstOrDefault(c => c.ConnectorId == connectorId);
+        var def = await _catalogue.ResolveForWorkspaceAsync(workspaceId, connectorId, cancellationToken);
         if (def is null) return NotFound($"Connector '{connectorId}' not found in catalogue.");
 
         var installed = await _catalogue.InstallAsync(
@@ -135,8 +140,7 @@ public sealed class ConnectorsController : ControllerBase
         }
         else
         {
-            var all = await _catalogue.GetAllAsync(cancellationToken);
-            var def = all.FirstOrDefault(c => c.ConnectorId == connectorId);
+            var def = await _catalogue.ResolveForWorkspaceAsync(workspaceId, connectorId, cancellationToken);
             if (def is null)
                 return NotFound($"Connector '{connectorId}' not found in catalogue.");
 

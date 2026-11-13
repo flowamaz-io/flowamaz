@@ -253,6 +253,14 @@ if (backgroundWorkersEnabled)
         q.AddJob<WorkspaceGitInitialisationJob>(gitInitKey);
         q.AddTrigger(t => t.ForJob(gitInitKey).StartNow());
 
+        // Library GitHub sync (FUNCTIONAL.md §23.7): every 15 minutes, first run a minute after start; the push
+        // webhook triggers it sooner. A repository that isn't configured is skipped.
+        var librarySyncKey = new JobKey(nameof(LibrarySyncJob));
+        q.AddJob<LibrarySyncJob>(librarySyncKey);
+        q.AddTrigger(t => t.ForJob(librarySyncKey)
+            .StartAt(DateBuilder.FutureDate(60, IntervalUnit.Second))
+            .WithSimpleSchedule(s => s.WithIntervalInMinutes(15).RepeatForever()));
+
         // Audit-log retention (prompt 07-02) — daily at 03:30 UTC. Deletes events past the plan window.
         var auditRetentionKey = new JobKey(nameof(AuditRetentionJob));
         q.AddJob<AuditRetentionJob>(auditRetentionKey);

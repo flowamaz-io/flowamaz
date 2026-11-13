@@ -58,4 +58,28 @@ public class ConnectorDefinition : AuditableEntity
 
     /// <summary>True for the seeded official connectors; false for community submissions.</summary>
     public bool IsOfficial { get; set; }
+
+    // ── Versioning (FUNCTIONAL.md §23.8) ────────────────────────────────────────────
+    // One row per major version: a workspace is pinned to the row it installed (publisher/connector@major).
+    // Minor and patch releases update that row in place (auto-applied, with a changelog notice); a new major
+    // is a new row the workspace admin upgrades to explicitly.
+
+    /// <summary>The major part of <see cref="Version"/>; the pin a workspace installs against.</summary>
+    public int MajorVersion { get; set; } = 1;
+
+    /// <summary>True for the highest major of this publisher/connector; only that row is offered to new installs.</summary>
+    public bool IsLatestMajor { get; set; } = true;
+
+    /// <summary>Release notes per version, newest first, as jsonb (<c>ChangelogEntry[]</c>).</summary>
+    public string ChangelogJson { get; set; } = "[]";
+
+    /// <summary>When a 90-day deprecation notice started (manifest <c>deprecated</c>, or removed from the Library repo).</summary>
+    public DateTime? DeprecatedAt { get; set; }
+
+    public string? DeprecationNote { get; set; }
+
+    /// <summary>Deprecated connectors leave the install list 90 days after the notice; existing installs keep running.</summary>
+    public DateTime? RemovalAt => DeprecatedAt?.AddDays(DeprecationNoticeDays);
+
+    public const int DeprecationNoticeDays = 90;
 }

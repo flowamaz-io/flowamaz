@@ -48,6 +48,10 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
     /// signature verification, which is never reached by any other test.
     /// </summary>
     public const string StripeWebhookSecret = "whsec_integration_test_secret_phase7";
+    public const string LibraryWebhookSecret = "integration-test-library-webhook-secret";
+
+    /// <summary>The Library repositories as the sync sees them; tests set the snapshot they need.</summary>
+    public FakeLibrarySource Library { get; } = new();
 
     public IServiceProvider Services => _factory.Services;
 
@@ -79,6 +83,8 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
         // drive the real EventUtility.ConstructEvent verification. No SecretKey is set, so no Stripe
         // network call is ever made (CreateCheckoutSession degrades to BillingException.NotConfigured).
         Environment.SetEnvironmentVariable("STRIPE_WEBHOOK_SECRET", StripeWebhookSecret);
+        // Library sync reads FakeLibrarySource (set per test) instead of GitHub; the webhook checks this secret.
+        Environment.SetEnvironmentVariable("Library__WebhookSecret", LibraryWebhookSecret);
 
         if (ExternalPostgres is null)
         {
@@ -109,6 +115,9 @@ public sealed class IntegrationApiFixture : IAsyncLifetime
                 // provider endpoints — returns a deterministic provider-shaped token response.
                 services.AddHttpClient(OAuthService.HttpClientName)
                     .ConfigurePrimaryHttpMessageHandler(() => new StubOAuthHandler());
+
+                services.RemoveAll<Flowamaz.Core.Interfaces.Library.ILibrarySource>();
+                services.AddSingleton<Flowamaz.Core.Interfaces.Library.ILibrarySource>(Library);
             });
         });
 

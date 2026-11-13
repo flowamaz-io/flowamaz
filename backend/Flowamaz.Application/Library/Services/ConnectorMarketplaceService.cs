@@ -25,13 +25,16 @@ public sealed class ConnectorMarketplaceService
     private readonly IConnectorSubmissionPrService _prService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ConnectorMarketplaceService> _logger;
+    private readonly IOrganisationRepository? _organisations;
 
     public ConnectorMarketplaceService(
         IConnectorMarketplaceRepository repo,
         IConnectorSubmissionPrService prService,
         IUnitOfWork unitOfWork,
-        ILogger<ConnectorMarketplaceService> logger)
+        ILogger<ConnectorMarketplaceService> logger,
+        IOrganisationRepository? organisations = null)
     {
+        _organisations = organisations;
         _repo = repo;
         _prService = prService;
         _unitOfWork = unitOfWork;
@@ -98,7 +101,21 @@ public sealed class ConnectorMarketplaceService
             throw new InvalidOperationException("A connector name is required.");
         ValidateManifest(manifestYaml);
 
-        var prUrl = await _prService.CreatePullRequestAsync(connectorName, manifestYaml, orgId.ToString(), ct);
+        // The publisher is the submitting organisation (its slug), never what the manifest claims; the folder is
+        // the manifest's id. Checked with the same rules the Library sync applies after the PR merges.
+        var org = _organisations is null ? null : await _organisations.GetByIdAsync(orgId, ct);
+        var publisher = org?.Slug is { Length: > 0 } orgSlug ? orgSlug : $"org-{orgId.ToString("N")[..8]}";
+        var connectorId = LibraryManifestParser.DeclaredId(manifestYaml) ?? Slugify(connectorName);
+        try
+        {
+            LibraryManifestParser.ParseConnector(new LibraryFolder($"{publisher}/{connectorId}", manifestYaml));
+        }
+        catch (LibraryManifestException ex)
+        {
+            throw new InvalidOperationException(ex.Message + " Fix the manifest and submit again.");
+        }
+
+        var prUrl = await _prService.CreatePullRequestAsync(connectorName, connectorId, publisher, manifestYaml, orgId.ToString(), ct);
 
         var submission = new ConnectorSubmission
         {
@@ -129,4 +146,7 @@ public sealed class ConnectorMarketplaceService
             throw new InvalidOperationException($"The connector manifest is not valid YAML: {ex.Message}");
         }
     }
+
+    private static string Slugify(string name) =>
+        System.Text.RegularExpressions.Regex.Replace(name.Trim().ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-') is { Length: > 0 } slug ? slug : "connector";
 }

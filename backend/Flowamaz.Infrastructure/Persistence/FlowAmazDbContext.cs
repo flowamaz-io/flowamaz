@@ -84,6 +84,7 @@ public class FlowAmazDbContext : DbContext
     public DbSet<ConnectorRating> ConnectorRatings => Set<ConnectorRating>();
     public DbSet<ConnectorSubmission> ConnectorSubmissions => Set<ConnectorSubmission>();
     public DbSet<WorkflowTemplate> WorkflowTemplates => Set<WorkflowTemplate>();
+    public DbSet<LibrarySyncState> LibrarySyncStates => Set<LibrarySyncState>();
 
     public DbSet<Flowamaz.Core.Entities.Economy.PublisherAccount> PublisherAccounts => Set<Flowamaz.Core.Entities.Economy.PublisherAccount>();
     public DbSet<Flowamaz.Core.Entities.Economy.TemplatePurchase> TemplatePurchases => Set<Flowamaz.Core.Entities.Economy.TemplatePurchase>();

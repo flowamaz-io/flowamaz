@@ -44,7 +44,14 @@ public sealed class ConnectorDefinitionConfiguration : IEntityTypeConfiguration<
 
         builder.Property(c => c.AverageRating).HasColumnType("numeric(3,2)");
 
+        // MajorVersion / IsLatestMajor: no database default, so 0 and false are stored as given (a 0.x connector,
+        // an older major). Existing rows get 1 / true from the migration.
+        builder.Property(c => c.ChangelogJson).HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb").IsRequired();
+        builder.Property(c => c.DeprecationNote).HasMaxLength(1024);
+        builder.Ignore(c => c.RemovalAt);
+
         builder.HasIndex(c => c.ConnectorId);
+        builder.HasIndex(c => new { c.PublisherId, c.ConnectorId, c.MajorVersion });
         builder.HasIndex(c => c.Category);
         builder.HasIndex(c => c.Tier);
 
