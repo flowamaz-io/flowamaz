@@ -2,6 +2,18 @@ import axios from "axios";
 import { readConfig } from "./config";
 
 /**
+ * The server's message when a request failed only because there is nothing to do (e.g. 409 "already
+ * installed"), so commands can report it and exit 0 instead of failing a script that re-runs them.
+ */
+export function noOpMessage(err: unknown, codes: string[]): string | null {
+  if (!axios.isAxiosError(err) || err.response?.status !== 409) return null;
+  const data = err.response.data as Record<string, unknown> | undefined;
+  const code = data && typeof data.code === "string" ? data.code : "";
+  if (!codes.includes(code)) return null;
+  return typeof data?.message === "string" ? data.message : "Nothing to do.";
+}
+
+/**
  * Turn any thrown value (axios error, Error, unknown) into a readable,
  * actionable message. Never throws.
  */

@@ -38,7 +38,7 @@ public sealed class CliAuthController : ControllerBase
     public async Task<IActionResult> Approve([FromBody] CliApproveRequest request, CancellationToken cancellationToken)
     {
         if (!_currentUser.IsAuthenticated)
-            return Unauthorized(new { message = "Sign in to approve a CLI login. Open the link from `fmz login` while logged in to Flowamaz." });
+            return Unauthorized(new { message = "Sign in to approve a CLI login. Open the link that `fmz auth login` printed while signed in to Flowamaz." });
 
         var header = Request.Headers.Authorization.ToString();
         const string bearer = "Bearer ";
@@ -49,7 +49,7 @@ public sealed class CliAuthController : ControllerBase
         // The CLI token mirrors the approving user's access-token lifetime (15 minutes).
         var approved = await _cliAuth.ApproveAsync(request.UserCode, token, DateTime.UtcNow.AddMinutes(15), cancellationToken);
         if (!approved)
-            return BadRequest(new { message = "That code is invalid or has expired. Run `fmz login` again to get a fresh code." });
+            return BadRequest(new { message = "That code is invalid or has expired. Run `fmz auth login` again to get a fresh code." });
 
         return Ok(new { status = "approved" });
     }

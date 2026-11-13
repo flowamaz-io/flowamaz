@@ -19,6 +19,9 @@ public sealed class LibraryException : AppException
             ? $"{name} is already installed here ({pin}). A newer major is available: run `fmz library update` with the connector id, or upgrade it from Library → Connectors."
             : $"{name} is already installed here ({pin}), and it's the latest version.", 409);
 
+    public static LibraryException Disabled(string name) => new("LIBRARY_CONNECTOR_DISABLED",
+        $"{name} is switched off on this platform, so it can't be installed. Ask platform support to enable it, or pick another connector.", 409);
+
     public static LibraryException UpToDate(string name, string pin) => new("LIBRARY_CONNECTOR_UP_TO_DATE",
         $"{name} is already on the latest major ({pin}). Minor and patch releases are applied automatically.", 409);
 

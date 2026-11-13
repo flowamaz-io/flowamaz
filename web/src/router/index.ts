@@ -29,6 +29,13 @@ const routes: RouteRecordRaw[] = [
     meta: { guestOnly: true },
   },
   {
+    // `fmz auth login` opens this to approve the terminal's device code.
+    path: '/cli-auth',
+    name: 'cli-auth',
+    component: () => import('@/views/cli/CliAuthView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/onboarding',
     name: 'onboarding',
     component: () => import('@/views/onboarding/OnboardingView.vue'),

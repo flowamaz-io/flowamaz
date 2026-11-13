@@ -145,7 +145,7 @@ public class ConnectorCatalogueServiceTests
     }
 
     [Fact]
-    public async Task InstallAsync_AlreadyInstalled_ThrowsInvalidOperationException()
+    public async Task InstallAsync_AlreadyInstalled_Throws409WithThePin()
     {
         // Arrange
         var db = NewDb();
@@ -167,8 +167,9 @@ public class ConnectorCatalogueServiceTests
         var act = async () => await service.InstallAsync(workspaceId, definition.Id, null, userId);
 
         // Assert
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*already installed*");
+        var thrown = await act.Should().ThrowAsync<Flowamaz.Core.Exceptions.LibraryException>()
+            .WithMessage("*already installed here (*/slack@1)*");
+        thrown.Which.HttpStatusCode.Should().Be(409);
     }
 
     [Fact]
