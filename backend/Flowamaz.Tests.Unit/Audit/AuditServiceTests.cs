@@ -62,11 +62,7 @@ public class AuditServiceTests
             Metadata = new { foo = "bar" },
         });
 
-        await Task.Delay(1500);
-
-        using var verifyScope = scopeFactory.CreateScope();
-        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
-        var stored = await verifyDb.AuditEvents.AsNoTracking().SingleAsync(e => e.OrgId == orgId);
+        var stored = await WaitForEventAsync(scopeFactory, orgId);
 
         stored.WorkspaceId.Should().Be(workspaceId);
         stored.ActorUserId.Should().Be(actorId);
@@ -107,11 +103,7 @@ public class AuditServiceTests
             Action = "approved",
         });
 
-        await Task.Delay(1500);
-
-        using var verifyScope = scopeFactory.CreateScope();
-        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
-        var stored = await verifyDb.AuditEvents.AsNoTracking().SingleAsync(e => e.OrgId == orgId);
+        var stored = await WaitForEventAsync(scopeFactory, orgId);
         stored.ActorType.Should().Be("api_key");
         stored.ActorLabel.Should().Be(label);
         stored.ActorUserId.Should().BeNull();
@@ -141,11 +133,7 @@ public class AuditServiceTests
             Action = "approved",
         });
 
-        await Task.Delay(1500);
-
-        using var verifyScope = scopeFactory.CreateScope();
-        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
-        var stored = await verifyDb.AuditEvents.AsNoTracking().SingleAsync(e => e.OrgId == orgId);
+        var stored = await WaitForEventAsync(scopeFactory, orgId);
         stored.ActorType.Should().Be("api_key");
         stored.ActorLabel.Should().Be($"Aisha Rahman (Branch Manager) via {keyLabel}");
         GC.KeepAlive(root);
@@ -172,11 +160,7 @@ public class AuditServiceTests
             Action = "rejected",
         });
 
-        await Task.Delay(1500);
-
-        using var verifyScope = scopeFactory.CreateScope();
-        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
-        var stored = await verifyDb.AuditEvents.AsNoTracking().SingleAsync(e => e.OrgId == orgId);
+        var stored = await WaitForEventAsync(scopeFactory, orgId);
         stored.ActorLabel!.Length.Should().Be(256);
         stored.ActorLabel.Should().EndWith("…");
         GC.KeepAlive(root);
@@ -355,5 +339,23 @@ public class AuditServiceTests
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(c => c.OrgId).Returns(callerOrgId);
         return new AuditController(repo.Object, workspaces.Object, currentUser.Object, NullLogger<AuditController>.Instance);
+    }
+
+    /// <summary>
+    /// RecordAsync writes in the background; wait for the row (up to 10 s) instead of a fixed delay, which
+    /// failed on a slow CI runner.
+    /// </summary>
+    private static async Task<Flowamaz.Core.Entities.Audit.AuditEvent> WaitForEventAsync(IServiceScopeFactory scopeFactory, Guid orgId)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (true)
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+            var stored = await db.AuditEvents.AsNoTracking().SingleOrDefaultAsync(e => e.OrgId == orgId);
+            if (stored is not null) return stored;
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("The audit event was not written within 10 seconds.");
+            await Task.Delay(50);
+        }
     }
 }
