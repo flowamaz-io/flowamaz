@@ -52,7 +52,17 @@ function unwrap<T>(body: unknown): T {
  */
 export async function resetRateLimits(): Promise<void> {
   if (process.env.E2E_SKIP_RATELIMIT_RESET === '1') return;
-  const container = process.env.E2E_REDIS_CONTAINER || 'flowamaz-e2e-redis';
+  const script = "redis-cli --scan --pattern 'ratelimit:*' | xargs -r redis-cli del >/dev/null 2>&1 || true";
+  // Redis on this machine (CI service container, local install): run redis-cli directly.
+  if (process.env.E2E_REDIS_LOCAL === '1') {
+    try {
+      await execFileAsync('sh', ['-c', script]);
+    } catch {
+      // Non-fatal, as below.
+    }
+    return;
+  }
+  const container = process.env.E2E_REDIS_CONTAINER || 'flowamaz-dev-redis';
   try {
     // Delete all ratelimit:* keys (KEYS is fine for a tiny dev dataset).
     await execFileAsync('docker', [
