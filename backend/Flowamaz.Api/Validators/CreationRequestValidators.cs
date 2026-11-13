@@ -32,3 +32,23 @@ public sealed class VisualPreviewRequestValidator : AbstractValidator<VisualPrev
     private static long DecodedLength(string? value) =>
         string.IsNullOrEmpty(value) ? 0 : (long)value.Length * 3 / 4;
 }
+
+/// <summary>Validates POST /workflows/conversation/preview (and the conversation text of POST /create).</summary>
+public sealed class ConversationPreviewRequestValidator : AbstractValidator<ConversationPreviewRequest>
+{
+    /// <summary>About 50k tokens: a long thread fits, a whole mailbox export does not.</summary>
+    public const int MaxTextLength = 200_000;
+    internal static readonly string[] Sources = ["slack", "teams", "email", "generic"];
+
+    public ConversationPreviewRequestValidator()
+    {
+        RuleFor(x => x.Text)
+            .Cascade(CascadeMode.Stop)
+            .NotEmpty().WithMessage("Paste a Slack thread, Teams transcript, email chain or meeting notes to extract a workflow from.")
+            .MaximumLength(MaxTextLength).WithMessage($"The conversation is too long ({MaxTextLength:N0} characters at most). Paste only the part where the process is discussed.");
+
+        RuleFor(x => x.SourceType)
+            .Must(s => s is null || Sources.Contains(s.ToLowerInvariant()))
+            .WithMessage(x => $"Unknown source type '{x.SourceType}'. Use slack, teams, email, or generic.");
+    }
+}

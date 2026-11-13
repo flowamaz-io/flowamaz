@@ -111,3 +111,10 @@ Needs a human with real accounts before production:
   4242 4242 4242 4242 → confirm the ledger row. Refunds assume refund_application_fee + reverse_transfer.
 - `docker compose up` of the sandbox (images not built here — no Docker in this environment).
 - Browser check of canvas box select / minimap drag (unit-tested only).
+
+## Status after the testing session (13 Nov 2026)
+
+Conversation→Workflow (§8.4) is no longer SHALLOW: extraction is reviewed and edited before generation, threads are
+parsed per source (Slack, Teams, email) without AI, and an unreadable answer fails with a 422 instead of saving an
+empty workflow. Empathy (§8.2), DNA inheritance (§8.8) and the Interpreter PDF (§8.10) were completed in PR #19.
+Remaining in-scope gaps and the Year 2/3 items are sized in `docs/ROADMAP-YEAR2-3.md`.

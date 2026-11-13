@@ -1584,3 +1584,31 @@ Audit found the app already largely consistent — changes are surgical. (Spec's
 **Acceptance criteria** — install→publish→trigger ✓; S73–S80 authored ✓; Trivy 0 ✓; checklist 8/8 ✓; totals unit 553 (≥545) / integration 116 (≥115) / web unit 61 (≥60) ✓.
 
 **Deviations:** Marketing/launch E2E require their respective dev servers (flowamaz.com on :5174, backend /scalar+/health) and are authored to run against a live stack, consistent with the S61–S72 precedent. The `localhost` readiness grep is non-zero by design (dev fallback + the security allowlist feature itself).
+
+---
+
+## fix-test-02 — Comprehensive testing session  (23 Oct → 13 Nov 2026)
+
+**Status:** Complete · **TESTING_COMPLETE** · full report: `testing-session-report.md`
+
+Carried out as PRs #2–#21 into `develop` (protected branch), each followed by a human browser check.
+
+- **test-01 baseline:** CI red on new NuGet advisories (fixed); nightly E2E had never passed (harness defects);
+  feature-depth audit of shallow/missing features (`prompts/fix-test-02/feature-depth-audit.md`).
+- **test-02 harness:** Vite proxy, readiness waits, one Playwright config with HTML/JSON reports,
+  `scripts/e2e-local.sh`, nightly CI running the same script (PR #20).
+- **test-03/04 triage + fixes:** first real run 36 pass / 44 fail → stale specs fixed without weakening assertions;
+  app bugs fixed (canvas node types, top-level `fmz connector`, keyboard access); audit gaps built across PRs #2–#19.
+- **test-05 hardening:** L1 redirect scheme/port (#19), L2 last-admin lock (#15, leave-race test #21), L3 Co-pilot
+  caps together (#19).
+- **#21 Conversation → Workflow:** extract (thread parsed without AI, then one metered call) → review/edit → generate
+  from the reviewed extraction; email/Teams/Slack parsing; computed warnings; 422 instead of an empty workflow.
+
+**DoD**
+- [x] Backend build 0 errors / 0 warnings; unit 1,068/1,068; integration 187 local + 17 Docker-only in CI
+- [x] Web: vue-tsc 0, eslint 0, vitest all pass, build OK; CLI tests pass
+- [x] E2E S1–S81: 81 pass / 0 fail / 1 skipped (S46, Community edition) locally and in CI
+
+**Deviations:** PRs instead of direct pushes (branch protection). Four in-scope gaps were found at the end and are
+listed, not fixed: `fmz library` routes, connector version pinning, Library Forms, Library Packs
+(`docs/ROADMAP-YEAR2-3.md` §A).
