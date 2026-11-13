@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { formatInstalls, type ConnectorDefinition } from '@/services/connector.service';
+import { CONNECTOR_INSTALL_ROLE_NEEDED } from '@/utils/constants';
 import { noticeDate, type LibraryConnectorItem, type LibraryOutdatedItem } from '@/services/library.service';
 
 interface Props {
@@ -11,9 +12,11 @@ interface Props {
   library?: LibraryConnectorItem;
   /** Set when an installed connector has a newer major to upgrade to. */
   outdated?: LibraryOutdatedItem;
+  /** False for members below Designer: the server refuses their installs, so no Install button. */
+  canInstall?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { canInstall: true });
 const emit = defineEmits<{ install: [connectorId: string] }>();
 const router = useRouter();
 
@@ -134,8 +137,16 @@ function onCardClick(): void {
         <span>{{ installLabel }} installs</span>
       </div>
 
+      <span
+        v-if="!isInstalled && !canInstall"
+        class="text-xs text-slate-400"
+        :title="CONNECTOR_INSTALL_ROLE_NEEDED"
+        data-testid="connector-install-role-note"
+      >
+        Designer role needed
+      </span>
       <button
-        v-if="!isInstalled"
+        v-else-if="!isInstalled"
         class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
         @click.stop="onInstall"
       >
