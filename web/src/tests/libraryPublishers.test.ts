@@ -5,6 +5,7 @@ import LibraryPublisherSection from '@/components/library/LibraryPublisherSectio
 import PlatformLibraryReviewView from '@/views/platform/PlatformLibraryReviewView.vue';
 import { itemLink, submissionBadge, type PublisherProfile } from '@/services/libraryPublisher.service';
 import { installsText } from '@/services/connector.service';
+import type { TemplateListItem } from '@/services/template.service';
 
 // Library publishers (FUNCTIONAL.md §23.9): profile page, portal section, staff reviews.
 const api = vi.hoisted(() => ({
@@ -148,7 +149,7 @@ describe('PlatformLibraryReviewView', () => {
 describe('TemplateCard publisher line', () => {
   it('links the publisher to their profile', async () => {
     const { default: TemplateCard } = await import('@/components/library/TemplateCard.vue');
-    const base = {
+    const base: TemplateListItem = {
       id: 't1', name: 'Acme PO', slug: 'acme-po', description: '', category: 'Finance', isOfficial: false, previewImageUrl: null,
       installCount: 1, averageRating: 0, tags: [], version: '1.0.0', createdAt: '2026-11-01T00:00:00Z',
       pricingModel: 'free', priceCents: 0, currency: 'usd', publisherName: 'Procurement Labs',
