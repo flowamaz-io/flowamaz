@@ -5,7 +5,7 @@ import yaml from "js-yaml";
 import { createClient } from "../lib/api-client";
 import { outputOpts } from "../lib/opts";
 import { printFormatted, printTable, success, error } from "../lib/output";
-import { asArray, describeError, requireWorkspaceId, str, unwrap } from "../lib/util";
+import { asArray, describeError, noOpMessage, requireWorkspaceId, str, unwrap } from "../lib/util";
 
 // ---- Library (connectors, templates, forms, packs), FUNCTIONAL.md §23.2 / §23.5 ----
 // Every call is workspace-scoped: /api/v1/workspaces/{id}/library/...
@@ -107,7 +107,16 @@ async function install(o: LibraryOpts, id: string): Promise<void> {
     if (failed > 0) process.exitCode = 1;
     return;
   }
-  const resp = await client.post((await base(o)) + kind + "/install", { id, name: o.name });
+  let resp;
+  try {
+    resp = await client.post((await base(o)) + kind + "/install", { id, name: o.name });
+  } catch (err) {
+    // Re-running an install is fine: say it's already there and exit 0.
+    const already = noOpMessage(err, ["LIBRARY_CONNECTOR_INSTALLED"]);
+    if (already === null) throw err;
+    success(already);
+    return;
+  }
   const data = unwrap(resp.data) as Record<string, unknown>;
   if (kind === "templates") {
     success("Installed template " + id + " as a new workflow: " + str(data?.workflowId));
@@ -150,7 +159,15 @@ async function update(o: LibraryOpts, id: string): Promise<void> {
     );
   }
   const client = await createClient();
-  const resp = await client.post((await base(o)) + "connectors/update", { id });
+  let resp;
+  try {
+    resp = await client.post((await base(o)) + "connectors/update", { id });
+  } catch (err) {
+    const upToDate = noOpMessage(err, ["LIBRARY_CONNECTOR_UP_TO_DATE"]);
+    if (upToDate === null) throw err;
+    success(upToDate);
+    return;
+  }
   const data = unwrap(resp.data) as Record<string, unknown>;
   success("Upgraded " + id + " from " + str(data?.fromVersion) + " to " + str(data?.toVersion) + " (" + str(data?.pin) + ")");
 }

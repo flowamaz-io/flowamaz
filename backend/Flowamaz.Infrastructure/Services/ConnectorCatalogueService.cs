@@ -1,3 +1,4 @@
+using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Entities.Connector;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Infrastructure.Persistence;
@@ -133,9 +134,7 @@ public sealed class ConnectorCatalogueService : IConnectorCatalogueService
                     "Ensure the connector exists in the catalogue before installing.");
 
             if (!definition.IsEnabled)
-                throw new InvalidOperationException(
-                    $"Connector '{definition.DisplayName}' is currently disabled. " +
-                    "Contact platform support to enable this connector.");
+                throw LibraryException.Disabled(definition.DisplayName);
 
             var existing = await _db.WorkspaceConnectors
                 .FirstOrDefaultAsync(wc =>
@@ -144,9 +143,8 @@ public sealed class ConnectorCatalogueService : IConnectorCatalogueService
                     !wc.IsDeleted, ct);
 
             if (existing is not null)
-                throw new InvalidOperationException(
-                    $"Connector '{definition.DisplayName}' is already installed in this workspace. " +
-                    "Uninstall the existing installation before reinstalling.");
+                throw LibraryException.AlreadyInstalled(definition.DisplayName,
+                    $"{definition.PublisherId}/{definition.ConnectorId}@{definition.MajorVersion}", newerMajor: false);
 
             var connector = new WorkspaceConnector
             {

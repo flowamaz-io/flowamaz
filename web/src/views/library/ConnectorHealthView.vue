@@ -203,6 +203,7 @@ onUnmounted(() => {
       v-if="wizardConnector"
       :connector="wizardConnector"
       :model-value="wizardOpen"
+      :install="false"
       @update:model-value="onWizardClose"
       @installed="wizardOpen = false"
     />
