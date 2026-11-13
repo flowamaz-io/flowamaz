@@ -78,6 +78,7 @@ function issueTypeLabel(type: EmpathyIssue['type']): string {
 }
 
 function hoursText(hours: number): string {
+  if (hours < 1) return 'under an hour';
   return hours >= 48 ? `${Math.round((hours / 24) * 10) / 10} days` : `${hours} hours`;
 }
 </script>

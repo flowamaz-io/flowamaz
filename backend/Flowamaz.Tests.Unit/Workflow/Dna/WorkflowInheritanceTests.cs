@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Flowamaz.Application.Workflow.Dna;
-using Flowamaz.Core.Entities.Analytics;
 using Flowamaz.Core.Workflow;
 
 namespace Flowamaz.Tests.Unit.Workflow.Dna;
@@ -98,19 +97,15 @@ public sealed class WorkflowInheritanceTests
           - { id: e4, from: tell, to: end }
         """;
 
-    private static WorkflowMetric Hour(int completed, int failed, long avgMs, int breaches = 0) => new()
-    {
-        RunsTotal = completed + failed, RunsCompleted = completed, RunsFailed = failed, AvgDurationMs = avgMs, SlaBreachCount = breaches,
-    };
-
     [Fact]
-    public void Performance_adds_up_the_hours()
+    public void Performance_comes_from_finished_runs()
     {
-        var p = WorkflowInheritanceService.Performance([Hour(6, 2, 3_600_000), Hour(1, 1, 7_200_000, breaches: 1)]);
+        var p = WorkflowInheritanceService.Performance(new Core.Models.RunPerformanceRow(Completed: 7, Failed: 3, AvgDurationMs: 4_320_000, SlaBreaches: 1));
         p.Runs.Should().Be(10);
         p.SuccessPercent.Should().Be(70);
         p.SlaCompliancePercent.Should().Be(90);
         p.AvgHours.Should().Be(1.2);
+        WorkflowInheritanceService.Performance(null).Should().Be(new WorkflowPerformance(0, 0, 100, 0));
     }
 
     [Theory]

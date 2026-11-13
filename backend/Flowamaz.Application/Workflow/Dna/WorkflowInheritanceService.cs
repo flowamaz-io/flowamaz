@@ -12,7 +12,7 @@ using YamlDotNet.RepresentationModel;
 
 namespace Flowamaz.Application.Workflow.Dna;
 
-/// <summary>How a workflow performed over the last 30 days (from hourly metrics).</summary>
+/// <summary>How a workflow performed over the last 30 days (finished, non-test runs).</summary>
 public sealed record WorkflowPerformance(int Runs, int SuccessPercent, int SlaCompliancePercent, double AvgHours);
 
 /// <summary>A pattern a better-performing similar workflow uses and this one doesn't.</summary>
@@ -38,7 +38,7 @@ public sealed record InheritanceReport(
 /// <summary>
 /// Workflow DNA inheritance (FUNCTIONAL.md §8.8): "underperforming workflows inherit patterns from high-performing
 /// siblings". Deterministic, no AI. A sibling is a workflow in the same workspace with similar DNA (score ≥ 60) and at
-/// least <see cref="MinRuns"/> runs that does clearly better: 10+ points more runs succeed, 10+ points better SLA
+/// least <see cref="MinRuns"/> finished runs (from the runs, not the hourly metrics) that does clearly better: 10+ points more runs succeed, 10+ points better SLA
 /// compliance, or it finishes in 70% of the time or less. The patterns compared:
 /// <list type="bullet">
 /// <item><c>gate-timeout</c> — its approval steps have a deadline; some of this one's don't (can apply: adds the
@@ -61,18 +61,18 @@ public sealed class WorkflowInheritanceService
 
     private readonly IWorkflowDnaService _dna;
     private readonly IWorkflowDefinitionRepository _definitions;
-    private readonly IWorkflowMetricRepository _metrics;
+    private readonly IWorkflowEventRepository _runs;
     private readonly SfgParser _parser;
     private readonly WorkflowService _workflows;
     private readonly ILogger<WorkflowInheritanceService> _log;
 
     public WorkflowInheritanceService(
-        IWorkflowDnaService dna, IWorkflowDefinitionRepository definitions, IWorkflowMetricRepository metrics,
+        IWorkflowDnaService dna, IWorkflowDefinitionRepository definitions, IWorkflowEventRepository runs,
         SfgParser parser, WorkflowService workflows, ILogger<WorkflowInheritanceService> log)
     {
         _dna = dna;
         _definitions = definitions;
-        _metrics = metrics;
+        _runs = runs;
         _parser = parser;
         _workflows = workflows;
         _log = log;
@@ -85,7 +85,7 @@ public sealed class WorkflowInheritanceService
         {
             var me = await _definitions.GetByIdForWorkspaceAsync(workflowId, workspaceId, ct);
             if (me is null) return null;
-            var mine = await PerformanceAsync(workspaceId, workflowId, ct);
+            var mine = (await PerformanceAsync(workspaceId, [workflowId], ct))[workflowId];
             if (mine.Runs < MinRuns)
                 return new InheritanceReport(workflowId, mine, [],
                     $"This workflow has {mine.Runs} finished {(mine.Runs == 1 ? "run" : "runs")} in the last 30 days. " +
@@ -96,11 +96,14 @@ public sealed class WorkflowInheritanceService
             var dna = await _dna.ComputeDnaAsync(workflowId, workspaceId, ct);
             var similar = await _dna.FindSimilarAsync(workspaceId, dna, limit: 10, ct);
 
+            var candidates = similar.Where(s => s.SimilarityScore >= MinSimilarity && s.WorkflowDefinitionId != workflowId).ToList();
+            var performance = await PerformanceAsync(workspaceId, candidates.Select(c => c.WorkflowDefinitionId).ToList(), ct);
+
             var suggestions = new List<InheritanceSuggestion>();
             var anyBetter = false;
-            foreach (var sibling in similar.Where(s => s.SimilarityScore >= MinSimilarity))
+            foreach (var sibling in candidates)
             {
-                var theirs = await PerformanceAsync(workspaceId, sibling.WorkflowDefinitionId, ct);
+                var theirs = performance[sibling.WorkflowDefinitionId];
                 if (theirs.Runs < MinRuns || Better(theirs, mine) is not { } evidence) continue;
                 anyBetter = true;
 
@@ -233,22 +236,25 @@ public sealed class WorkflowInheritanceService
 
     private static void Set(YamlMappingNode map, string key, string value) => map.Children[new YamlScalarNode(key)] = new YamlScalarNode(value);
 
-    private async Task<WorkflowPerformance> PerformanceAsync(Guid workspaceId, Guid workflowId, CancellationToken ct) =>
-        Performance(await _metrics.GetForDefinitionSinceAsync(workflowId, workspaceId, DateTime.UtcNow.AddDays(-30), ct));
-
-    internal static WorkflowPerformance Performance(IReadOnlyCollection<WorkflowMetric> rows)
+    /// <summary>
+    /// Last 30 days of finished, non-test runs for each workflow (one query), from the runs themselves, so the numbers
+    /// match the Empathy view and run history as soon as runs finish. Workflows without runs get an empty record.
+    /// </summary>
+    private async Task<Dictionary<Guid, WorkflowPerformance>> PerformanceAsync(Guid workspaceId, IReadOnlyCollection<Guid> ids, CancellationToken ct)
     {
-        var finished = rows.Sum(m => m.RunsCompleted + m.RunsFailed);
-        var completed = rows.Sum(m => m.RunsCompleted);
-        var total = rows.Sum(m => m.RunsTotal);
-        var breaches = rows.Sum(m => m.SlaBreachCount);
-        var weighted = rows.Where(m => m.RunsTotal > 0).ToList();
-        var avgMs = weighted.Count == 0 ? 0 : weighted.Sum(m => (double)m.AvgDurationMs * m.RunsTotal) / weighted.Sum(m => m.RunsTotal);
+        var rows = await _runs.GetRunPerformanceAsync(workspaceId, ids, DateTime.UtcNow.AddDays(-30), ct);
+        return ids.Distinct().ToDictionary(id => id, id => Performance(rows.GetValueOrDefault(id)));
+    }
+
+    internal static WorkflowPerformance Performance(RunPerformanceRow? row)
+    {
+        if (row is null) return new WorkflowPerformance(0, 0, 100, 0);
+        var finished = row.Completed + row.Failed;
         return new WorkflowPerformance(
             finished,
-            finished == 0 ? 0 : (int)Math.Round(completed * 100.0 / finished),
-            total == 0 ? 100 : (int)Math.Round(100 - breaches * 100.0 / total),
-            Math.Round(avgMs / 3_600_000, 1));
+            finished == 0 ? 0 : (int)Math.Round(row.Completed * 100.0 / finished),
+            finished == 0 ? 100 : (int)Math.Round(100 - row.SlaBreaches * 100.0 / finished),
+            Math.Round(row.AvgDurationMs / 3_600_000, 1));
     }
 
     /// <summary>Why <paramref name="theirs"/> clearly beats <paramref name="mine"/>, or null when it doesn't.</summary>

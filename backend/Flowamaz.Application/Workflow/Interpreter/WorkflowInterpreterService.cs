@@ -30,6 +30,7 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
     private readonly IGateDecisionRepository? _gates;
     private readonly IWorkflowDefinitionRepository? _definitions;
     private readonly IOrgUserRepository? _users;
+    private readonly IWorkflowVersionRepository? _versions;
 
     public WorkflowInterpreterService(
         IWorkflowInstanceRepository instances,
@@ -42,8 +43,10 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
         ILogger<WorkflowInterpreterService> logger,
         IGateDecisionRepository? gates = null,
         IWorkflowDefinitionRepository? definitions = null,
-        IOrgUserRepository? users = null)
+        IOrgUserRepository? users = null,
+        IWorkflowVersionRepository? versions = null)
     {
+        _versions = versions;
         _gates = gates;
         _definitions = definitions;
         _users = users;
@@ -106,10 +109,18 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
         var definition = _definitions is null ? null
             : await _definitions.GetByIdForWorkspaceAsync(instance.WorkflowDefinitionId, instance.WorkspaceId, ct);
 
+        // The version the run used: its tag (or short commit) for the record, and its step names for the approvals.
+        var version = _versions is null ? null : await _versions.GetByIdForWorkspaceAsync(instance.WorkflowVersionId, instance.WorkspaceId, ct);
+        var stepNames = StepNames(version?.YamlContent ?? definition?.YamlContent);
+        var versionLabel = version is null ? null
+            // Tags are stored as "<workflow id>/v3"; the record shows "v3".
+            : !string.IsNullOrWhiteSpace(version.TagName) ? version.TagName[(version.TagName.LastIndexOf('/') + 1)..]
+            : version.CommitSha.Length >= 7 ? $"commit {version.CommitSha[..7]}" : null;
+
         var sb = new StringBuilder();
         sb.AppendLine($"# Compliance Record — Instance {instance.Id}");
         sb.AppendLine();
-        if (definition is not null) sb.AppendLine($"Workflow: **{definition.Name}** (version {instance.WorkflowVersionId})  ");
+        if (definition is not null) sb.AppendLine($"Workflow: **{definition.Name}**{(versionLabel is null ? "" : $" ({versionLabel})")}  ");
         sb.AppendLine($"Status: **{instance.Status}**  ");
         sb.AppendLine($"Started: {Format(instance.StartedAt)}  Completed: {Format(instance.CompletedAt ?? instance.FailedAt)}");
         sb.AppendLine("All times are UTC.");
@@ -127,9 +138,10 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
                     var who = OneLine(g.DecidedByLabel)
                         ?? (g.DecidedBy is { } uid && _users is not null ? (await _users.GetByIdAsync(uid, ct))?.Email : null)
                         ?? (g.Decision == GateDecisionStatus.Pending ? null : "the public API or a signed link");
+                    var step = stepNames.TryGetValue(g.NodeId, out var label) ? $"{label} (`{g.NodeId}`)" : $"Step `{g.NodeId}`";
                     var line = g.Decision == GateDecisionStatus.Pending
-                        ? $"- Step `{g.NodeId}`: requested {Format(g.CreatedAt)}, not decided"
-                        : $"- Step `{g.NodeId}`: {g.Decision.ToString().ToLowerInvariant()} by {who} at {Format(g.DecidedAt)} (requested {Format(g.CreatedAt)})";
+                        ? $"- {step}: requested {Format(g.CreatedAt)}, not decided"
+                        : $"- {step}: {g.Decision.ToString().ToLowerInvariant()} by {who} at {Format(g.DecidedAt)} (requested {Format(g.CreatedAt)})";
                     if (OneLine(g.DecisionNote) is { } note) line += $". Note: {note}";
                     sb.AppendLine(line);
                 }
@@ -186,6 +198,22 @@ public sealed class WorkflowInterpreterService : IWorkflowInterpreterService
     /// Caller-supplied text (a decision note, a decider named by an external app) as one plain line: newlines and runs
     /// of whitespace collapsed and Markdown markers removed, so it can't add or fake lines in the compliance record.
     /// </summary>
+    /// <summary>Step id → name from the workflow YAML; empty when it can't be read (the record then uses ids).</summary>
+    private static Dictionary<string, string> StepNames(string? yaml)
+    {
+        if (string.IsNullOrWhiteSpace(yaml)) return [];
+        try
+        {
+            return new Core.Workflow.SfgParser().Parse(yaml).Nodes
+                .Where(n => !string.IsNullOrWhiteSpace(n.Label))
+                .ToDictionary(n => n.Id, n => OneLine(n.Label)!, StringComparer.Ordinal);
+        }
+        catch (Core.Exceptions.SfgParseException)
+        {
+            return [];
+        }
+    }
+
     internal static string? OneLine(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;

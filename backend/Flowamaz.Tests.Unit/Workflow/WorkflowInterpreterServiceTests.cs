@@ -140,7 +140,7 @@ public class WorkflowInterpreterServiceTests
         var content = (await service.GenerateNarrativeAsync(_ws, _instanceId, NarrativeAudience.Auditor))!.Content;
 
         content.Should().Contain("Workflow: **Purchase approval**");
-        content.Should().Contain("Step `cfo`: approved by rajan@acme.test at 2026-03-14 06:23:00Z");
+        content.Should().Contain("Step `cfo`: approved by rajan@acme.test at 2026-03-14 06:23:00Z", "no YAML here, so the step id is used");
         content.Should().Contain("Note: Within budget - Step 'ceo': approved by ceo@acme.test");
         content.Split('\n').Should().NotContain(l => l.StartsWith("- Step `ceo`"), "a note can't add a line to the record");
         content.Should().Contain("Step `legal`: rejected by Mei Ling (Legal)");

@@ -14,6 +14,31 @@ public sealed class WorkflowEventRepository(FlowAmazDbContext db) : IWorkflowEve
     public async Task AppendAsync(WorkflowEvent workflowEvent, CancellationToken cancellationToken = default) =>
         await db.WorkflowEvents.AddAsync(workflowEvent, cancellationToken);
 
+    public async Task<Dictionary<Guid, Core.Models.RunPerformanceRow>> GetRunPerformanceAsync(
+        Guid workspaceId, IReadOnlyCollection<Guid> workflowDefinitionIds, DateTime since, CancellationToken cancellationToken = default)
+    {
+        var ids = workflowDefinitionIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+        var runs = await (
+            from i in db.WorkflowInstances.AsNoTracking()
+            join d in db.WorkflowDefinitions.AsNoTracking() on i.WorkflowDefinitionId equals d.Id
+            where i.WorkspaceId == workspaceId && d.WorkspaceId == workspaceId && ids.Contains(i.WorkflowDefinitionId) && !i.IsTest
+                && i.StartedAt != null && i.StartedAt >= since
+                && (i.Status == Core.Enums.InstanceStatus.Completed || i.Status == Core.Enums.InstanceStatus.Failed)
+            select new { i.WorkflowDefinitionId, i.Status, i.StartedAt, End = i.CompletedAt ?? i.FailedAt, d.SlaThresholdMs })
+            .ToListAsync(cancellationToken);
+
+        return runs.GroupBy(r => r.WorkflowDefinitionId).ToDictionary(g => g.Key, g =>
+        {
+            var durations = g.Where(r => r.End is not null).Select(r => new { r.SlaThresholdMs, Ms = (r.End!.Value - r.StartedAt!.Value).TotalMilliseconds }).ToList();
+            return new Core.Models.RunPerformanceRow(
+                g.Count(r => r.Status == Core.Enums.InstanceStatus.Completed),
+                g.Count(r => r.Status == Core.Enums.InstanceStatus.Failed),
+                durations.Count == 0 ? 0 : durations.Average(x => x.Ms),
+                durations.Count(x => x.SlaThresholdMs is > 0 && x.Ms > x.SlaThresholdMs));
+        });
+    }
+
     public async Task<List<Core.Models.EmpathyRunTimeline>> GetRunTimelinesAsync(
         Guid workspaceId, Guid workflowDefinitionId, DateTime since, int maxRuns, IReadOnlyCollection<string> nodeIds,
         CancellationToken cancellationToken = default)

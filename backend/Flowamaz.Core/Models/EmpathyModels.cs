@@ -33,6 +33,9 @@ public sealed record EmpathyRunEvidence(
     string? SlowestGateNodeId,
     double SlowestGateAvgHours);
 
+/// <summary>Finished, non-test runs of one workflow since a date: the basis for comparing workflows (§8.8).</summary>
+public sealed record RunPerformanceRow(int Completed, int Failed, double AvgDurationMs, int SlaBreaches);
+
 /// <summary>One finished run, as the empathy analysis needs it.</summary>
 public sealed record EmpathyRunTimeline(
     Guid InstanceId,

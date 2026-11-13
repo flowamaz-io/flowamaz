@@ -111,11 +111,28 @@ public sealed class DevItemsTests : ApiTestBase
         await db.SaveChangesAsync();
     }
 
-    private static WorkflowMetric Hour(Guid ws, Guid wf, int completed, int failed, int hoursAgo) => new()
+    /// <summary>Publishes the workflow and records finished runs the way the engine leaves them (the worker is off in tests).</summary>
+    private async Task FinishedRunsAsync(HttpClient client, Guid ws, Guid wf, int completed, int failed)
     {
-        WorkspaceId = ws, WorkflowDefinitionId = wf, PeriodHour = DateTime.UtcNow.AddHours(-hoursAgo).Date.AddHours(DateTime.UtcNow.Hour),
-        RunsTotal = completed + failed, RunsCompleted = completed, RunsFailed = failed, AvgDurationMs = 3_600_000,
-    };
+        (await client.PostAsync($"/api/v1/workspaces/{ws}/workflows/{wf}/publish", null)).EnsureSuccessStatusCode();
+        var ids = new List<Guid>();
+        for (var i = 0; i < completed + failed; i++)
+        {
+            var trigger = await client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/instances", new { workflowDefinitionId = wf });
+            ids.Add((await DataAsync(trigger)).GetProperty("instanceId").GetGuid());
+        }
+        var start = DateTime.UtcNow.AddDays(-2);
+        await WithDbAsync(async db =>
+        {
+            var runs = await db.WorkflowInstances.Where(r => ids.Contains(r.Id)).OrderBy(r => r.CreatedAt).ToListAsync();
+            for (var i = 0; i < runs.Count; i++)
+            {
+                runs[i].StartedAt = start;
+                if (i < completed) { runs[i].Status = InstanceStatus.Completed; runs[i].CompletedAt = start.AddHours(1); }
+                else { runs[i].Status = InstanceStatus.Failed; runs[i].FailedAt = start.AddHours(1); }
+            }
+        });
+    }
 
     [Fact]
     public async Task A_weaker_workflow_inherits_patterns_from_a_better_similar_one()
@@ -124,9 +141,12 @@ public sealed class DevItemsTests : ApiTestBase
         var ws = await CreateWorkspaceAsync(owner.Client, "Purchasing", U("dev-inherit-ws"));
         var weak = await CreateWorkflowAsync(owner.Client, ws, "PO approval (West)", Weak);
         var strong = await CreateWorkflowAsync(owner.Client, ws, "PO approval (East)", Strong);
+        await FinishedRunsAsync(owner.Client, ws, weak, completed: 6, failed: 4);
+        await FinishedRunsAsync(owner.Client, ws, strong, completed: 10, failed: 0);
         await WithDbAsync(db =>
         {
-            db.WorkflowMetrics.AddRange(Hour(ws, weak, 6, 4, 30), Hour(ws, strong, 10, 0, 30));
+            // The hourly rollup is ignored: the comparison reads the runs themselves.
+            db.WorkflowMetrics.Add(new WorkflowMetric { WorkspaceId = ws, WorkflowDefinitionId = weak, PeriodHour = DateTime.UtcNow.Date, RunsTotal = 500, RunsCompleted = 500 });
             return Task.CompletedTask;
         });
 
@@ -243,6 +263,20 @@ public sealed class DevItemsTests : ApiTestBase
         var bytes = await pdf.Content.ReadAsByteArrayAsync();
         using (var doc = UglyToad.PdfPig.PdfDocument.Open(bytes))
             string.Join(" ", doc.GetPages().Select(p => p.Text)).Should().Contain("Compliance Record").And.Contain("PO approval (East)");
+
+        // The record names the step and shows the version as its tag or short commit, not an id.
+        await WithDbAsync(db =>
+        {
+            db.GateDecisions.Add(new GateDecision
+            {
+                WorkspaceId = ws, InstanceId = instance, NodeId = "finance", Decision = GateDecisionStatus.Approved,
+                DecidedByLabel = "Rajan (CFO)", DecidedAt = DateTime.UtcNow, ExpiresAt = DateTime.UtcNow.AddDays(1),
+            });
+            return Task.CompletedTask;
+        });
+        var md = await (await owner.Client.PostAsync(url + "&format=md", null)).Content.ReadAsStringAsync();
+        md.Should().Contain("Finance approval (`finance`): approved by Rajan (CFO)");
+        md.Should().MatchRegex(@"Workflow: \*\*PO approval \(East\)\*\* \((v[\w.-]+|commit [0-9a-f]{7})\)");
 
         (await owner.Client.PostAsync(url + "&format=md", null)).Content.Headers.ContentType!.MediaType.Should().Be("text/markdown");
         (await owner.Client.PostAsync(url + "&format=docx", null)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
