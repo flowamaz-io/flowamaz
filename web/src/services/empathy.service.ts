@@ -19,6 +19,22 @@ export interface EmpathyAnalysis {
   visibilityGapHours: number;
   score: number;
   issues: EmpathyIssue[];
+  /** What finished, non-test runs of the last 30 days showed; null when there were none. */
+  runs?: EmpathyRunEvidence | null;
+}
+
+export interface EmpathyRunEvidence {
+  runsAnalysed: number;
+  avgDaysToOutcome: number;
+  avgMessagesPerRun: number;
+  /** Median over runs of the longest stretch without any message. */
+  medianLongestSilenceHours: number;
+  /** 0–100 */
+  percentTimeWaitingOnApprovals: number;
+  /** 0–100 */
+  percentRunsOutcomeNotified: number;
+  slowestGateNodeId: string | null;
+  slowestGateAvgHours: number;
 }
 
 export const empathyService = {

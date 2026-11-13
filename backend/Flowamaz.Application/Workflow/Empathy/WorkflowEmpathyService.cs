@@ -9,16 +9,28 @@ using Microsoft.Extensions.Logging;
 namespace Flowamaz.Application.Workflow.Empathy;
 
 /// <summary>
-/// Deterministic graph-walk empathy analyser. No AI calls — pure structural analysis.
+/// Empathy View (FUNCTIONAL.md §8.2): what the workflow is like for the person who started it. Two deterministic
+/// layers, no AI calls:
+/// <list type="bullet">
+/// <item><b>Structure</b> — a graph walk: where it sends messages, where it waits on people, whether anyone hears the
+/// outcome.</item>
+/// <item><b>Real runs</b> — finished, non-test runs of the last 30 days: days to outcome, messages actually sent,
+/// the longest stretch without any message, time spent waiting on approvals, whether the outcome was announced.
+/// Findings quote those numbers ("Runs send 7 messages over 3 days…").</item>
+/// </list>
 /// </summary>
 public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
 {
     // connectorIds that send email or messaging notifications
+    // Ids from OfficialConnectorCatalog (plus older aliases still found in saved YAML).
     private static readonly HashSet<string> EmailConnectors =
-        new(StringComparer.OrdinalIgnoreCase) { "email-smtp", "microsoft-365", "sendgrid" };
+        new(StringComparer.OrdinalIgnoreCase) { "email-smtp", "email", "microsoft-365", "sendgrid" };
 
     private static readonly HashSet<string> MessagingConnectors =
-        new(StringComparer.OrdinalIgnoreCase) { "slack", "teams", "discord" };
+        new(StringComparer.OrdinalIgnoreCase) { "slack", "microsoft-teams", "teams", "discord" };
+
+    private const int RunWindowDays = 30;
+    private const int MaxRunsAnalysed = 200;
 
     // 72-hour timeout in seconds
     private const int LongWaitThresholdSeconds = 72 * 3600;
@@ -27,13 +39,16 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
     private readonly IWorkflowMetricRepository _metrics;
     private readonly SfgParser _sfgParser;
     private readonly ILogger<WorkflowEmpathyService> _log;
+    private readonly IWorkflowEventRepository? _events;
 
     public WorkflowEmpathyService(
         IWorkflowDefinitionRepository definitions,
         IWorkflowMetricRepository metrics,
         SfgParser sfgParser,
-        ILogger<WorkflowEmpathyService> log)
+        ILogger<WorkflowEmpathyService> log,
+        IWorkflowEventRepository? events = null)
     {
+        _events = events;
         _definitions = definitions;
         _metrics = metrics;
         _sfgParser = sfgParser;
@@ -111,7 +126,7 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
 
                 if (node.Type == NodeType.Action)
                 {
-                    var connectorId = GetStringProperty(node, "connector_id");
+                    var connectorId = GetStringProperty(node, "connector_id") ?? GetStringProperty(node, "connector");
                     var operationId = GetStringProperty(node, "operation_id");
 
                     if (connectorId is not null)
@@ -218,6 +233,17 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
 
             int visibilityGapHours = (waitPeriods > 0 && statusUpdates == 0) ? 72 : 0;
 
+            // ── Real runs ─────────────────────────────────────────────────────────
+            var evidence = await RunEvidenceAsync(graph, workflowDefinitionId, workspaceId, ct);
+            if (evidence is not null)
+            {
+                var runIssues = RunIssues(evidence, graph);
+                issues.AddRange(runIssues);
+                score = Math.Max(0, score - runIssues.Sum(i => i.Severity == "High" ? 10 : 5));
+                avgDays = evidence.AvgDaysToOutcome;
+                visibilityGapHours = (int)Math.Round(evidence.MedianLongestSilenceHours);
+            }
+
             var analysis = new EmpathyAnalysis(
                 workflowDefinitionId,
                 emailsSent,
@@ -226,7 +252,8 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
                 avgDays,
                 visibilityGapHours,
                 score,
-                issues.AsReadOnly());
+                issues.AsReadOnly(),
+                evidence);
 
             _log.LogInformation(
                 "WorkflowEmpathyService.AnalyseYamlAsync exit id={Id} score={Score} issues={IssueCount}",
@@ -239,6 +266,116 @@ public sealed class WorkflowEmpathyService : IWorkflowEmpathyService
             _log.LogError(ex, "WorkflowEmpathyService.AnalyseYamlAsync error id={Id}", workflowDefinitionId);
             throw;
         }
+    }
+
+    /// <summary>Measures finished runs; null when there are none (or no event store).</summary>
+    private async Task<EmpathyRunEvidence?> RunEvidenceAsync(WorkflowGraph graph, Guid definitionId, Guid workspaceId, CancellationToken ct)
+    {
+        if (_events is null || definitionId == Guid.Empty) return null;
+        var notify = NotificationNodeIds(graph);
+        var runs = await _events.GetRunTimelinesAsync(workspaceId, definitionId, DateTime.UtcNow.AddDays(-RunWindowDays), MaxRunsAnalysed, notify, ct);
+        return Measure(runs, notify);
+    }
+
+    /// <summary>Action nodes that send an email or a chat message.</summary>
+    internal static HashSet<string> NotificationNodeIds(WorkflowGraph graph) =>
+        graph.Nodes
+            .Where(n => n.Type == NodeType.Action &&
+                        (GetStringProperty(n, "connector_id") ?? GetStringProperty(n, "connector")) is { } c &&
+                        (EmailConnectors.Contains(c) || MessagingConnectors.Contains(c)))
+            .Select(n => n.Id)
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>The requester's experience across these runs. Pure, so it is unit-tested directly.</summary>
+    internal static EmpathyRunEvidence? Measure(IReadOnlyList<EmpathyRunTimeline> runs, IReadOnlySet<string> notificationNodes)
+    {
+        var usable = runs.Where(r => r.EndedAt > r.StartedAt).ToList();
+        if (usable.Count == 0) return null;
+
+        var days = new List<double>();
+        var messages = new List<int>();
+        var silences = new List<double>();
+        var waitingShares = new List<double>();
+        var notifiedRuns = 0;
+        var gateWaits = new Dictionary<string, List<double>>(StringComparer.Ordinal);
+
+        foreach (var run in usable)
+        {
+            var duration = run.EndedAt - run.StartedAt;
+            days.Add(duration.TotalDays);
+
+            var sent = run.CompletedNodes.Where(n => notificationNodes.Contains(n.NodeId)).Select(n => n.At).OrderBy(t => t).ToList();
+            messages.Add(sent.Count);
+
+            // Longest quiet stretch: start → first message → … → last message → outcome.
+            var points = new List<DateTime> { run.StartedAt };
+            points.AddRange(sent.Where(t => t > run.StartedAt && t < run.EndedAt));
+            points.Add(run.EndedAt);
+            silences.Add(points.Zip(points.Skip(1), (a, b) => (b - a).TotalHours).Max());
+
+            double waited = 0;
+            foreach (var gate in run.Gates)
+            {
+                var until = gate.DecidedAt is { } d && d < run.EndedAt ? d : run.EndedAt; // a run ends its waits
+                if (until <= gate.OpenedAt) continue;
+                var hours = (until - gate.OpenedAt).TotalHours;
+                waited += hours;
+                if (!gateWaits.TryGetValue(gate.NodeId, out var list)) gateWaits[gate.NodeId] = list = [];
+                list.Add(hours);
+            }
+            waitingShares.Add(Math.Min(1, waited / Math.Max(duration.TotalHours, 1e-9)));
+
+            var lastDecision = run.Gates.Where(g => g.DecidedAt is not null).Select(g => g.DecidedAt!.Value).DefaultIfEmpty(run.StartedAt).Max();
+            if (sent.Any(t => t >= lastDecision)) notifiedRuns++;
+        }
+
+        var slowest = gateWaits.Select(kv => (kv.Key, Avg: kv.Value.Average())).OrderByDescending(g => g.Avg).FirstOrDefault();
+        silences.Sort();
+        return new EmpathyRunEvidence(
+            usable.Count,
+            Math.Round(days.Average(), 2),
+            Math.Round(messages.Average(), 1),
+            Math.Round(silences[silences.Count / 2], 1),
+            (int)Math.Round(waitingShares.Average() * 100),
+            (int)Math.Round(notifiedRuns * 100.0 / usable.Count),
+            slowest.Key,
+            Math.Round(slowest.Avg, 1));
+    }
+
+    /// <summary>Findings backed by run numbers. Each says what was measured and what to change.</summary>
+    internal static List<EmpathyIssue> RunIssues(EmpathyRunEvidence e, WorkflowGraph graph)
+    {
+        var issues = new List<EmpathyIssue>();
+        string Runs() => e.RunsAnalysed == 1 ? "the one finished run" : $"the last {e.RunsAnalysed} finished runs";
+        string Days(double d) => d >= 1 ? $"{d:0.#} days" : $"{d * 24:0.#} hours";
+
+        if (e.AvgMessagesPerRun >= 5)
+            issues.Add(new EmpathyIssue("workflow", "Too many messages", EmpathyIssueType.MultipleEmails,
+                $"Across {Runs()}, the workflow sent {e.AvgMessagesPerRun:0.#} messages per run over {Days(e.AvgDaysToOutcome)} on average.",
+                "Combine the progress messages into one update per stage, and send the rest only to the people who must act.",
+                "Medium"));
+
+        if (e.MedianLongestSilenceHours >= 24)
+            issues.Add(new EmpathyIssue("workflow", "Long silence", EmpathyIssueType.VisibilityGap,
+                $"In a typical run the requester heard nothing for {e.MedianLongestSilenceHours:0.#} hours in a row ({Runs()}).",
+                "Send a short status update when each approval step opens (for example: 'With Finance for approval, usually decided within a day').",
+                e.MedianLongestSilenceHours >= 72 ? "High" : "Medium"));
+
+        if (e.PercentRunsOutcomeNotified < 50)
+            issues.Add(new EmpathyIssue("workflow", "Outcome rarely announced", EmpathyIssueType.NoOutcomeNotification,
+                $"Only {e.PercentRunsOutcomeNotified}% of {Runs()} sent any message after the final decision, so most requesters had to find out the outcome themselves.",
+                "Add an email or chat message after the last approval, on both the approved and rejected paths.",
+                "High"));
+
+        if (e.SlowestGateNodeId is { } gateId && e.PercentTimeWaitingOnApprovals >= 50 && e.SlowestGateAvgHours >= 8)
+        {
+            var label = graph.Nodes.FirstOrDefault(n => n.Id == gateId)?.Label ?? gateId;
+            issues.Add(new EmpathyIssue(gateId, label, EmpathyIssueType.LongWait,
+                $"Runs spent {e.PercentTimeWaitingOnApprovals}% of their time waiting for approvals; '{label}' took {e.SlowestGateAvgHours:0.#} hours on average.",
+                "Set a timeout with a reminder or escalation on this step, or add a backup approver.",
+                e.SlowestGateAvgHours >= 48 ? "High" : "Medium"));
+        }
+        return issues;
     }
 
     private static string? GetStringProperty(SfgNode node, string propertyName)

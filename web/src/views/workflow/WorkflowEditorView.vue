@@ -8,6 +8,7 @@ import SfgCanvas from '../../components/canvas/SfgCanvas.vue';
 import FmYamlEditor from '../../components/editor/FmYamlEditor.vue';
 import CopilotPanel from '../../components/editor/CopilotPanel.vue';
 import EmpathyPanel from '../../components/editor/EmpathyPanel.vue';
+import InheritancePanel from '../../components/editor/InheritancePanel.vue';
 import { useWorkflowEditor } from '../../composables/useWorkflowEditor';
 import { useHelp } from '../../composables/useHelp';
 import { useWorkspace } from '../../composables/useWorkspace';
@@ -30,6 +31,18 @@ const {
 } = useWorkflowEditor(workspaceId, workflowId);
 
 const toast = useToast();
+// Designers and Admins edit workflows. Only trusted when the store's workspace is this page's; the server checks anyway.
+const canEdit = computed(() => {
+  const current = ws.current?.value;
+  return current?.id !== workspaceId || !current.role || ['Admin', 'Designer'].includes(current.role);
+});
+
+// After a pattern from a similar workflow is added: reload the saved YAML and re-run the empathy analysis.
+const empathyKey = ref(0);
+async function onPatternApplied(): Promise<void> {
+  await loadWorkflow();
+  empathyKey.value += 1;
+}
 
 /** Save, telling the user what to do when it fails (the composable only reports success). */
 async function save(): Promise<boolean> {
@@ -414,11 +427,22 @@ onUnmounted(() => {
         <div class="flex-1 overflow-hidden bg-white">
           <EmpathyPanel
             v-if="empathyMode"
+            :key="empathyKey"
             :workspace-id="workspaceId"
             :workflow-id="workflowId"
             :visible="empathyMode"
             :yaml-content="yaml"
-          />
+          >
+            <template #after>
+              <InheritancePanel
+                :workspace-id="workspaceId"
+                :workflow-id="workflowId"
+                :can-edit="canEdit"
+                :dirty="isDirty"
+                @applied="onPatternApplied"
+              />
+            </template>
+          </EmpathyPanel>
           <FmYamlEditor
             v-else
             ref="yamlEditorRef"

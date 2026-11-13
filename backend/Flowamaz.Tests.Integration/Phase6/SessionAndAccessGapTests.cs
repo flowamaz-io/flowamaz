@@ -200,6 +200,24 @@ public sealed class SessionAndAccessGapTests : ApiTestBase
             "a token the marking server issues right after its own marker is always newer");
     }
 
+    [Fact]
+    public async Task A_request_refused_by_one_limit_uses_up_no_slot_in_the_other()
+    {
+        var limits = Fixture.Services.GetRequiredService<IRateLimitService>();
+        var person = $"person-{Guid.NewGuid():N}";
+        var shared = $"shared-{Guid.NewGuid():N}";
+        RateLimitCheck[] both = [new(person, 3, 3600), new(shared, 1, 3600)];
+
+        (await limits.CheckAndIncrementAllAsync(both)).Should().Be(-1, "the first request fits both");
+        (await limits.CheckAndIncrementAllAsync(both)).Should().Be(1, "the shared limit is full");
+        (await limits.CheckAndIncrementAllAsync(both)).Should().Be(1);
+
+        // Only the one allowed request counted against the person: two of their three are left.
+        (await limits.CheckAndIncrementAllAsync([new(person, 3, 3600)])).Should().Be(-1);
+        (await limits.CheckAndIncrementAllAsync([new(person, 3, 3600)])).Should().Be(-1);
+        (await limits.CheckAndIncrementAllAsync([new(person, 3, 3600)])).Should().Be(0);
+    }
+
     // ── SSO identity unlink ────────────────────────────────────────────────────────────
 
     [Fact]

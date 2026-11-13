@@ -14,6 +14,71 @@ public sealed class WorkflowEventRepository(FlowAmazDbContext db) : IWorkflowEve
     public async Task AppendAsync(WorkflowEvent workflowEvent, CancellationToken cancellationToken = default) =>
         await db.WorkflowEvents.AddAsync(workflowEvent, cancellationToken);
 
+    public async Task<Dictionary<Guid, Core.Models.RunPerformanceRow>> GetRunPerformanceAsync(
+        Guid workspaceId, IReadOnlyCollection<Guid> workflowDefinitionIds, DateTime since, CancellationToken cancellationToken = default)
+    {
+        var ids = workflowDefinitionIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+        var runs = await (
+            from i in db.WorkflowInstances.AsNoTracking()
+            join d in db.WorkflowDefinitions.AsNoTracking() on i.WorkflowDefinitionId equals d.Id
+            where i.WorkspaceId == workspaceId && d.WorkspaceId == workspaceId && ids.Contains(i.WorkflowDefinitionId) && !i.IsTest
+                && i.StartedAt != null && i.StartedAt >= since
+                && (i.Status == Core.Enums.InstanceStatus.Completed || i.Status == Core.Enums.InstanceStatus.Failed)
+            select new { i.WorkflowDefinitionId, i.Status, i.StartedAt, End = i.CompletedAt ?? i.FailedAt, d.SlaThresholdMs })
+            .ToListAsync(cancellationToken);
+
+        return runs.GroupBy(r => r.WorkflowDefinitionId).ToDictionary(g => g.Key, g =>
+        {
+            var durations = g.Where(r => r.End is not null).Select(r => new { r.SlaThresholdMs, Ms = (r.End!.Value - r.StartedAt!.Value).TotalMilliseconds }).ToList();
+            return new Core.Models.RunPerformanceRow(
+                g.Count(r => r.Status == Core.Enums.InstanceStatus.Completed),
+                g.Count(r => r.Status == Core.Enums.InstanceStatus.Failed),
+                durations.Count == 0 ? 0 : durations.Average(x => x.Ms),
+                durations.Count(x => x.SlaThresholdMs is > 0 && x.Ms > x.SlaThresholdMs));
+        });
+    }
+
+    public async Task<List<Core.Models.EmpathyRunTimeline>> GetRunTimelinesAsync(
+        Guid workspaceId, Guid workflowDefinitionId, DateTime since, int maxRuns, IReadOnlyCollection<string> nodeIds,
+        CancellationToken cancellationToken = default)
+    {
+        const int MaxEventsPerRun = 50;
+        var runs = await db.WorkflowInstances.AsNoTracking()
+            .Where(i => i.WorkspaceId == workspaceId && i.WorkflowDefinitionId == workflowDefinitionId && !i.IsTest
+                && i.StartedAt != null && i.StartedAt >= since
+                && (i.Status == Core.Enums.InstanceStatus.Completed || i.Status == Core.Enums.InstanceStatus.Failed))
+            .OrderByDescending(i => i.StartedAt)
+            .Take(maxRuns)
+            .Select(i => new { i.Id, StartedAt = i.StartedAt!.Value, EndedAt = i.CompletedAt ?? i.FailedAt })
+            .ToListAsync(cancellationToken);
+        if (runs.Count == 0) return [];
+
+        var ids = runs.Select(r => r.Id).ToList();
+        var wanted = nodeIds.ToList();
+        var completed = wanted.Count == 0 ? [] : await db.WorkflowEvents.AsNoTracking()
+            .Where(e => e.WorkspaceId == workspaceId && ids.Contains(e.InstanceId) && e.EventType == "NodeCompleted"
+                && e.NodeId != null && wanted.Contains(e.NodeId))
+            .OrderBy(e => e.OccurredAt)
+            .Take(maxRuns * MaxEventsPerRun)
+            .Select(e => new { e.InstanceId, NodeId = e.NodeId!, e.OccurredAt })
+            .ToListAsync(cancellationToken);
+        var gates = await db.GateDecisions.AsNoTracking()
+            .Where(g => g.WorkspaceId == workspaceId && ids.Contains(g.InstanceId))
+            .Select(g => new { g.InstanceId, g.NodeId, g.CreatedAt, g.DecidedAt })
+            .ToListAsync(cancellationToken);
+
+        var nodesByRun = completed.ToLookup(c => c.InstanceId);
+        var gatesByRun = gates.ToLookup(g => g.InstanceId);
+        return runs
+            .Where(r => r.EndedAt is not null)
+            .Select(r => new Core.Models.EmpathyRunTimeline(
+                r.Id, r.StartedAt, r.EndedAt!.Value,
+                nodesByRun[r.Id].OrderBy(c => c.OccurredAt).Select(c => (c.NodeId, c.OccurredAt)).ToList(),
+                gatesByRun[r.Id].OrderBy(g => g.CreatedAt).Select(g => (g.NodeId, g.CreatedAt, g.DecidedAt)).ToList()))
+            .ToList();
+    }
+
     public Task<List<WorkflowEvent>> GetForInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
         db.WorkflowEvents.AsNoTracking()
             .Where(e => e.InstanceId == instanceId)

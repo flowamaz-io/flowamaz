@@ -17,13 +17,16 @@ public sealed class WorkflowDnaController : ControllerBase
     private readonly IWorkflowDefinitionRepository _definitions;
     private readonly IUnitOfWork _uow;
     private readonly ILogger<WorkflowDnaController> _log;
+    private readonly Application.Workflow.Dna.WorkflowInheritanceService _inheritance;
 
     public WorkflowDnaController(
         IWorkflowDnaService dna,
         IWorkflowDefinitionRepository definitions,
         IUnitOfWork uow,
-        ILogger<WorkflowDnaController> log)
+        ILogger<WorkflowDnaController> log,
+        Application.Workflow.Dna.WorkflowInheritanceService inheritance)
     {
+        _inheritance = inheritance;
         _dna = dna;
         _definitions = definitions;
         _uow = uow;
@@ -52,6 +55,39 @@ public sealed class WorkflowDnaController : ControllerBase
         var similar = await _dna.FindSimilarAsync(workspaceId, dna, limit: 10, cancellationToken);
         _log.LogInformation("WorkflowDnaController.GetSimilar exit count={Count}", similar.Count);
         return Ok(similar);
+    }
+
+    /// <summary>
+    /// Inheritance (§8.8): patterns that similar, better-performing workflows in this workspace use and this one doesn't.
+    /// </summary>
+    [HttpGet("{id:guid}/inheritance")]
+    [RequireWorkspaceRole(WorkspaceRole.Viewer)]
+    public async Task<ActionResult<Application.Workflow.Dna.InheritanceReport>> GetInheritance(Guid workspaceId, Guid id, CancellationToken cancellationToken)
+    {
+        _log.LogInformation("WorkflowDnaController.GetInheritance entry workspaceId={WorkspaceId} id={Id}", workspaceId, id);
+        var report = await _inheritance.GetReportAsync(workspaceId, id, cancellationToken);
+        if (report is null) return NotFound(new { error = "This workflow isn't in this workspace any more. Go back to the workflow list and open it again." });
+        _log.LogInformation("WorkflowDnaController.GetInheritance exit suggestions={Count}", report.Suggestions.Count);
+        return Ok(report);
+    }
+
+    /// <summary>Adds an inheritable pattern (gate-timeout or action-retry) from a sibling to this workflow and saves it.</summary>
+    [HttpPost("{id:guid}/inheritance/apply")]
+    [RequireWorkspaceRole(WorkspaceRole.Designer)]
+    public async Task<ActionResult<ApplyInheritanceResponse>> ApplyInheritance(
+        Guid workspaceId, Guid id, [FromBody] ApplyInheritanceRequest request, CancellationToken cancellationToken)
+    {
+        _log.LogInformation("WorkflowDnaController.ApplyInheritance entry workspaceId={WorkspaceId} id={Id} kind={Kind}", workspaceId, id, request.Kind);
+        if (request.Kind is not ("gate-timeout" or "action-retry") || request.FromWorkflowId == Guid.Empty)
+            return BadRequest(new
+            {
+                success = false, statusCode = 400, code = "VALIDATION_ERROR",
+                message = "Choose a suggestion that can be applied (gate-timeout or action-retry) and the workflow it comes from.",
+            });
+        var yaml = await _inheritance.ApplyAsync(workspaceId, id, request.Kind, request.FromWorkflowId, cancellationToken);
+        if (yaml is null) return NotFound(new { error = "One of the two workflows isn't in this workspace any more. Refresh the suggestions." });
+        _log.LogInformation("WorkflowDnaController.ApplyInheritance exit id={Id}", id);
+        return Ok(new ApplyInheritanceResponse(yaml));
     }
 
     /// <summary>Suggest a clone when the user is typing a new workflow name.</summary>
@@ -105,3 +141,9 @@ public sealed class WorkflowDnaController : ControllerBase
 }
 
 public sealed record WorkflowDefinitionSummary(Guid Id, string Name, string Slug);
+
+/// <summary>Which suggestion to apply: its kind and the workflow it comes from.</summary>
+public sealed record ApplyInheritanceRequest(string Kind, Guid FromWorkflowId);
+
+/// <summary>The workflow's YAML after the change.</summary>
+public sealed record ApplyInheritanceResponse(string YamlContent);

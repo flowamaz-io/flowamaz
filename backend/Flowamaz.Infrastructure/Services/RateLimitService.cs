@@ -23,6 +23,20 @@ end
 return current
 ";
 
+    // KEYS = counter keys; ARGV = max1, window1, max2, window2, … Returns the 1-based index of the first full
+    // counter (nothing incremented), or 0 after incrementing them all. Runs atomically, so concurrent requests can't
+    // both slip into the last slot.
+    private const string CheckAndIncrementAllScript = @"
+for i = 1, #KEYS do
+  local current = tonumber(redis.call('GET', KEYS[i]) or '0')
+  if current + 1 > tonumber(ARGV[2 * i - 1]) then return i end
+end
+for i = 1, #KEYS do
+  if redis.call('INCR', KEYS[i]) == 1 then redis.call('EXPIRE', KEYS[i], ARGV[2 * i]) end
+end
+return 0
+";
+
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RateLimitService> _logger;
 
@@ -69,6 +83,33 @@ return current
             // dashboard still catches anomalies via metering. Failing closed would punish all users
             // on a cache outage, which is worse than allowing brief over-spend.
             return true;
+        }
+    }
+
+    public async Task<int> CheckAndIncrementAllAsync(IReadOnlyList<RateLimitCheck> limits, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(limits);
+        if (limits.Count == 0) return -1;
+        foreach (var l in limits)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(l.Key);
+            if (l.MaxCount <= 0 || l.WindowSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(limits), "Each limit needs a positive count and window.");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        _logger.LogDebug("RateLimitService.CheckAndIncrementAllAsync enter count={Count}", limits.Count);
+        try
+        {
+            // Hash-tagged keys would be needed on Redis Cluster; Flowamaz runs a single Redis (docker-compose).
+            var keys = limits.Select(l => (RedisKey)$"ratelimit:{l.Key}").ToArray();
+            var args = limits.SelectMany(l => new RedisValue[] { l.MaxCount, l.WindowSeconds }).ToArray();
+            var full = (long)await _redis.GetDatabase().ScriptEvaluateAsync(CheckAndIncrementAllScript, keys, args);
+            _logger.LogDebug("RateLimitService.CheckAndIncrementAllAsync exit full={Full}", full);
+            return full == 0 ? -1 : (int)full - 1;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "RateLimitService.CheckAndIncrementAllAsync error — failing open (allowing request)");
+            return -1; // same reasoning as CheckAndIncrementAsync
         }
     }
 }

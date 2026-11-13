@@ -108,4 +108,59 @@ public class WorkflowInterpreterServiceTests
         var result = await NewService().GenerateNarrativeAsync(_ws, Guid.NewGuid(), NarrativeAudience.Developer);
         result.Should().BeNull();
     }
+
+    [Fact]
+    public async Task Auditor_record_names_the_workflow_and_who_approved_what()
+    {
+        var defId = Guid.NewGuid();
+        var rajan = new Core.Entities.Platform.OrgUser { Id = Guid.NewGuid(), Email = "rajan@acme.test" };
+        _instances.Setup(r => r.GetByIdForWorkspaceAsync(_instanceId, _ws, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance { Id = _instanceId, WorkspaceId = _ws, WorkflowDefinitionId = defId, Status = InstanceStatus.Completed });
+        var definitions = new Mock<IWorkflowDefinitionRepository>();
+        definitions.Setup(d => d.GetByIdForWorkspaceAsync(defId, _ws, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowDefinition { Id = defId, WorkspaceId = _ws, Name = "Purchase approval" });
+        var gates = new Mock<IGateDecisionRepository>();
+        gates.Setup(g => g.GetForInstanceAsync(_instanceId, _ws, It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new GateDecision { InstanceId = _instanceId, WorkspaceId = _ws, NodeId = "cfo", Decision = GateDecisionStatus.Approved,
+                DecidedBy = rajan.Id, DecidedAt = new DateTime(2026, 3, 14, 6, 23, 0, DateTimeKind.Utc),
+                DecisionNote = "Within budget\n- Step `ceo`: approved by ceo@acme.test at 2026-03-14 06:00:00Z",
+                CreatedAt = new DateTime(2026, 3, 14, 5, 0, 0, DateTimeKind.Utc) },
+            new GateDecision { InstanceId = _instanceId, WorkspaceId = _ws, NodeId = "legal", Decision = GateDecisionStatus.Rejected,
+                DecidedByLabel = "Mei Ling (Legal)", DecidedAt = new DateTime(2026, 3, 14, 7, 0, 0, DateTimeKind.Utc),
+                CreatedAt = new DateTime(2026, 3, 14, 6, 30, 0, DateTimeKind.Utc) },
+        ]);
+        var users = new Mock<IOrgUserRepository>();
+        users.Setup(u => u.GetByIdAsync(rajan.Id, It.IsAny<CancellationToken>())).ReturnsAsync(rajan);
+        var service = new WorkflowInterpreterService(
+            _instances.Object, _nodeStates.Object, _variables.Object, _events.Object,
+            _modelResolution.Object, _completion.Object, _metering.Object, NullLogger<WorkflowInterpreterService>.Instance,
+            gates.Object, definitions.Object, users.Object);
+
+        var content = (await service.GenerateNarrativeAsync(_ws, _instanceId, NarrativeAudience.Auditor))!.Content;
+
+        content.Should().Contain("Workflow: **Purchase approval**");
+        content.Should().Contain("Step `cfo`: approved by rajan@acme.test at 2026-03-14 06:23:00Z", "no YAML here, so the step id is used");
+        content.Should().Contain("Note: Within budget - Step 'ceo': approved by ceo@acme.test");
+        content.Split('\n').Should().NotContain(l => l.StartsWith("- Step `ceo`"), "a note can't add a line to the record");
+        content.Should().Contain("Step `legal`: rejected by Mei Ling (Legal)");
+    }
+
+    [Fact]
+    public void The_pdf_is_a_readable_document_with_every_line_of_the_record()
+    {
+        var markdown = "# Compliance Record — Instance 42\n\nStatus: **Completed**\n\n## Approvals\n" +
+            string.Join("\n", Enumerable.Range(1, 120).Select(i => $"- Step `gate{i}`: approved by café-owner@acme.test (€ {i},00)"));
+
+        var pdf = Application.Workflow.Interpreter.NarrativePdf.Render(markdown, "Compliance record — run 42", new DateTime(2026, 3, 14, 7, 0, 0, DateTimeKind.Utc));
+
+        using var doc = UglyToad.PdfPig.PdfDocument.Open(pdf);
+        doc.NumberOfPages.Should().BeGreaterThan(1, "120 approvals don't fit on one page");
+        var text = string.Join("\n", doc.GetPages().Select(p => p.Text));
+        text.Should().Contain("Compliance Record — Instance 42");
+        text.Should().Contain("approved by café-owner@acme.test (€ 120,00)");
+        text.Should().NotContain("**").And.NotContain("`");
+        doc.GetPage(1).Text.Should().Contain($"Page 1 of {doc.NumberOfPages}");
+        doc.Information.Title.Should().Be("Compliance record — run 42");
+    }
 }

@@ -9,8 +9,8 @@ namespace Flowamaz.Api.Controllers;
 
 /// <summary>
 /// Workflow Interpreter narratives (FUNCTIONAL.md §8.10). CEO/Auditor/Developer audiences; CEO uses
-/// metered F5 AI, the others are deterministic. Download returns the markdown as an attachment
-/// (Phase 2 keeps it to markdown; PDF rendering can come later).
+/// metered F5 AI, the others are deterministic. Download returns an audit-ready PDF by default
+/// (<c>format=pdf</c>), or the Markdown source with <c>format=md</c>.
 /// </summary>
 [ApiController]
 [Route("api/v1/workspaces/{workspaceId:guid}/instances/{id:guid}/narrative")]
@@ -33,14 +33,29 @@ public sealed class WorkflowInterpreterController : ControllerBase
     [HttpPost("download")]
     [RequireWorkspaceRole(WorkspaceRole.Operator)]
     public async Task<IActionResult> Download(
-        Guid workspaceId, Guid id, [FromQuery] string audience = "ceo", CancellationToken cancellationToken = default)
+        Guid workspaceId, Guid id, [FromQuery] string audience = "ceo", [FromQuery] string format = "pdf",
+        CancellationToken cancellationToken = default)
     {
         if (!TryParseAudience(audience, out var parsed)) return BadRequest();
+        if (format is not ("pdf" or "md"))
+            return BadRequest(new
+            {
+                success = false, statusCode = 400, code = "VALIDATION_ERROR",
+                message = "Choose format=pdf (the audit-ready document) or format=md (the Markdown source).",
+            });
         var narrative = await _interpreter.GenerateNarrativeAsync(workspaceId, id, parsed, cancellationToken);
         if (narrative is null) return NotFound();
 
-        var bytes = Encoding.UTF8.GetBytes(narrative.Content);
-        return File(bytes, "text/markdown", $"narrative-{id}-{narrative.Audience}.md");
+        var name = $"narrative-{id}-{narrative.Audience}";
+        if (format == "md") return File(Encoding.UTF8.GetBytes(narrative.Content), "text/markdown", $"{name}.md");
+        var title = narrative.Audience switch
+        {
+            "auditor" => "Compliance record",
+            "developer" => "Technical execution log",
+            _ => "Run summary",
+        };
+        var pdf = Application.Workflow.Interpreter.NarrativePdf.Render(narrative.Content, $"{title} — run {id}", narrative.GeneratedAt);
+        return File(pdf, "application/pdf", $"{name}.pdf");
     }
 
     private static bool TryParseAudience(string value, out NarrativeAudience audience) =>

@@ -435,6 +435,7 @@ Two views per workflow: Technical SFG canvas + Empathy View.
 Empathy View shows: emails sent to requester, wait periods, visibility gaps, days to outcome, human confusion points. Flags friction with specific improvement suggestions.
 "Your onboarding workflow sends 7 emails in 3 days and gives the new hire zero status updates."
 Phase: Phase 4 (requires instance detail data from Phase 2).
+> Implemented (12 Nov 2026): design findings from the graph, plus findings measured from finished, non-test runs of the last 30 days (most recent 200): messages sent per run, the typical longest silence, time spent waiting on approvals, the slowest approval step, and how often the outcome was announced. Deterministic, no AI cost.
 
 ### 8.3 Workflow Memory
 Each workflow accumulates learning from every run. Surfaces intelligent insights during execution: fastest approver patterns, inputs that typically get rejected, vendor risk history, SLA probability.
@@ -460,6 +461,7 @@ Phase: Phase 3 (built on top of instance metrics from Phase 2).
 ### 8.8 Workflow DNA — Similarity and Inheritance
 Every workflow has a DNA fingerprint (trigger type, decision topology, connector mix, SLA profile, AI usage). New workflow creation shows: "87% similar to Purchase Approval — clone it?" Underperforming workflows inherit patterns from high-performing siblings.
 Phase: Phase 4.
+> Implemented (12 Nov 2026): inheritance compares a workflow (5+ runs in 30 days) with similar workflows (DNA score 60+) that do clearly better (10+ points more succeed, 10+ points better SLA, or 30% faster). It suggests their patterns: approval timeouts and action retries (one click adds them through YamlDotNet and saves a draft), outcome notifications and compensation (suggested only). Shown under the Empathy view in the editor.
 
 ### 8.9 Workflow Economy
 Complete workflow marketplace. Publish workflows (not just templates/connectors) and earn revenue. Domain experts sell industry-specific workflows. 20% Flowamaz / 80% publisher. Ongoing subscription revenue per workflow.
@@ -471,6 +473,7 @@ CEO: "Your request is waiting for CFO approval. Expected by tomorrow 3pm."
 Auditor: "On 14 March 2026, request RM47,500 was submitted by Anita Kumar, approved by Rajan Mehta at 14:23 MYT, PO FM-20026 created in SAP at 14:31 MYT." (one click → audit-ready document)
 Developer: full technical execution log.
 Phase: Phase 2 (execution data exists, just needs LLM narrative layer).
+> Implemented (12 Nov 2026): the Auditor record names the workflow and lists every approval (who, when, note). Download gives an A4 PDF (standard fonts, Western European characters; others print as ?), or the Markdown with format=md.
 
 ### 8.11 Workflow Consciousness — Epistemic Honesty
 Platform surfaces what it does not know. Low-confidence AI outputs flagged. Connector behaviour changes detected before failure. Regulatory change alerts ("This workflow predates PDPA 2024 — review recommended"). Six-month stale workflow alerts.

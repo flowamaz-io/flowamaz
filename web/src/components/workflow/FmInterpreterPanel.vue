@@ -42,14 +42,24 @@ async function load(audience: NarrativeAudience): Promise<void> {
   }
 }
 
+const downloading = ref(false);
+
 async function download(): Promise<void> {
-  const blob = await instanceService.downloadNarrative(props.workspaceId, props.instanceId, active.value);
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `narrative-${props.instanceId}-${active.value}.md`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloading.value = true;
+  error.value = null;
+  try {
+    const blob = await instanceService.downloadNarrative(props.workspaceId, props.instanceId, active.value);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `narrative-${props.instanceId}-${active.value}.pdf`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    error.value = `Couldn't create the PDF. ${toUserFacingError(e).message}`;
+  } finally {
+    downloading.value = false;
+  }
 }
 
 onMounted(() => {
@@ -81,12 +91,14 @@ onMounted(() => {
         variant="secondary"
         size="sm"
         :disabled="loading || !content"
+        :loading="downloading"
+        :aria-label="`Download the ${active} narrative as a PDF`"
         @click="download"
       >
         <template #icon-left>
           <Download class="h-4 w-4" />
         </template>
-        Download
+        Download PDF
       </FmButton>
     </div>
 
