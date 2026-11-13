@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toUserFacingError } from '@/utils/error.util';
 import { computed, ref } from 'vue';
 import { BookOpen, Plus, Save, Trash2 } from 'lucide-vue-next';
 import { libraryService, type LibraryFormItem } from '@/services/library.service';
@@ -94,9 +95,7 @@ async function openPicker(): Promise<void> {
   try {
     libraryForms.value = await libraryService.listForms(props.workspaceId);
   } catch (err: unknown) {
-    libraryError.value = err instanceof Error
-      ? err.message
-      : 'Library forms could not be loaded. Check your connection, then open the list again.';
+    libraryError.value = toUserFacingError(err).message || 'Library forms could not be loaded. Check your connection, then open the list again.';
   } finally {
     libraryLoading.value = false;
   }
@@ -124,7 +123,7 @@ async function saveAsForm(): Promise<void> {
   } catch (err: unknown) {
     saveMessage.value = {
       ok: false,
-      text: err instanceof Error ? err.message : 'The form was not saved. Check your connection and save again.',
+      text: toUserFacingError(err).message || 'The form was not saved. Check your connection and save again.',
     };
   } finally {
     saving.value = false;

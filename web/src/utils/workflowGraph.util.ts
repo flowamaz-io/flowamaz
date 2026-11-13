@@ -25,6 +25,24 @@ const str = (v: unknown): string | undefined =>
   typeof v === 'string' ? v : typeof v === 'number' || typeof v === 'boolean' ? String(v) : undefined;
 
 /**
+ * The mapping that holds a workflow's `nodes` / `edges` / `variables`: `spec` in flowamaz/v1, or the document
+ * itself in the short legacy shape (top-level `nodes:`). Editors must write back into this same mapping;
+ * writing `spec.nodes` into a short-shape document defines every node twice (CC, PR #23).
+ * With `create`, a document with neither gets an empty `spec` (flowamaz/v1).
+ */
+export function workflowSection(doc: unknown, create: true): Dict;
+export function workflowSection(doc: unknown, create?: false): Dict | null;
+export function workflowSection(doc: unknown, create = false): Dict | null {
+  if (!isDict(doc)) return null;
+  if (isDict(doc.spec)) return doc.spec;
+  if (Array.isArray(doc.nodes) || Array.isArray(doc.edges)) return doc;
+  if (!create) return null;
+  const spec: Dict = {};
+  doc.spec = spec;
+  return spec;
+}
+
+/**
  * Extracts the canvas graph (nodes + edges) from workflow YAML. Accepts both the flowamaz/v1 shape
  * (`spec.nodes` / `spec.edges`) and the legacy top-level `nodes` / `edges`, in any valid YAML style.
  * Returns null when the text is not parseable YAML or has no nodes (the canvas then keeps its state).
@@ -38,7 +56,7 @@ export function parseWorkflowGraph(yaml: string): { nodes: CanvasNode[]; edges: 
   }
   if (!isDict(doc)) return null;
 
-  const spec = isDict(doc.spec) ? doc.spec : doc;
+  const spec = workflowSection(doc) ?? doc;
   const rawNodes = Array.isArray(spec.nodes) ? spec.nodes : [];
   const rawEdges = Array.isArray(spec.edges) ? spec.edges : [];
 

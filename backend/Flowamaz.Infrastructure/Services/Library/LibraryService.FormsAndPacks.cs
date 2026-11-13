@@ -149,6 +149,12 @@ public sealed partial class LibraryService
             throw LibraryException.Removed(pack.Name, deprecated.AddDays(ConnectorDefinitionNoticeDays));
         var results = new List<LibraryPackItemResult>();
 
+        // Names for the result rows, so "already installed" shows "Email (SMTP/Resend)" rather than its id.
+        var connectorNames = (await ListConnectorsAsync(workspaceId, null, null, ct))
+            .GroupBy(c => c.Id).ToDictionary(g => g.Key, g => g.First().Name);
+        string ConnectorName(string reference) =>
+            connectorNames.GetValueOrDefault(reference.Contains('/') ? reference[(reference.IndexOf('/') + 1)..] : reference) ?? reference;
+
         foreach (var connectorId in pack.Connectors)
         {
             try
@@ -158,12 +164,12 @@ public sealed partial class LibraryService
             }
             catch (LibraryException ex) when (ex.ErrorCode == "LIBRARY_CONNECTOR_INSTALLED")
             {
-                results.Add(new("connector", connectorId, connectorId, "already_installed", ex.Message));
+                results.Add(new("connector", connectorId, ConnectorName(connectorId), "already_installed", ex.Message));
             }
             catch (AppException ex)
             {
                 _log.LogWarning("LibraryService.InstallPackAsync connector {Connector} not installed: {Code}", connectorId, ex.ErrorCode);
-                results.Add(new("connector", connectorId, connectorId, ex.HttpStatusCode == 404 ? "unavailable" : "failed", ex.Message));
+                results.Add(new("connector", connectorId, ConnectorName(connectorId), ex.HttpStatusCode == 404 ? "unavailable" : "failed", ex.Message));
             }
         }
 

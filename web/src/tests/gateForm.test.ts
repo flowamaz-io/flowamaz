@@ -14,7 +14,12 @@ vi.mock('@/services/library.service', () => ({
       publisher: 'flowamaz-io', isOfficial: true, isWorkspaceForm: false, tags: [], deprecatedAt: null, deprecationNote: null,
       fields: [{ key: 'approved_amount', label: 'Approved amount', type: 'number', required: true, min: 0 }],
     }]),
-    saveForm: vi.fn(),
+    saveForm: vi.fn(async () => {
+      throw Object.assign(new Error('Request failed with status code 409'), {
+        isAxiosError: true,
+        response: { status: 409, data: { code: 'LIBRARY_FORM_NAME_TAKEN', message: "This workspace already has a form called 'Vendor check'." } },
+      });
+    }),
   },
 }));
 
@@ -71,6 +76,16 @@ describe('GateFormEditor', () => {
     expect(wrapper.emitted('update')!.at(-1)![0]).toEqual({
       form: { fields: [{ key: 'approved_amount', label: 'Approved amount', type: 'number', required: true, min: 0 }] },
     });
+  });
+
+  it("shows the server's message when saving fails", async () => {
+    const wrapper = mount(GateFormEditor, { props: { config: { form: { fields: [{ key: 'a', label: 'A', type: 'text' }] } }, workspaceId: 'w1' } });
+    await wrapper.find('[data-test="gate-form-save"]').trigger('click');
+    await wrapper.find('input[aria-label="Form name"]').setValue('Vendor check');
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.text()).toContain("already has a form called 'Vendor check'");
+    expect(wrapper.text()).not.toContain('status code 409');
   });
 
   it('removing the last field removes the form', async () => {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toUserFacingError } from '@/utils/error.util';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ClipboardList, Search, Trash2 } from 'lucide-vue-next';
@@ -23,6 +24,8 @@ const error = ref<string | null>(null);
 const query = ref('');
 const expanded = ref<string | null>(null);
 const deleting = ref<string | null>(null);
+/** The form whose delete is waiting for "Yes, delete". */
+const confirming = ref<string | null>(null);
 
 const typeLabel = (t: string): string => FIELD_TYPES.find((x) => x.value === t)?.label ?? t;
 
@@ -40,7 +43,7 @@ async function load(): Promise<void> {
   try {
     forms.value = await libraryService.listForms(currentWorkspaceId.value);
   } catch (err: unknown) {
-    error.value = err instanceof Error ? err.message : 'Forms could not be loaded. Check your connection, then select "Try again".';
+    error.value = toUserFacingError(err).message || 'Forms could not be loaded. Check your connection, then select "Try again".';
   } finally {
     loading.value = false;
   }
@@ -48,12 +51,13 @@ async function load(): Promise<void> {
 
 async function remove(form: LibraryFormItem): Promise<void> {
   if (!currentWorkspaceId.value) return;
+  confirming.value = null;
   deleting.value = form.id;
   try {
     await libraryService.deleteForm(currentWorkspaceId.value, form.id);
     forms.value = forms.value.filter((f) => f.id !== form.id);
   } catch (err: unknown) {
-    error.value = err instanceof Error ? err.message : 'The form was not deleted. Reload the page and try again.';
+    error.value = toUserFacingError(err).message || 'The form was not deleted. Reload the page and try again.';
   } finally {
     deleting.value = null;
   }
@@ -170,11 +174,33 @@ onMounted(load);
           v-if="form.isWorkspaceForm && canEdit"
           class="mt-3 border-t border-slate-100 pt-3"
         >
+          <div
+            v-if="confirming === form.id"
+            class="flex flex-wrap items-center gap-2 text-xs"
+            :data-testid="`library-form-confirm-${form.slug}`"
+          >
+            <span class="text-slate-700">Delete “{{ form.name }}”?</span>
+            <button
+              type="button"
+              class="rounded bg-red-600 px-2 py-1 font-medium text-white hover:bg-red-700"
+              @click="remove(form)"
+            >
+              Yes, delete
+            </button>
+            <button
+              type="button"
+              class="rounded px-2 py-1 text-slate-600 hover:bg-slate-100"
+              @click="confirming = null"
+            >
+              Cancel
+            </button>
+          </div>
           <button
+            v-else
             type="button"
             class="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 disabled:opacity-50"
             :disabled="deleting === form.id"
-            @click="remove(form)"
+            @click="confirming = form.id"
           >
             <Trash2 class="h-3.5 w-3.5" />
             {{ deleting === form.id ? 'Deleting…' : 'Delete form' }}

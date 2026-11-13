@@ -93,6 +93,10 @@ test.describe('Library forms and packs (S82–S85)', () => {
     await panel.getByRole('button', { name: 'Save node' }).click();
     await expect(panel).toBeHidden();
     await expect(page.locator('.cm-content')).toContainText('approved_amount');
+    // A short-shape workflow is saved in place: no second spec.nodes, the gate defined once.
+    const yamlText = (await page.locator('.cm-content').innerText());
+    expect(yamlText).not.toMatch(/^spec:/m);
+    expect(yamlText.match(/id: approve\b/g) ?? []).toHaveLength(1);
   });
 
   // S84: Library → Forms lists the official forms.

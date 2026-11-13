@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { notifyGatesChanged } from '@/utils/gateEvents.util';
+import { toUserFacingError } from '@/utils/error.util';
 import { computed, onMounted, ref } from 'vue';
 import { CheckCircle, XCircle, Clock, ClipboardList } from 'lucide-vue-next';
 import FmSpinner from '@/components/common/FmSpinner.vue';
@@ -76,9 +78,7 @@ async function load(): Promise<void> {
     allGates.value = await gateService.getAllGates(currentWorkspaceId.value, showTest.value);
   } catch (err: unknown) {
     error.value =
-      err instanceof Error
-        ? err.message
-        : 'Could not load approval gates. Check that the Flowamaz API is reachable, then select "Try again".';
+      toUserFacingError(err).message || 'Could not load approval gates. Check that the Flowamaz API is reachable, then select "Try again".';
   } finally {
     loading.value = false;
   }
@@ -148,14 +148,13 @@ async function decide(
     );
     if (idx !== -1) allGates.value[idx] = updated;
     decidedHere.value = new Set(decidedHere.value).add(key);
+    notifyGatesChanged();
 
     delete notes.value[key];
     return true;
   } catch (err: unknown) {
     const message =
-      err instanceof Error
-        ? err.message
-        : 'The decision was not recorded. Reload the page and decide again.';
+      toUserFacingError(err).message || 'The decision was not recorded. Reload the page and decide again.';
     // Inside the form, the problem shows next to the answers; elsewhere it replaces the list.
     if (values !== undefined) formError.value = message;
     else error.value = message;

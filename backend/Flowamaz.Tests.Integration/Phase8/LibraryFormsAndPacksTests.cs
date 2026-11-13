@@ -174,6 +174,8 @@ public sealed class LibraryFormsAndPacksTests : ApiTestBase
         var again = await DataAsync(await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/library/packs/install", new { id = "finance-approvals" }));
         again.GetProperty("installed").GetInt32().Should().Be(0);
         again.GetProperty("alreadyInstalled").GetInt32().Should().Be(7);
+        again.GetProperty("items").EnumerateArray().Where(i => i.GetProperty("kind").GetString() == "connector")
+            .Should().OnlyContain(i => i.GetProperty("name").GetString() != i.GetProperty("id").GetString(), "rows show connector names, not ids");
 
         var workflows = await DbAsync(db => db.WorkflowDefinitions.CountAsync(w => w.WorkspaceId == ws));
         workflows.Should().Be(3);

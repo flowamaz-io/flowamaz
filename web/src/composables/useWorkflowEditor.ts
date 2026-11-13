@@ -4,6 +4,7 @@ import * as jsYaml from 'js-yaml';
 import { workflowService } from '@/services/workflow.service';
 import { creationService } from '@/services/creation.service';
 import { dumpWorkflowYaml, expandYamlAliases } from '@/utils/yaml.util';
+import { workflowSection } from '@/utils/workflowGraph.util';
 
 export type SaveState = 'saved' | 'unsaved' | 'saving';
 
@@ -107,8 +108,9 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
         return 'No changes to apply in this suggestion.';
       }
 
-      const current = jsYaml.load(yaml.value) as Record<string, unknown>;
-      const currentSpec = (current?.spec ?? {}) as Record<string, unknown>;
+      const current = (jsYaml.load(yaml.value) as Record<string, unknown> | null) ?? {};
+      // The short shape (top-level nodes:) is patched in place, not given a second spec.
+      const currentSpec = workflowSection(current, true);
 
       // Merge nodes — update existing by id, add new
       const currentNodes = (currentSpec.nodes as Array<Record<string, unknown>>) ?? [];
@@ -144,7 +146,6 @@ export function useWorkflowEditor(workspaceId: string, workflowId: string) {
         currentSpec.variables = { ...(currentSpec.variables as object ?? {}), ...(patchSpec.variables as object) };
       }
 
-      current.spec = currentSpec;
       validationErrors.value = []; // clear stale markers before patch lands
       yaml.value = dumpWorkflowYaml(current, { quotingType: '"', forceQuotes: false });
       return null;

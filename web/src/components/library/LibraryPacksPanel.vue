@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toUserFacingError } from '@/utils/error.util';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { CheckCircle2, Package, XCircle } from 'lucide-vue-next';
@@ -44,7 +45,7 @@ async function load(): Promise<void> {
   try {
     packs.value = await libraryService.listPacks(currentWorkspaceId.value);
   } catch (err: unknown) {
-    error.value = err instanceof Error ? err.message : 'Packs could not be loaded. Check your connection, then select "Try again".';
+    error.value = toUserFacingError(err).message || 'Packs could not be loaded. Check your connection, then select "Try again".';
   } finally {
     loading.value = false;
   }
@@ -60,7 +61,7 @@ async function install(pack: LibraryPackItem): Promise<void> {
   } catch (err: unknown) {
     installErrors.value = {
       ...installErrors.value,
-      [pack.slug]: err instanceof Error ? err.message : 'The pack was not installed. Check your connection and install again.',
+      [pack.slug]: toUserFacingError(err).message || 'The pack was not installed. Check your connection and install again.',
     };
   } finally {
     installing.value = null;
