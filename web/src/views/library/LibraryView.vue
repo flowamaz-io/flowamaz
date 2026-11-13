@@ -127,7 +127,11 @@ onMounted(load);
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit" role="tablist" aria-label="Library sections">
+    <div
+      class="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit"
+      role="tablist"
+      aria-label="Library sections"
+    >
       <button
         v-for="tab in (['connectors', 'templates', 'forms', 'packs'] as const)"
         :key="tab"
