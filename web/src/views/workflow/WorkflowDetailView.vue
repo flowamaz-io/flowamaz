@@ -13,6 +13,8 @@ import FmErrorState from '@/components/common/FmErrorState.vue';
 import FmTooltip from '@/components/common/FmTooltip.vue';
 import FmYamlEditor from '@/components/editor/FmYamlEditor.vue';
 import FmVersionDiffView from '@/components/workflow/FmVersionDiffView.vue';
+import TwinPanel from '@/components/workflow/TwinPanel.vue';
+import { canDesign } from '@/utils/constants';
 import type { WorkflowCommit } from '@/types';
 import { useWorkflowStore } from '@/stores/workflow.store';
 import { useWorkspaceStore } from '@/stores/workspace.store';
@@ -23,7 +25,8 @@ import { toUserFacingError } from '@/utils/error.util';
 import { fromNow, formatDate } from '@/utils/date.util';
 import { healthColorClass, instanceStatusVariant, workflowStatusVariant } from '@/utils/workflow.util';
 
-type Tab = 'overview' | 'instances' | 'versions' | 'yaml';
+type Tab = 'overview' | 'instances' | 'versions' | 'twin' | 'yaml';
+const TABS: Tab[] = ['overview', 'instances', 'versions', 'twin', 'yaml'];
 
 const route = useRoute();
 const router = useRouter();
@@ -34,7 +37,9 @@ const { currentWorkflow, instances, loading, error } = storeToRefs(store);
 
 const id = computed(() => String(route.params.id));
 const workspaceId = computed(() => workspaceStore.currentWorkspaceId ?? '');
-const activeTab = ref<Tab>('overview');
+// ?tab=twin (from the Twin badge on the workflow list) opens that tab directly.
+const activeTab = ref<Tab>(TABS.includes(route.query.tab as Tab) ? (route.query.tab as Tab) : 'overview');
+const canRunTwin = computed(() => canDesign(workspaceStore.current?.role));
 const includeTestRuns = ref(false);
 const publishing = ref(false);
 
@@ -343,7 +348,7 @@ watch(id, () => store.loadWorkflow(id.value));
 
       <div class="flex gap-1 border-b border-slate-200">
         <button
-          v-for="tab in (['overview', 'instances', 'versions', 'yaml'] as Tab[])"
+          v-for="tab in TABS"
           :key="tab"
           type="button"
           :class="[
@@ -488,6 +493,13 @@ watch(id, () => store.loadWorkflow(id.value));
           </button>
         </div>
       </div>
+
+      <TwinPanel
+        v-else-if="activeTab === 'twin' && workspaceId"
+        :workspace-id="workspaceId"
+        :workflow-id="id"
+        :can-run="canRunTwin"
+      />
 
       <div v-else-if="activeTab === 'instances'">
         <label class="mb-3 inline-flex items-center gap-2 text-sm text-slate-600">
