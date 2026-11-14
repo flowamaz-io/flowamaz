@@ -23,6 +23,8 @@ const running = ref(false);
 const run = ref<TwinRun | null>(null);
 const automatic = ref(false);
 const showInfo = ref(false);
+/** True once the latest result has loaded; until then we don't know whether it's published, so we don't say. */
+const loaded = ref(false);
 
 const badge = computed(() => (run.value ? twinBadge(run.value.status, run.value.breakCount, run.value.warningCount) : null));
 const visible = computed<TwinFinding[]>(() =>
@@ -39,10 +41,12 @@ const severityStyle: Record<TwinSeverity, { label: string; variant: 'danger' | '
 async function load(): Promise<void> {
   loading.value = true;
   loadError.value = '';
+  loaded.value = false;
   try {
     const latest = await twinService.latest(props.workspaceId, props.workflowId);
     run.value = latest.run;
     automatic.value = latest.hasProductionVersion;
+    loaded.value = true;
   } catch (e) {
     loadError.value = toUserFacingError(e).message;
   } finally {
@@ -90,10 +94,10 @@ watch(() => props.workflowId, load);
           Tries generated inputs against this workflow — boundary values, missing and badly formatted fields, recent
           real payloads, each approval approved and rejected — without running anything for real, and shows the ones
           that break it. The more decision points, the more inputs (up to 5,000).
-          <template v-if="automatic">
+          <template v-if="loaded && automatic">
             The published version is simulated automatically once a day, and within an hour of each publish.
           </template>
-          <template v-else>
+          <template v-else-if="loaded">
             This workflow isn't published, so the saved draft is simulated when you run it.
           </template>
         </p>
@@ -109,7 +113,7 @@ watch(() => props.workflowId, load);
         </p>
       </div>
       <FmButton
-        v-if="canRun"
+        v-if="canRun && loaded"
         variant="secondary"
         :loading="running"
         data-testid="twin-run"

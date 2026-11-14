@@ -1655,4 +1655,8 @@ listed, not fixed: `fmz library` routes, connector version pinning, Library Form
   linking to it, help article `workflows/workflow-twin`.
 - No AI calls, no instances, no connector calls: cost is CPU only (the loan sample, 7 decision points: 133 cases).
 - Tests: unit 1,162 (+16), integration 212 local (+6) + 17 Docker-only, web 327 (+5), E2E S92–S93; full E2E suite 93 pass / 1 skipped (S46) locally.
+- CC browser test (14 Nov): 10/10 passed. Fixed in the same PR from the check-9 notes: (1) while the Twin result can't
+  load, the tab no longer claims the workflow is unpublished or offers Run; (2) an answer from a proxy/gateway instead of
+  the API (502/503/504, or a 500 with no Flowamaz error body, as the Vite proxy sends when the API is down) now reads
+  "The Flowamaz server didn't answer (HTTP …)" app-wide instead of the generic "Request failed".
 

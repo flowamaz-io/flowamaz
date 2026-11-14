@@ -37,6 +37,17 @@ export function toUserFacingError(error: unknown): UserFacingError {
         code: 'NETWORK_ERROR',
       };
     }
+    // No Flowamaz error envelope: the answer came from something in front of the API (nginx, or the Vite dev proxy,
+    // which answers 500 when the API is down), not from the API itself.
+    const status = error.response?.status;
+    const fromGateway = status !== undefined && (status === 502 || status === 503 || status === 504
+      || (status === 500 && (data === undefined || data === null || typeof data !== 'object')));
+    if (fromGateway) {
+      return {
+        message: `The Flowamaz server didn't answer (HTTP ${status}). It may be restarting or down. Wait a moment and try again; if it keeps happening, contact support@flowamaz.io.`,
+        code: 'SERVER_UNREACHABLE',
+      };
+    }
     if (error.response?.status === 404) {
       return {
         message: "That item wasn't found (HTTP 404). It may have been deleted, or the link or ID is wrong. Go back to the list and open it from there.",

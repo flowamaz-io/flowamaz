@@ -112,6 +112,10 @@ describe('Workflow Twin panel', () => {
     const w = mountPanel();
     await flushPromises();
     expect(w.text()).toContain("Couldn't load the Twin result");
+    // Unknown whether it's published, so don't claim either way, and don't offer a run that would fail too.
+    expect(w.text()).not.toContain("isn't published");
+    expect(w.text()).not.toContain('simulated automatically');
+    expect(w.find('[data-testid="twin-run"]').exists()).toBe(false);
 
     latest.mockResolvedValue({ run: result({ status: 'failed', findings: [], errorMessage: "The Twin couldn't read this workflow: …" }), hasProductionVersion: true });
     const w2 = mountPanel();
