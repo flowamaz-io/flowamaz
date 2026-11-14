@@ -32,6 +32,15 @@ describe('toUserFacingError', () => {
     expect(toUserFacingError(e).message).toContain('HTTP 500');
   });
 
+  it('says the server did not answer when a proxy or gateway replies instead of the API', () => {
+    for (const [status, body] of [[500, ''], [502, '<html>Bad Gateway</html>'], [503, undefined], [504, {}]] as const) {
+      const r = toUserFacingError(axiosErrorWith(status, body));
+      expect(r.code).toBe('SERVER_UNREACHABLE');
+      expect(r.message).toContain(`HTTP ${status}`);
+      expect(r.message).toContain("didn't answer");
+    }
+  });
+
   it('says a 404 means the item is missing or the link/ID is wrong, not "try again"', () => {
     const r = toUserFacingError(axiosErrorWith(404, {}));
     expect(r.code).toBe('NOT_FOUND');

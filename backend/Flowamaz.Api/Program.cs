@@ -268,6 +268,14 @@ if (backgroundWorkersEnabled)
             .WithCronSchedule("0 30 3 * * ?"));
 
         // Roles for people in very large SCIM group changes, applied in the background (see ScimService).
+        // Workflow Twin: hourly, simulate live workflows whose version changed or whose last run is a day old (§8.1).
+        // Starts 1–10 minutes after boot so a restart doesn't add load at once.
+        var twinKey = new JobKey(nameof(WorkflowTwinJob));
+        q.AddJob<WorkflowTwinJob>(twinKey);
+        q.AddTrigger(t => t.ForJob(twinKey)
+            .StartAt(DateBuilder.FutureDate(Random.Shared.Next(60, 600), IntervalUnit.Second))
+            .WithSimpleSchedule(s => s.WithIntervalInHours(1).RepeatForever()));
+
         var scimResyncKey = new JobKey(nameof(ScimRoleResyncJob));
         q.AddJob<ScimRoleResyncJob>(scimResyncKey);
         q.AddTrigger(t => t.ForJob(scimResyncKey)

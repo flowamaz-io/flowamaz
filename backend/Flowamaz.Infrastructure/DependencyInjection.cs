@@ -117,6 +117,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceApiKeyRepository, WorkspaceApiKeyRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<ICliSessionRepository, CliSessionRepository>();
+        services.AddScoped<IWorkflowTwinRepository, WorkflowTwinRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
 
         services.AddScoped<IWorkflowDefinitionRepository, WorkflowDefinitionRepository>();

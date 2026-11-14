@@ -17,6 +17,7 @@ import { fromNow } from '@/utils/date.util';
 import { CREATION_METHODS, DESIGNER_ROLE_NEEDED, canDesign } from '@/utils/constants';
 import { healthColorClass, workflowStatusVariant } from '@/utils/workflow.util';
 import type { WorkflowStatus } from '@/types';
+import { twinBadge, twinService, type TwinSummary } from '@/services/twin.service';
 
 const store = useWorkflowStore();
 const { workflows, loading, error } = storeToRefs(store);
@@ -58,9 +59,25 @@ function openCreationMethod(method: string): void {
   }
 }
 
+// Workflow Twin badges (§8.1). Loaded alongside the list; if they fail the list still shows, with "—" in the column.
+const twin = ref<Record<string, TwinSummary>>({});
+async function loadTwin(): Promise<void> {
+  if (!currentWorkspaceId.value) return;
+  try {
+    const rows = await twinService.summary(currentWorkspaceId.value);
+    twin.value = Object.fromEntries(rows.map((r) => [r.workflowDefinitionId, r]));
+  } catch {
+    twin.value = {};
+  }
+}
+function twinFor(id: string): { label: string; variant: 'primary' | 'amber' | 'danger' | 'slate' } | null {
+  const t = twin.value[id];
+  return t ? twinBadge(t.status, t.breakCount, t.warningCount) : null;
+}
+
 async function reload(): Promise<void> {
   if (!currentWorkspaceId.value) await loadWorkspaces();
-  await store.loadWorkflows();
+  await Promise.all([store.loadWorkflows(), loadTwin()]);
 }
 
 onMounted(reload);
@@ -203,6 +220,15 @@ onMounted(reload);
               </span>
             </th>
             <th class="px-4 py-3">
+              <span class="inline-flex items-center gap-1">
+                Twin
+                <FmTooltip
+                  text="Workflow Twin tries generated inputs against the workflow, without running anything, and reports the ones that break it."
+                  label="About Workflow Twin"
+                />
+              </span>
+            </th>
+            <th class="px-4 py-3">
               Updated
             </th>
             <th class="px-4 py-3 text-right">
@@ -234,6 +260,22 @@ onMounted(reload);
             </td>
             <td class="px-4 py-3">
               <span :class="['font-semibold tabular-nums', healthColorClass(wf.healthScore)]">{{ wf.healthScore }}</span>
+            </td>
+            <td class="px-4 py-3">
+              <RouterLink
+                v-if="twinFor(wf.id)"
+                :to="{ path: `/workflows/${wf.id}`, query: { tab: 'twin' } }"
+                :data-testid="`twin-badge-${wf.id}`"
+              >
+                <FmBadge :variant="twinFor(wf.id)!.variant">
+                  {{ twinFor(wf.id)!.label }}
+                </FmBadge>
+              </RouterLink>
+              <span
+                v-else
+                class="text-xs text-slate-400"
+                title="Not simulated yet. Published workflows are simulated automatically; open the workflow's Twin tab to run it now."
+              >—</span>
             </td>
             <td class="px-4 py-3 text-slate-500">
               {{ fromNow(wf.updatedAt) }}

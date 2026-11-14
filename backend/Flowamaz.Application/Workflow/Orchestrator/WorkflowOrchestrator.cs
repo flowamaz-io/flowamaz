@@ -727,16 +727,9 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         return null;
     }
 
-    internal static bool DecisionMatches(string via, string decision)
-    {
-        static string Norm(string v) => v.Trim().ToLowerInvariant() switch
-        {
-            "approve" or "approved" or "yes" or "accept" or "accepted" => "approved",
-            "reject" or "rejected" or "no" or "decline" or "declined" or "denied" => "rejected",
-            var other => other,
-        };
-        return Norm(via) == Norm(decision);
-    }
+    // One definition shared with the Workflow Twin simulator, so simulated runs follow decisions the same way.
+    internal static bool DecisionMatches(string via, string decision) =>
+        Core.Workflow.Twin.TwinSimulator.DecisionMatches(via, decision);
 
     public async Task<bool> HasDecisionRouteAsync(Guid instanceId, string nodeId, string decision, CancellationToken cancellationToken = default)
     {
