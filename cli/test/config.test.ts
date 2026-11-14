@@ -54,4 +54,26 @@ describe("config", () => {
     const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
     expect(parsed.current_workspace).toBe("demo");
   });
+
+  it("does not save an api_url that came from FMZ_API_URL or the default", () => {
+    process.env.FMZ_API_URL = "http://localhost:8307";
+    writeConfig({ token_expiry: "2026-11-14T10:00:00Z" });
+    const parsed = JSON.parse(fs.readFileSync(path.join(tmpDir, "config.json"), "utf8"));
+    expect(parsed.api_url).toBeUndefined();
+  });
+
+  it("lets FMZ_API_URL override a saved api_url", () => {
+    fs.writeFileSync(path.join(tmpDir, "config.json"), JSON.stringify({ api_url: "http://saved:1" }));
+    expect(readConfig().api_url).toBe("http://saved:1");
+    process.env.FMZ_API_URL = "http://localhost:1";
+    expect(readConfig().api_url).toBe("http://localhost:1");
+  });
+
+  it("removes keys written as undefined", () => {
+    writeConfig({ token_expiry: "x" });
+    writeConfig({ token_expiry: undefined });
+    const parsed = JSON.parse(fs.readFileSync(path.join(tmpDir, "config.json"), "utf8"));
+    expect("token_expiry" in parsed).toBe(false);
+  });
 });
+

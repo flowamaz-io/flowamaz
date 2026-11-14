@@ -45,6 +45,10 @@ describe('CLI sign-in page (/cli-auth)', () => {
     await w.get('[data-testid="cli-auth-approve"]').trigger('click');
     await flushPromises();
     expect(w.text()).toContain('invalid or has expired');
+    // Backticks from the API message render as code, not literally.
+    const err = w.get('[data-testid="cli-auth-error"]');
+    expect(err.text()).not.toContain('`');
+    expect(err.get('code').text()).toBe('fmz auth login');
     expect(w.text()).not.toContain('CLI signed in');
   });
 

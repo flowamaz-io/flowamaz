@@ -16,6 +16,10 @@ const auth = useAuthStore();
 const code = ref(typeof route.query.code === 'string' ? normaliseUserCode(route.query.code) : '');
 const status = ref<'idle' | 'approving' | 'approved'>('idle');
 const error = ref<string | null>(null);
+/** API messages mark commands with backticks (they're read in terminals too); show those parts as code here. */
+const errorParts = computed(() =>
+  (error.value ?? '').split('`').map((text, i) => ({ text, code: i % 2 === 1 })).filter((p) => p.text.length > 0),
+);
 const valid = computed(() => /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normaliseUserCode(code.value)));
 const who = computed(() => auth.user?.email ?? 'your account');
 /** What the terminal called itself (e.g. "fmz on jagan-mbp"), so people can check it's the one they're using. */
@@ -113,7 +117,13 @@ async function approve(): Promise<void> {
             v-if="error"
             type="error"
           >
-            {{ error }}
+            <span data-testid="cli-auth-error"><template
+              v-for="(part, i) in errorParts"
+              :key="i"
+            ><code
+              v-if="part.code"
+              class="rounded bg-white/70 px-1 font-mono text-xs"
+            >{{ part.text }}</code><template v-else>{{ part.text }}</template></template></span>
           </FmAlert>
           <FmButton
             class="w-full"

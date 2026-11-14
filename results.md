@@ -1637,4 +1637,7 @@ listed, not fixed: `fmz library` routes, connector version pinning, Library Form
   (+ S1–S6, S86–S87 re-run, all pass). Real `fmz` smoke run against a local API: login, forced refresh, logout.
 - Deviation: refresh tokens for the CLI are not rotated (rotation would sign out parallel `fmz` commands); revocation
   plus idle expiry cover the risk instead.
+- CC browser test (14 Nov): 10/11 passed first time. Fixed in the same PR: (1) `FMZ_API_URL` now overrides a saved
+  `api_url`, and `writeConfig` no longer saves an `api_url` that only came from the env var or the default (login used
+  to persist it, so a later `FMZ_API_URL=…` was ignored); (2) backticks in API errors on the approval page render as code.
 

@@ -16,7 +16,7 @@ Credentials are stored in your OS keychain via [`keytar`](https://www.npmjs.com/
 | Variable | Purpose |
 |----------|---------|
 | `FMZ_API_KEY` | A `fmz_`-prefixed API key. When set, it is sent as `Authorization: Bearer fmz_...` and overrides any stored user token. Use this in CI. |
-| `FMZ_API_URL` | API base URL. Defaults to `https://api.flowamaz.io`. |
+| `FMZ_API_URL` | API base URL. Overrides an `api_url` saved in `~/.fmz/config.json`; defaults to `https://api.flowamaz.io`. |
 | `FMZ_WORKSPACE` | Default workspace slug for workspace-scoped commands (overrides the one saved by `fmz workspace use`). |
 | `FMZ_CONFIG_DIR` | Override the config/credentials directory (default `~/.fmz`). Useful for tests and sandboxes. |
 | `FMZ_CREDENTIAL_STORE` | Set to `file` to keep credentials in `credentials.json` instead of the OS keychain (headless machines, tests). |
