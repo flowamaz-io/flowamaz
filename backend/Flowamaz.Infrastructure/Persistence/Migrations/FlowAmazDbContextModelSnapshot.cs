@@ -4671,6 +4671,110 @@ namespace Flowamaz.Infrastructure.Persistence.Migrations
                     b.ToTable("workflow_node_states");
                 });
 
+            modelBuilder.Entity("Flowamaz.Core.Entities.Workflow.WorkflowTwinRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("BreakCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("break_count");
+
+                    b.Property<int>("CasesRun")
+                        .HasColumnType("integer")
+                        .HasColumnName("cases_run");
+
+                    b.Property<DateTime>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_ms");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("FindingsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("findings_json");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("RoutersTested")
+                        .HasColumnType("integer")
+                        .HasColumnName("routers_tested");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("trigger");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("VersionLabel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("version_label");
+
+                    b.Property<int>("WarningCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("warning_count");
+
+                    b.Property<Guid>("WorkflowDefinitionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workflow_definition_id");
+
+                    b.Property<Guid?>("WorkflowVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workflow_version_id");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_workflow_twin_runs");
+
+                    b.HasIndex("WorkspaceId", "WorkflowDefinitionId", "CompletedAt")
+                        .HasDatabaseName("ix_workflow_twin_runs_workspace_id_workflow_definition_id_comp~");
+
+                    b.ToTable("workflow_twin_runs");
+                });
+
             modelBuilder.Entity("Flowamaz.Core.Entities.Workflow.WorkflowVariable", b =>
                 {
                     b.Property<Guid>("Id")

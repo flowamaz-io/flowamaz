@@ -12,8 +12,12 @@ public sealed record WorkflowGraph(
     string Version,
     IReadOnlyList<SfgNode> Nodes,
     IReadOnlyList<SfgEdge> Edges,
-    WorkflowMetadata Metadata)
+    WorkflowMetadata Metadata,
+    IReadOnlyList<WorkflowInput>? Inputs = null)
 {
+    /// <summary>The inputs declared under <c>spec.variables</c> (or top-level <c>variables:</c>); empty when none.</summary>
+    public IReadOnlyList<WorkflowInput> DeclaredInputs => Inputs ?? [];
+
     public SfgNode? FindNode(string id) => Nodes.FirstOrDefault(n => n.Id == id);
 
     public SfgNode TriggerNode => Nodes.First(n => n.Type == NodeType.Trigger);
@@ -40,6 +44,12 @@ public sealed record SfgNode(
 public sealed record SfgEdge(string Id, string FromNodeId, string ToNodeId, string? Condition, bool IsDefault = false, string? Via = null);
 
 public sealed record WorkflowMetadata(string Name, string? Description);
+
+/// <summary>
+/// An input the workflow declares (<c>variables: amount: { type: number, required: true }</c>). Type is lower-case
+/// (string, number, integer, boolean, object, array) or null when not given.
+/// </summary>
+public sealed record WorkflowInput(string Name, string? Type, bool Required);
 
 public sealed record RetryPolicy(int MaxAttempts, int BackoffSeconds, double BackoffMultiplier);
 

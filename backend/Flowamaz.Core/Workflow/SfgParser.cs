@@ -83,7 +83,43 @@ public sealed class SfgParser
             root.Workflow?.Version ?? root.Metadata?.Version ?? "draft",
             nodes,
             edges,
-            meta);
+            meta,
+            MapInputs(root.Spec?.Variables ?? root.Variables));
+    }
+
+    /// <summary>
+    /// Declared inputs. Accepts <c>name: { type: number, required: true }</c> and the shorthand <c>name: number</c>;
+    /// anything else is ignored (inputs are informational for the engine).
+    /// </summary>
+    private static List<WorkflowInput> MapInputs(object? variables)
+    {
+        var inputs = new List<WorkflowInput>();
+        if (variables is not IDictionary<object, object?> declared) return inputs;
+        foreach (var (rawName, value) in declared)
+        {
+            var name = rawName?.ToString();
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            string? type = null;
+            var required = false;
+            switch (value)
+            {
+                case string shorthand:
+                    type = shorthand.Trim().ToLowerInvariant();
+                    break;
+                case IDictionary<object, object?> map:
+                    foreach (var (k, v) in map)
+                    {
+                        var key = k?.ToString();
+                        if (string.Equals(key, "type", StringComparison.OrdinalIgnoreCase))
+                            type = v?.ToString()?.Trim().ToLowerInvariant();
+                        else if (string.Equals(key, "required", StringComparison.OrdinalIgnoreCase))
+                            required = v is bool b ? b : string.Equals(v?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+                    }
+                    break;
+            }
+            inputs.Add(new WorkflowInput(name.Trim(), string.IsNullOrEmpty(type) ? null : type, required));
+        }
+        return inputs;
     }
 
     private static List<SfgNode> MapNodes(List<NodeDto> dtos)
@@ -266,6 +302,8 @@ public sealed class SfgParser
         public SpecDto? Spec { get; set; }
         public List<NodeDto>? Nodes { get; set; }
         public List<EdgeDto>? Edges { get; set; }
+        /// <summary>Usually a map of name → definition; typed loosely so any shape still parses.</summary>
+        public object? Variables { get; set; }
     }
 
     // flowamaz/v1 envelope: metadata: header + spec: body.
@@ -281,6 +319,8 @@ public sealed class SfgParser
     {
         public List<NodeDto>? Nodes { get; set; }
         public List<EdgeDto>? Edges { get; set; }
+        /// <summary>Usually a map of name → definition; typed loosely so any shape still parses.</summary>
+        public object? Variables { get; set; }
     }
 
     private sealed class WorkflowDto

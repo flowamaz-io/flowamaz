@@ -62,6 +62,7 @@ public class FlowAmazDbContext : DbContext
     public DbSet<WorkflowVersion> WorkflowVersions => Set<WorkflowVersion>();
     public DbSet<WorkflowInstance> WorkflowInstances => Set<WorkflowInstance>();
     public DbSet<WorkflowEvent> WorkflowEvents => Set<WorkflowEvent>();
+    public DbSet<WorkflowTwinRun> WorkflowTwinRuns => Set<WorkflowTwinRun>();
     public DbSet<WorkflowNodeState> WorkflowNodeStates => Set<WorkflowNodeState>();
     public DbSet<WorkflowVariable> WorkflowVariables => Set<WorkflowVariable>();
     public DbSet<GateDecision> GateDecisions => Set<GateDecision>();
