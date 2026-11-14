@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceApiKeyService, WorkspaceApiKeyService>();
         services.AddScoped<IWorkspaceAuthorizationService, WorkspaceAuthorizationService>();
         services.AddScoped<AuthService>();
+        services.AddScoped<CliSessionService>();
         services.AddScoped<ISsoService, Auth.Services.SsoService>();
         services.AddScoped<Auth.Scim.ScimService>();
 

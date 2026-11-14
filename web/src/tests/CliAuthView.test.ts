@@ -7,10 +7,14 @@ import { normaliseUserCode } from '@/services/cliAuth.service';
 const approve = vi.fn();
 vi.mock('@/services/cliAuth.service', async (orig) => ({
   ...(await orig<typeof import('@/services/cliAuth.service')>()),
-  cliAuthService: { approve: (c: string) => approve(c) },
+  cliAuthService: {
+    approve: (c: string) => approve(c),
+    pendingClientName: (c: string) => pendingClientName(c),
+  },
 }));
+const pendingClientName = vi.fn().mockResolvedValue(null);
 let query: Record<string, string> = {};
-vi.mock('vue-router', () => ({ useRoute: () => ({ query }) }));
+vi.mock('vue-router', () => ({ useRoute: () => ({ query }), RouterLink: { template: '<a><slot /></a>' } }));
 
 describe('CLI sign-in page (/cli-auth)', () => {
   it('normalises codes the way the CLI prints them', () => {
@@ -41,6 +45,25 @@ describe('CLI sign-in page (/cli-auth)', () => {
     await w.get('[data-testid="cli-auth-approve"]').trigger('click');
     await flushPromises();
     expect(w.text()).toContain('invalid or has expired');
+    // Backticks from the API message render as code, not literally.
+    const err = w.get('[data-testid="cli-auth-error"]');
+    expect(err.text()).not.toContain('`');
+    expect(err.get('code').text()).toBe('fmz auth login');
     expect(w.text()).not.toContain('CLI signed in');
+  });
+
+  it('shows which terminal is asking and where to sign it out later', async () => {
+    setActivePinia(createPinia());
+    query = { code: 'ABCD-2345' };
+    pendingClientName.mockResolvedValue('fmz on jagan-mbp');
+    approve.mockResolvedValue(undefined);
+    const w = mount(CliAuthView);
+    await flushPromises();
+    expect(pendingClientName).toHaveBeenCalledWith('ABCD-2345');
+    expect(w.get('[data-testid="cli-auth-client"]').text()).toContain('fmz on jagan-mbp');
+    await w.get('[data-testid="cli-auth-approve"]').trigger('click');
+    await flushPromises();
+    expect(w.get('[data-testid="cli-auth-sessions-link"]').text()).toContain('CLI sessions');
+    pendingClientName.mockResolvedValue(null);
   });
 });

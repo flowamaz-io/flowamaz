@@ -9,9 +9,12 @@ public sealed record CliDeviceAuthorization(
     int IntervalSeconds,
     int ExpiresInSeconds);
 
-/// <summary>Result of polling the CLI token endpoint. Pending until the user approves in the browser.</summary>
-public sealed record CliTokenResult(bool Pending, string? AccessToken, DateTime? ExpiresAt)
+/// <summary>
+/// Result of polling a device code. Pending until the person approves in the browser; then it carries who approved
+/// (and the name the CLI gave itself) exactly once, and the API creates a CLI session for that person.
+/// </summary>
+public sealed record CliTokenResult(bool Pending, Guid? ApprovedByUserId, string? ClientName)
 {
     public static CliTokenResult Waiting() => new(true, null, null);
-    public static CliTokenResult Ready(string accessToken, DateTime expiresAt) => new(false, accessToken, expiresAt);
+    public static CliTokenResult Approved(Guid orgUserId, string? clientName) => new(false, orgUserId, clientName);
 }

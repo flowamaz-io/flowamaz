@@ -11,13 +11,14 @@ namespace Flowamaz.Infrastructure.Services;
 /// <summary>
 /// Redis-backed CLI device flow. A device code (CLI polls it) and a user code (shown in the browser)
 /// are stored with a 10-minute TTL; the user-code key indexes back to the device code so the browser
-/// approval can find the pending flow. The approving user's own access token is bound to the device
-/// code and handed to the CLI exactly once.
+/// approval can find the pending flow. Approval records only who approved — no token is stored in
+/// Redis — and the poll hands that approval to the API exactly once, which then creates a CLI session.
 /// </summary>
 public sealed class CliAuthService : ICliAuthService
 {
     private static readonly TimeSpan FlowTtl = TimeSpan.FromMinutes(10);
     private const int IntervalSeconds = 2;
+    private const int MaxClientNameLength = 100;
 
     private readonly IConnectionMultiplexer _redis;
     private readonly string _appBaseUrl;
@@ -34,7 +35,7 @@ public sealed class CliAuthService : ICliAuthService
     private static string DeviceKey(string deviceCode) => $"cli:device:{deviceCode}";
     private static string UserCodeKey(string userCode) => $"cli:usercode:{userCode}";
 
-    public async Task<CliDeviceAuthorization> InitiateDeviceFlowAsync(CancellationToken ct = default)
+    public async Task<CliDeviceAuthorization> InitiateDeviceFlowAsync(string? clientName = null, CancellationToken ct = default)
     {
         _logger.LogDebug("CliAuthService.InitiateDeviceFlowAsync enter");
         try
@@ -43,7 +44,7 @@ public sealed class CliAuthService : ICliAuthService
             var userCode = RandomUserCode();
             var db = _redis.GetDatabase();
 
-            var state = JsonSerializer.Serialize(new DeviceState("pending", null, null));
+            var state = JsonSerializer.Serialize(new DeviceState("pending", null, CleanClientName(clientName)));
             await db.StringSetAsync(DeviceKey(deviceCode), state, FlowTtl);
             await db.StringSetAsync(UserCodeKey(userCode), deviceCode, FlowTtl);
 
@@ -66,22 +67,41 @@ public sealed class CliAuthService : ICliAuthService
         }
     }
 
-    public async Task<bool> ApproveAsync(string userCode, string accessToken, DateTime expiresAt, CancellationToken ct = default)
+    public async Task<string?> GetPendingClientNameAsync(string userCode, CancellationToken ct = default)
+    {
+        _logger.LogDebug("CliAuthService.GetPendingClientNameAsync enter userCode={UserCode}", userCode);
+        try
+        {
+            var state = await ReadPendingAsync(userCode);
+            _logger.LogDebug("CliAuthService.GetPendingClientNameAsync exit found={Found}", state is not null);
+            return state?.State.ClientName;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "CliAuthService.GetPendingClientNameAsync error userCode={UserCode}", userCode);
+            throw;
+        }
+    }
+
+    public async Task<bool> ApproveAsync(string userCode, Guid orgUserId, CancellationToken ct = default)
     {
         _logger.LogDebug("CliAuthService.ApproveAsync enter userCode={UserCode}", userCode);
         try
         {
-            var db = _redis.GetDatabase();
-            var deviceCode = await db.StringGetAsync(UserCodeKey(userCode));
-            if (deviceCode.IsNullOrEmpty)
+            var pending = await ReadPendingAsync(userCode);
+            if (pending is null)
             {
-                _logger.LogWarning("CliAuthService.ApproveAsync unknown/expired userCode={UserCode}", userCode);
+                _logger.LogWarning("CliAuthService.ApproveAsync unknown/expired/used userCode={UserCode}", userCode);
                 return false;
             }
 
-            var state = JsonSerializer.Serialize(new DeviceState("approved", accessToken, expiresAt));
-            await db.StringSetAsync(DeviceKey(deviceCode!), state, FlowTtl);
-            _logger.LogInformation("CliAuthService.ApproveAsync exit approved userCode={UserCode}", userCode);
+            var db = _redis.GetDatabase();
+            var approved = JsonSerializer.Serialize(new DeviceState("approved", orgUserId, pending.Value.State.ClientName));
+            // Keep the flow's original expiry; the code can't be approved a second time (by anyone).
+            var ttl = await db.KeyTimeToLiveAsync(DeviceKey(pending.Value.DeviceCode)) ?? FlowTtl;
+            await db.StringSetAsync(DeviceKey(pending.Value.DeviceCode), approved, ttl);
+            await db.KeyDeleteAsync(UserCodeKey(userCode));
+            _logger.LogInformation("CliAuthService.ApproveAsync exit approved userCode={UserCode} userId={UserId}", userCode, orgUserId);
             return true;
         }
         catch (Exception ex)
@@ -101,19 +121,38 @@ public sealed class CliAuthService : ICliAuthService
             if (raw.IsNullOrEmpty) return CliTokenResult.Waiting(); // unknown or expired → keep CLI polite
 
             var state = JsonSerializer.Deserialize<DeviceState>(raw.ToString());
-            if (state is null || state.Status != "approved" || string.IsNullOrEmpty(state.AccessToken))
+            if (state is null || state.Status != "approved" || state.ApprovedBy is not { } userId)
                 return CliTokenResult.Waiting();
 
-            // One-time hand-off: delete the flow so the token can't be collected twice.
-            await db.KeyDeleteAsync(DeviceKey(deviceCode));
-            _logger.LogInformation("CliAuthService.PollTokenAsync exit token delivered");
-            return CliTokenResult.Ready(state.AccessToken, state.ExpiresAt ?? DateTime.UtcNow.AddMinutes(15));
+            // One-time hand-off: only the poll that deletes the key gets the approval, so it can't be collected twice.
+            if (!await db.KeyDeleteAsync(DeviceKey(deviceCode))) return CliTokenResult.Waiting();
+            _logger.LogInformation("CliAuthService.PollTokenAsync exit approval delivered userId={UserId}", userId);
+            return CliTokenResult.Approved(userId, state.ClientName);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "CliAuthService.PollTokenAsync error");
             throw;
         }
+    }
+
+    private async Task<(string DeviceCode, DeviceState State)?> ReadPendingAsync(string userCode)
+    {
+        var db = _redis.GetDatabase();
+        var deviceCode = await db.StringGetAsync(UserCodeKey(userCode));
+        if (deviceCode.IsNullOrEmpty) return null;
+        var raw = await db.StringGetAsync(DeviceKey(deviceCode!));
+        if (raw.IsNullOrEmpty) return null;
+        var state = JsonSerializer.Deserialize<DeviceState>(raw.ToString());
+        return state is { Status: "pending" } ? (deviceCode.ToString(), state) : null;
+    }
+
+    private static string? CleanClientName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        var printable = new string(name.Where(c => !char.IsControl(c)).ToArray()).Trim();
+        if (printable.Length == 0) return null;
+        return printable.Length > MaxClientNameLength ? printable[..MaxClientNameLength] : printable;
     }
 
     private static string RandomToken(int bytes) =>
@@ -129,5 +168,5 @@ public sealed class CliAuthService : ICliAuthService
         return new string(chars);
     }
 
-    private sealed record DeviceState(string Status, string? AccessToken, DateTime? ExpiresAt);
+    private sealed record DeviceState(string Status, Guid? ApprovedBy, string? ClientName);
 }

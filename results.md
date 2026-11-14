@@ -1619,3 +1619,25 @@ listed, not fixed: `fmz library` routes, connector version pinning, Library Form
 - Library Forms (3 official seeds + workspace forms, read-only Library forms) and Packs (2 official: finance-approvals, people-operations), synced from `forms/` and `packs/` of the templates repo; seeded items never deprecated by sync.
 - Web: approval dialog on Gates, answers shown on decided gates, gate form editor (Use a Library form / Save as a form), Forms and Packs tabs. CLI `--forms` / `--packs`.
 - Tests: unit +10 (GateForms, parser, FRM-001), integration +5 (LibraryFormsAndPacksTests), web +7, CLI +1, E2E S82–S85.
+
+## 2026-11-14 — CLI sessions: refreshable, revocable CLI tokens
+
+- The device flow no longer hands the CLI a copy of the browser's 15-minute token. Approval records who approved
+  (nothing secret in Redis); the poll creates a `cli_sessions` row and returns an access token + a refresh token
+  (only its SHA256 is stored). `POST /cli/auth/refresh` (not rotated, sliding 30-day idle expiry),
+  `POST /cli/auth/logout` (ends the session and revokes the current access token), `GET/DELETE /cli/sessions`
+  (own sessions only; people only, not API keys). Revoking also revokes the last-issued access token's jti.
+- The refresh-token "revoke all" paths (password reset, SCIM, SSO unlink, SSO required) end CLI sessions too.
+- CLI: credentials stored as JSON (keychain or owner-only file; old bare tokens still read), refresh before expiry and
+  once on 401, `fmz auth logout` ends the session on the server (warns if it can't), `FMZ_CLIENT_NAME`,
+  `FMZ_CREDENTIAL_STORE=file`.
+- Web: Settings → CLI sessions (loading/empty/error states, sign-out confirmation); the approval page names the
+  terminal; help article `settings/cli-sessions`; audit events `cli.session.created` / `cli.session.revoked`.
+- Tests: unit 1,146 (+25), integration 206 local (+5) + 17 Docker-only, web 322 (+6), CLI 37 (+12), E2E S90–S91
+  (+ S1–S6, S86–S87 re-run, all pass). Real `fmz` smoke run against a local API: login, forced refresh, logout.
+- Deviation: refresh tokens for the CLI are not rotated (rotation would sign out parallel `fmz` commands); revocation
+  plus idle expiry cover the risk instead.
+- CC browser test (14 Nov): 10/11 passed first time. Fixed in the same PR: (1) `FMZ_API_URL` now overrides a saved
+  `api_url`, and `writeConfig` no longer saves an `api_url` that only came from the env var or the default (login used
+  to persist it, so a later `FMZ_API_URL=…` was ignored); (2) backticks in API errors on the approval page render as code.
+

@@ -77,6 +77,7 @@ const sections: NavSection[] = [
       { label: 'Members', to: '/settings/members', icon: Users },
       { label: 'Credentials', to: '/settings/credentials', icon: LockKeyhole },
       { label: 'API Keys', to: '/settings/api-keys', icon: KeyRound },
+      { label: 'CLI Sessions', to: '/settings/cli-sessions', icon: Terminal },
       { label: 'Webhooks', to: '/settings/webhooks', icon: Webhook },
       { label: 'SSO', to: '/settings/sso', icon: ShieldCheck, ownerOnly: true },
       { label: 'Billing', to: '/settings/billing', icon: CreditCard },

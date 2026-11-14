@@ -1,6 +1,7 @@
-import axios, { AxiosInstance } from "axios";
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from "axios";
 import { readConfig } from "./config";
 import { getToken } from "./auth";
+import { ensureFreshSession, refreshSession } from "./session";
 
 /**
  * Build the Authorization header for the current session.
@@ -20,13 +21,18 @@ export async function authHeader(): Promise<Record<string, string>> {
   return {};
 }
 
+type RetriableConfig = InternalAxiosRequestConfig & { _fmzRetried?: boolean };
+
 /**
  * Create an authenticated axios instance pointed at the configured API.
+ * A signed-in CLI keeps itself signed in: the access token is refreshed just before it expires, and a request
+ * refused with 401 is refreshed and retried once (e.g. the token expired mid-command).
  */
 export async function createClient(): Promise<AxiosInstance> {
   const config = readConfig();
+  await ensureFreshSession();
   const headers = await authHeader();
-  return axios.create({
+  const client = axios.create({
     baseURL: config.api_url,
     headers: {
       "Content-Type": "application/json",
@@ -34,4 +40,23 @@ export async function createClient(): Promise<AxiosInstance> {
     },
     validateStatus: (status) => status >= 200 && status < 300,
   });
+
+  client.interceptors.response.use(undefined, async (err: AxiosError) => {
+    const original = err.config as RetriableConfig | undefined;
+    if (!original || original._fmzRetried || err.response?.status !== 401) {
+      throw err;
+    }
+    original._fmzRetried = true;
+    if ((await refreshSession()) !== "refreshed") {
+      throw err;
+    }
+    const fresh = await authHeader();
+    if (fresh.Authorization) {
+      original.headers.set("Authorization", fresh.Authorization);
+      client.defaults.headers["Authorization"] = fresh.Authorization; // later requests in this command
+    }
+    return client.request(original);
+  });
+
+  return client;
 }

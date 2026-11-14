@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onMounted, ref, watch } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
 import { CheckCircle2, Terminal } from 'lucide-vue-next';
 import FmButton from '@/components/common/FmButton.vue';
 import FmAlert from '@/components/common/FmAlert.vue';
@@ -8,16 +8,31 @@ import { useAuthStore } from '@/stores/auth.store';
 import { cliAuthService, normaliseUserCode } from '@/services/cliAuth.service';
 import { toUserFacingError } from '@/utils/error.util';
 
-// `fmz auth login` sends people here (CliAuthService: {app}/cli-auth?code=XXXX-XXXX). Approving binds this
-// browser's sign-in to the CLI, so the terminal acts as this user.
+// `fmz auth login` sends people here (CliAuthService: {app}/cli-auth?code=XXXX-XXXX). Approving gives that terminal a
+// CLI session of its own for this user (listed in Settings → CLI sessions), not a copy of this browser's sign-in.
 const route = useRoute();
 const auth = useAuthStore();
 
 const code = ref(typeof route.query.code === 'string' ? normaliseUserCode(route.query.code) : '');
 const status = ref<'idle' | 'approving' | 'approved'>('idle');
 const error = ref<string | null>(null);
+/** API messages mark commands with backticks (they're read in terminals too); show those parts as code here. */
+const errorParts = computed(() =>
+  (error.value ?? '').split('`').map((text, i) => ({ text, code: i % 2 === 1 })).filter((p) => p.text.length > 0),
+);
 const valid = computed(() => /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(normaliseUserCode(code.value)));
 const who = computed(() => auth.user?.email ?? 'your account');
+/** What the terminal called itself (e.g. "fmz on jagan-mbp"), so people can check it's the one they're using. */
+const clientName = ref<string | null>(null);
+
+async function lookUpClient(): Promise<void> {
+  clientName.value = valid.value ? await cliAuthService.pendingClientName(normaliseUserCode(code.value)) : null;
+}
+onMounted(lookUpClient);
+watch(valid, (isValid) => {
+  if (isValid) void lookUpClient();
+  else clientName.value = null;
+});
 
 async function approve(): Promise<void> {
   if (!valid.value) {
@@ -51,6 +66,16 @@ async function approve(): Promise<void> {
           <p class="text-sm text-slate-600">
             Your terminal is now signed in as {{ who }}. Go back to it; you can close this tab.
           </p>
+          <p class="text-xs text-slate-500">
+            It stays signed in while you use it. To sign it out later, run <code>fmz auth logout</code> or use
+            <RouterLink
+              to="/settings/cli-sessions"
+              class="font-medium text-indigo-600 hover:text-indigo-700"
+              data-testid="cli-auth-sessions-link"
+            >
+              Settings → CLI sessions
+            </RouterLink>.
+          </p>
         </div>
       </template>
       <template v-else>
@@ -63,6 +88,13 @@ async function approve(): Promise<void> {
         <p class="mt-2 text-sm text-slate-600">
           Check that this code matches the one in your terminal, then approve. The CLI will act as
           <span class="font-medium">{{ who }}</span>. If you didn't run <code>fmz auth login</code>, close this tab.
+        </p>
+        <p
+          v-if="clientName"
+          class="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
+          data-testid="cli-auth-client"
+        >
+          Signing in: <span class="font-medium">{{ clientName }}</span>
         </p>
         <form
           class="mt-4 space-y-4"
@@ -85,7 +117,13 @@ async function approve(): Promise<void> {
             v-if="error"
             type="error"
           >
-            {{ error }}
+            <span data-testid="cli-auth-error"><template
+              v-for="(part, i) in errorParts"
+              :key="i"
+            ><code
+              v-if="part.code"
+              class="rounded bg-white/70 px-1 font-mono text-xs"
+            >{{ part.text }}</code><template v-else>{{ part.text }}</template></template></span>
           </FmAlert>
           <FmButton
             class="w-full"

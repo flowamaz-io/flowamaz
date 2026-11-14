@@ -20,6 +20,12 @@ public interface IJwtService
     /// <summary>SHA256 (hex, lower-case) of a plain refresh token — for hashing an incoming cookie before lookup.</summary>
     string HashRefreshToken(string plainToken);
 
+    /// <summary>
+    /// The jti and expiry of an access token this service just issued, read without validating it. Used to remember
+    /// which token a CLI session holds, so ending the session can revoke that token straight away.
+    /// </summary>
+    (string TokenId, DateTime ExpiresAt) ReadTokenIdentity(string accessToken);
+
     /// <summary>Validates signature, issuer, audience and lifetime. Returns null when invalid or expired.</summary>
     ClaimsPrincipal? ValidateAccessToken(string token);
 

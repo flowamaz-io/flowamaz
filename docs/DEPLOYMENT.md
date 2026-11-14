@@ -12,6 +12,7 @@ Copy `.env.example` to `.env` and set real values. Key variables:
 | `REDIS_CONNECTION_STRING` | Overridden by compose to `redis:6379`. |
 | `JWT_SECRET` | **Required** (≥ 32 chars). Signs access tokens. The API refuses to start outside Development without it. |
 | `JWT_ISSUER` / `JWT_AUDIENCE` | Token issuer/audience. |
+| `Jwt__CliSessionIdleDays` | Optional (default 30). Days without use after which a signed-in `fmz` CLI session ends. |
 | `ANTHROPIC_PLATFORM_KEY` | Platform-managed Anthropic key (only Anthropic is platform-managed). |
 | `RESEND_API_KEY` / `EMAIL_FROM_ADDRESS` | Transactional email (noreply@flowamaz.io). For Docker deployments use `Email__ResendApiKey` (double underscore) to override the nested .NET config section. |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins for the SPA. |
