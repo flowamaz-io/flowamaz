@@ -766,6 +766,16 @@ fmz completion   bash/zsh/fish
 fmz cloud        migrate
 ```
 
+> **Built (Nov 2026): CLI sessions.** `fmz auth login` (device flow) gives the terminal a CLI session of its own,
+> not a copy of the browser's token: a 15-minute access token plus a long-lived refresh token, stored in the OS
+> keychain (or `~/.fmz/credentials.json`, owner-only). The CLI refreshes the access token before it expires and retries
+> once on 401, so it stays signed in. The refresh token is not rotated (parallel `fmz` commands can't sign each other
+> out); a session ends after `Jwt:CliSessionIdleDays` (default 30) without use. `fmz auth logout` ends the session on
+> the server. **Settings → CLI sessions** lists the person's own sessions and signs any of them out; that also revokes
+> the access token it last issued, so the terminal is cut off at once. Password reset, deactivation, SCIM removal and
+> an org starting to require SSO end CLI sessions too. API: `POST /api/v1/cli/auth/refresh`, `POST /api/v1/cli/auth/logout`,
+> `GET /api/v1/cli/sessions`, `DELETE /api/v1/cli/sessions/{id}`, `GET /api/v1/cli/auth/pending?userCode=`.
+
 Exit codes: 0=success, 1=error, 2=validation fail, 3=auth error, 4=permission denied, 5=not found, 6=breaking change, 7=coverage below threshold.
 
 Shell completions: complete live resource names (instance IDs, branch names, tag names, workspace names) from API.

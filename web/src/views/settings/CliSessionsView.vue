@@ -50,7 +50,7 @@ async function confirmRevoke(): Promise<void> {
   try {
     await cliAuthService.revokeSession(target.id);
     sessions.value = sessions.value.filter((s) => s.id !== target.id);
-    toast.success(`Signed out "${target.name}". That terminal needs \`fmz auth login\` to sign in again.`);
+    toast.success(`Signed out "${target.name}". That terminal needs fmz auth login to sign in again.`);
     revokeTarget.value = null;
   } catch (e) {
     toast.error(toUserFacingError(e).message);
@@ -112,7 +112,7 @@ async function confirmRevoke(): Promise<void> {
       <FmEmptyState
         :icon="Terminal"
         title="No terminals are signed in"
-        description="Install the CLI with `npm install -g @flowamaz/cli`, then run `fmz auth login` and approve the code here in your browser. The terminal will show up in this list, and you can sign it out from here at any time."
+        description="Install the CLI (npm install -g @flowamaz/cli), run fmz auth login, and approve the code here in your browser. The terminal will show up in this list, and you can sign it out from here at any time."
         cta-label="Read the CLI guide"
         @cta="openDocs"
       />
@@ -200,7 +200,7 @@ async function confirmRevoke(): Promise<void> {
       @update:model-value="revokeTarget = null"
     >
       <p class="text-sm text-slate-600">
-        <strong>{{ revokeTarget?.name }}</strong> will be signed out straight away. Any `fmz` command running there will
+        <strong>{{ revokeTarget?.name }}</strong> will be signed out straight away. Any <code>fmz</code> command running there will
         fail, and it will need <code>fmz auth login</code> to sign in again.
       </p>
       <template #footer>

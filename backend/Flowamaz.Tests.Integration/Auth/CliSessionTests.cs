@@ -112,6 +112,12 @@ public sealed class CliSessionTests : ApiTestBase
         // Logging out twice is harmless.
         (await Fixture.NewClient().PostAsJsonAsync("/api/v1/cli/auth/logout", new { refreshToken = login.RefreshToken }))
             .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // An expired or bad access token doesn't stop the refresh token from ending its session.
+        var second = await LoginCliAsync(owner, "build-box-2");
+        var stale = await As("not.a.valid-jwt").PostAsJsonAsync("/api/v1/cli/auth/logout", new { refreshToken = second.RefreshToken });
+        stale.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await RefreshAsync(second.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
