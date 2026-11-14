@@ -55,6 +55,7 @@ public class FlowAmazDbContext : DbContext
     public DbSet<WorkspaceApiKey> WorkspaceApiKeys => Set<WorkspaceApiKey>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<CliSession> CliSessions => Set<CliSession>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     public DbSet<WorkflowDefinition> WorkflowDefinitions => Set<WorkflowDefinition>();

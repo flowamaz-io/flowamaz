@@ -106,6 +106,12 @@ public sealed class JwtService : IJwtService
     public string HashRefreshToken(string plainToken) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(plainToken))).ToLowerInvariant();
 
+    public (string TokenId, DateTime ExpiresAt) ReadTokenIdentity(string accessToken)
+    {
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(accessToken);
+        return (jwt.Id, jwt.ValidTo);
+    }
+
     public ClaimsPrincipal? ValidateAccessToken(string token)
     {
         _logger.LogDebug("JwtService.ValidateAccessToken enter");
