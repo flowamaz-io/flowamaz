@@ -39,6 +39,7 @@ const result = (over: Partial<TwinRun> = {}): TwinRun => ({
       example: { amount: '5000' },
       alsoFailsWith: [],
       cases: 3,
+      fromRealPayload: false,
     },
     {
       kind: 'never-taken',
@@ -51,6 +52,7 @@ const result = (over: Partial<TwinRun> = {}): TwinRun => ({
       example: {},
       alsoFailsWith: [],
       cases: 0,
+      fromRealPayload: false,
     },
   ],
   ...over,

@@ -223,7 +223,7 @@ onMounted(reload);
               <span class="inline-flex items-center gap-1">
                 Twin
                 <FmTooltip
-                  text="Workflow Twin tries thousands of inputs against the workflow, without running anything, and reports the ones that break it."
+                  text="Workflow Twin tries generated inputs against the workflow, without running anything, and reports the ones that break it."
                   label="About Workflow Twin"
                 />
               </span>

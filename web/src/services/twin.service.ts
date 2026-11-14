@@ -17,6 +17,8 @@ export interface TwinFinding {
   example: Record<string, string>;
   alsoFailsWith: string[];
   cases: number;
+  /** Found by replaying a recent real payload. Its values are hidden from people who can't see run data. */
+  fromRealPayload: boolean;
 }
 
 export interface TwinRun {

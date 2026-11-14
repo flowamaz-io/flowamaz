@@ -429,6 +429,21 @@ add-annotation, duplicate-node, delete-node, rename-node, add-variable, set-cred
 Every live workflow automatically runs silent shadow simulations with thousands of input variations. Finds the inputs that break the workflow before real users do. Results shown as health badges on workflow cards.
 "Your purchase approval breaks when amount equals exactly $5,000 — router uses > not ≥."
 Phase: Year 2 (requires execution engine + simulation layer).
+> **Built (Nov 2026): Workflow Twin.** An in-memory simulator walks the workflow with the engine's own routing rules
+> (`ConditionEvaluator`, shared with the live engine; default branches; decision branches; each node entered once).
+> Nothing runs for real: no instances, connectors or AI calls (no cost). Inputs are generated per decision point:
+> each number a condition compares with and its neighbours (±1, ±0.01), other well-formed values, missing/null/empty,
+> wrong types (`"abc"`, `"5,000"`), on a generated base input and up to 10 recent real payloads, with every approval
+> approved, rejected, and each rejected alone; one value changes per case; up to 5,000 cases. Steps return their latest
+> recorded real output. Findings: **break** (a well-formed input, real payload or rejection leaves the run with no route,
+> or a router takes two branches), **warning** (only a missing required or badly formatted value does), **info** (a
+> conditional branch nothing took); each with the values that matter, the number of inputs, and a fix ("Nothing handles
+> exactly 5000: "Small" uses < and "Large" uses >…"). Published workflows are simulated hourly when the production
+> version changed or the last run is over a day old (25 per tick); Designers can run it from the workflow's **Twin**
+> tab (the draft when unpublished). The workflow list shows a **Twin** badge next to Health (a separate badge; the
+> health score is unchanged). Values from real payloads are hidden from people below Operator. API:
+> `GET/POST /workspaces/{id}/workflows/{id}/twin`, `GET /workspaces/{id}/twin/summary`. Only routing is checked:
+> a step's own settings (URL, credential) are not.
 
 ### 8.2 Workflow Empathy View
 Two views per workflow: Technical SFG canvas + Empathy View.

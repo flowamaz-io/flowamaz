@@ -1641,3 +1641,18 @@ listed, not fixed: `fmz library` routes, connector version pinning, Library Form
   `api_url`, and `writeConfig` no longer saves an `api_url` that only came from the env var or the default (login used
   to persist it, so a later `FMZ_API_URL=…` was ignored); (2) backticks in API errors on the approval page render as code.
 
+## 2026-11-14 — B1 Workflow Twin (shadow simulation)
+
+- Core: `ConditionEvaluator` (the live engine's condition/placeholder rules, now shared; `VariableEvaluationService`
+  delegates, no behaviour change), `TwinSimulator` (pure graph walk), `TwinCaseGenerator` (boundary, other, missing,
+  wrong-type values on a clean generated base + recent real payloads, all gate decision sets, max 5,000),
+  `TwinAnalyzer` (break / warning / info findings with example values, counts and fixes). The parser now exposes
+  declared inputs (`spec.variables`), tolerant of any shape.
+- Backend: `workflow_twin_runs` (last 10 per workflow), `WorkflowTwinService`, `WorkflowTwinJob` (hourly, 25 due
+  workflows), `GET/POST …/workflows/{id}/twin` (Viewer / Designer), `GET …/twin/summary`. Values from real payloads are
+  hidden below Operator. A simulator failure is stored as a failed run with an actionable message.
+- Web: Twin tab on the workflow page (loading/empty/error/failed/clean states), Twin column on the workflow list
+  linking to it, help article `workflows/workflow-twin`.
+- No AI calls, no instances, no connector calls: cost is CPU only (the loan sample, 7 decision points: 133 cases).
+- Tests: unit 1,162 (+16), integration 212 local (+6) + 17 Docker-only, web 327 (+5), E2E S92–S93; full E2E suite 93 pass / 1 skipped (S46) locally.
+

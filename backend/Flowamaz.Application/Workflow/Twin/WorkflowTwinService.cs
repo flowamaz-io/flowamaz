@@ -23,7 +23,8 @@ public sealed record TwinFindingDto(
     string Fix,
     IReadOnlyDictionary<string, string> Example,
     IReadOnlyList<string> AlsoFailsWith,
-    int Cases);
+    int Cases,
+    bool FromRealPayload);
 
 /// <summary>One Twin run of a workflow.</summary>
 public sealed record TwinRunDto(
@@ -158,7 +159,11 @@ public sealed class WorkflowTwinService
         }
     }
 
-    public async Task<TwinLatestDto> GetLatestAsync(Guid workspaceId, Guid workflowDefinitionId, CancellationToken ct = default)
+    /// <param name="canSeeRunData">
+    /// False for Viewers, who can't see run variables: the values of findings that came from a real payload are hidden.
+    /// </param>
+    public async Task<TwinLatestDto> GetLatestAsync(
+        Guid workspaceId, Guid workflowDefinitionId, bool canSeeRunData = true, CancellationToken ct = default)
     {
         _logger.LogDebug("WorkflowTwinService.GetLatestAsync enter workflow={WorkflowId}", workflowDefinitionId);
         try
@@ -168,7 +173,7 @@ public sealed class WorkflowTwinService
             var run = await _twins.GetLatestAsync(workspaceId, workflowDefinitionId, ct);
             var production = await _versions.GetProductionAsync(workflowDefinitionId, workspaceId, ct);
             _logger.LogDebug("WorkflowTwinService.GetLatestAsync exit found={Found}", run is not null);
-            return new TwinLatestDto(run is null ? null : ToDto(run), production is not null);
+            return new TwinLatestDto(run is null ? null : ToDto(run, canSeeRunData), production is not null);
         }
         catch (Exception ex) when (ex is not WorkflowNotFoundException and not OperationCanceledException)
         {
@@ -234,14 +239,22 @@ public sealed class WorkflowTwinService
         catch (JsonException) { return null; }
     }
 
-    internal static TwinRunDto ToDto(WorkflowTwinRun run)
+    public const string HiddenValue = "(hidden — Viewers can't see run data)";
+
+    internal static TwinRunDto ToDto(WorkflowTwinRun run, bool canSeeRunData = true)
     {
         var findings = new List<TwinFindingDto>();
         try
         {
             foreach (var f in JsonSerializer.Deserialize<List<TwinFinding>>(run.FindingsJson, Json) ?? [])
+            {
+                // A real payload's values are run data; Viewers don't see them (the explanation quotes no values for these).
+                var example = f.FromRealPayload && !canSeeRunData
+                    ? f.Example.ToDictionary(kv => kv.Key, _ => HiddenValue)
+                    : f.Example;
                 findings.Add(new TwinFindingDto(f.Kind, f.Severity.ToString().ToLowerInvariant(), f.NodeId, f.NodeLabel, f.Title,
-                    f.Explanation, f.Fix, f.Example, f.AlsoFailsWith, f.Cases));
+                    f.Explanation, f.Fix, example, f.AlsoFailsWith, f.Cases, f.FromRealPayload));
+            }
         }
         catch (JsonException)
         {

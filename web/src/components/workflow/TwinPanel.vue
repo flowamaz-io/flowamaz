@@ -12,7 +12,7 @@ import { toUserFacingError } from '@/utils/error.util';
 import { fromNow } from '@/utils/date.util';
 import { twinBadge, twinService, type TwinFinding, type TwinRun, type TwinSeverity } from '@/services/twin.service';
 
-// Workflow Twin (FUNCTIONAL.md §8.1): the latest shadow simulation of this workflow — thousands of generated inputs
+// Workflow Twin (FUNCTIONAL.md §8.1): the latest shadow simulation of this workflow — generated inputs (up to 5,000)
 // run through its routers with nothing executed for real — and what broke.
 const props = defineProps<{ workspaceId: string; workflowId: string; canRun: boolean }>();
 const toast = useToast();
@@ -87,9 +87,9 @@ watch(() => props.workflowId, load);
           </FmBadge>
         </h2>
         <p class="mt-1 text-sm text-slate-500">
-          Tries thousands of inputs against this workflow — boundary values, missing and badly formatted fields, recent
+          Tries generated inputs against this workflow — boundary values, missing and badly formatted fields, recent
           real payloads, each approval approved and rejected — without running anything for real, and shows the ones
-          that break it.
+          that break it. The more decision points, the more inputs (up to 5,000).
           <template v-if="automatic">
             The published version is simulated automatically once a day, and within an hour of each publish.
           </template>
@@ -104,7 +104,8 @@ watch(() => props.workflowId, load);
         >
           Last run {{ fromNow(run.completedAt) }} ({{ run.trigger === 'scheduled' ? 'automatic' : 'run by hand' }}) on the
           {{ run.versionLabel === 'production' ? 'published version' : 'saved draft' }}:
-          {{ run.casesRun.toLocaleString() }} inputs, {{ run.routersTested }} decision points, {{ run.durationMs }} ms.
+          {{ run.casesRun.toLocaleString() }} {{ run.casesRun === 1 ? 'input' : 'inputs' }},
+          {{ run.routersTested }} {{ run.routersTested === 1 ? 'decision point' : 'decision points' }}, {{ run.durationMs }} ms.
         </p>
       </div>
       <FmButton
@@ -186,6 +187,12 @@ watch(() => props.workflowId, load);
             {{ f.title }}
           </h3>
           <span class="text-xs text-slate-500">at “{{ f.nodeLabel }}”</span>
+          <FmBadge
+            v-if="f.fromRealPayload"
+            variant="blue"
+          >
+            Seen in a real run's input
+          </FmBadge>
           <span
             v-if="f.cases > 0"
             class="ml-auto text-xs text-slate-400"

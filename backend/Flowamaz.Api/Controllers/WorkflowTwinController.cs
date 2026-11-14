@@ -31,7 +31,9 @@ public sealed class WorkflowTwinController : ControllerBase
     public async Task<ActionResult<TwinLatestDto>> Latest(Guid workspaceId, Guid id, CancellationToken cancellationToken)
     {
         _logger.LogDebug("WorkflowTwinController.Latest enter workspace={WorkspaceId} workflow={WorkflowId}", workspaceId, id);
-        return Ok(await _twin.GetLatestAsync(workspaceId, id, cancellationToken));
+        // Only people who can see every run's data (Operator and up, or the org owner) see values taken from real payloads.
+        var canSeeRunData = _currentUser.IsOrgOwner || _currentUser.GetWorkspaceRole(workspaceId) >= WorkspaceRole.Operator;
+        return Ok(await _twin.GetLatestAsync(workspaceId, id, canSeeRunData, cancellationToken));
     }
 
     /// <summary>Simulates the workflow now. Designers and above; it takes about a second.</summary>

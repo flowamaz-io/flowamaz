@@ -89,3 +89,25 @@ public class WorkflowTwinServiceTests
         dto.Status.Should().Be("breaks");
     }
 }
+
+public class WorkflowTwinRedactionTests
+{
+    [Fact]
+    public void Values_from_real_payloads_are_hidden_from_people_who_cannot_see_run_data()
+    {
+        var findings = System.Text.Json.JsonSerializer.Serialize(new[]
+        {
+            new Flowamaz.Core.Workflow.Twin.TwinFinding("no-route", Flowamaz.Core.Workflow.Twin.TwinSeverity.Break, "n", "N",
+                "Breaks for a recent real payload (#1)", "e", "f", new Dictionary<string, string> { ["region"] = "APAC" }, [], 1, FromRealPayload: true),
+            new Flowamaz.Core.Workflow.Twin.TwinFinding("no-route", Flowamaz.Core.Workflow.Twin.TwinSeverity.Break, "n", "N",
+                "Breaks when amount = 5000", "e", "f", new Dictionary<string, string> { ["amount"] = "5000" }, [], 1),
+        }, WorkflowTwinService.Json);
+        var run = new WorkflowTwinRun { FindingsJson = findings };
+
+        var hidden = WorkflowTwinService.ToDto(run, canSeeRunData: false);
+        hidden.Findings[0].Example["region"].Should().Be(WorkflowTwinService.HiddenValue);
+        hidden.Findings[1].Example["amount"].Should().Be("5000", "generated values aren't run data");
+
+        WorkflowTwinService.ToDto(run).Findings[0].Example["region"].Should().Be("APAC");
+    }
+}

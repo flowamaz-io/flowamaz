@@ -8,7 +8,8 @@ plans: "All plans"
 # Workflow Twin
 
 The Workflow Twin finds the inputs that break a workflow before real users send them. It
-simulates the workflow thousands of times, in memory, without running anything for real: no
+simulates the workflow many times (as many as its decision points call for, up to 5,000), in
+memory, without running anything for real: no
 runs are created, no connectors are called and no AI is used, so it costs nothing.
 
 ## What it tries

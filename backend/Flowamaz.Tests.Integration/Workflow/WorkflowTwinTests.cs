@@ -1,7 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using System.Net.Http.Headers;
 using Flowamaz.Application.Workflow.Twin;
+using Flowamaz.Core.Entities.Platform;
+using Flowamaz.Core.Entities.Workspaces;
+using Flowamaz.Core.Enums;
+using Flowamaz.Core.Interfaces.Repositories;
+using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Infrastructure.Persistence;
 using Flowamaz.Tests.Integration.Common;
 using Microsoft.EntityFrameworkCore;
@@ -155,5 +161,46 @@ public sealed class WorkflowTwinTests : ApiTestBase
         using var scope = Fixture.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
         (await db.WorkflowTwinRuns.CountAsync(r => r.WorkflowDefinitionId == id)).Should().Be(WorkflowTwinService.RunsKeptPerWorkflow);
+    }
+
+    /// <summary>A person in the org with the given role in the workspace, signed in with a fresh access token.</summary>
+    private async Task<HttpClient> MemberAsync(Guid orgId, Guid ws, WorkspaceRole role)
+    {
+        using var scope = Fixture.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlowAmazDbContext>();
+        var user = new OrgUser { OrgId = orgId, Email = $"{role}-{Guid.NewGuid():N}@twin.test", Name = role.ToString(), PasswordHash = string.Empty, IsActive = true };
+        db.OrgUsers.Add(user);
+        db.WorkspaceMembers.Add(new WorkspaceMember { WorkspaceId = ws, OrgUserId = user.Id, Role = role, IsActive = true });
+        await db.SaveChangesAsync();
+        var slug = await db.Organisations.Where(o => o.Id == orgId).Select(o => o.Slug).SingleAsync();
+        var memberships = await scope.ServiceProvider.GetRequiredService<IWorkspaceMemberRepository>().GetActiveMembershipsForUserAsync(user.Id);
+        var token = scope.ServiceProvider.GetRequiredService<IJwtService>().GenerateAccessToken(user, slug, memberships);
+        var client = Fixture.NewClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
+
+    [Fact]
+    public async Task Viewers_see_results_but_cannot_run_it_or_see_real_payload_values()
+    {
+        var (owner, ws, id) = await SetupAsync(U("twin-view"), publish: true);
+        (await owner.Client.PostAsJsonAsync($"/api/v1/workspaces/{ws}/instances",
+            new { workflowDefinitionId = id, payload = "{\"amount\":5000}" })).EnsureSuccessStatusCode();
+        (await owner.Client.PostAsync($"/api/v1/workspaces/{ws}/workflows/{id}/twin", null)).EnsureSuccessStatusCode();
+
+        var viewer = await MemberAsync(owner.OrgId, ws, WorkspaceRole.Viewer);
+        (await viewer.PostAsync($"/api/v1/workspaces/{ws}/workflows/{id}/twin", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var seen = await DataAsync(await viewer.GetAsync($"/api/v1/workspaces/{ws}/workflows/{id}/twin"));
+        var real = seen.GetProperty("run").GetProperty("findings").EnumerateArray()
+            .Single(f => f.GetProperty("fromRealPayload").GetBoolean());
+        real.GetProperty("example").EnumerateObject().Should().OnlyContain(p => p.Value.GetString() == WorkflowTwinService.HiddenValue);
+
+        var operatorClient = await MemberAsync(owner.OrgId, ws, WorkspaceRole.Operator);
+        var full = await DataAsync(await operatorClient.GetAsync($"/api/v1/workspaces/{ws}/workflows/{id}/twin"));
+        full.GetProperty("run").GetProperty("findings").EnumerateArray()
+            .Single(f => f.GetProperty("fromRealPayload").GetBoolean())
+            .GetProperty("example").GetProperty("amount").GetString().Should().Be("5000");
+        (await operatorClient.PostAsync($"/api/v1/workspaces/{ws}/workflows/{id}/twin", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

@@ -18,7 +18,8 @@ public sealed record TwinFinding(
     string Fix,
     IReadOnlyDictionary<string, string> Example,
     IReadOnlyList<string> AlsoFailsWith,
-    int Cases);
+    int Cases,
+    bool FromRealPayload = false);
 
 /// <summary>The outcome of simulating one workflow.</summary>
 public sealed record TwinReport(int CasesRun, int RoutersTested, IReadOnlyList<TwinFinding> Findings)
@@ -151,7 +152,7 @@ public static class TwinAnalyzer
                 $"Takes {matched.Count} branches at once{(trigger is null ? "" : " when " + trigger)}",
                 $"In \"{label}\", {string.Join(" and ", matched.Select(e => BranchName(graph, e)))} all match, so all of them run. Branches: {branches}.",
                 "Make the conditions exclusive, for example use > on one branch and <= on the other, so exactly one branch matches every value.",
-                example, also, g.Count);
+                example, also, g.Count, FromRealPayload: g.Cause == "real");
         }
 
         var gateNote = GateNote(graph, g.Example, g.Issue);
@@ -178,7 +179,7 @@ public static class TwinAnalyzer
         return new TwinFinding(
             "no-route", g.Severity, node.Id, label, title,
             $"No branch of \"{label}\" matches{(trigger is null ? "" : " when " + trigger)}{(gateNote is null || trigger is null ? "" : " and " + gateNote)}. {stops} Branches: {branches}.",
-            fix, example, also, g.Count);
+            fix, example, also, g.Count, FromRealPayload: g.Cause == "real");
     }
 
     /// <summary>"loan_amount = 50000" for the changed value; null for an unchanged base input.</summary>
