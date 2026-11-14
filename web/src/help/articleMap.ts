@@ -7,6 +7,7 @@ export const articleMap: Record<string, string> = {
   '/settings': 'workspaces/what-is-a-workspace',
   '/settings/members': 'workspaces/invite-team-members',
   '/settings/api-keys': 'workspaces/api-keys',
+  '/settings/cli-sessions': 'settings/cli-sessions',
   // Phase 8 settings + feature routes (prompt 08-03)
   '/settings/webhooks': 'settings/webhooks',
   '/settings/sso': 'settings/sso',
