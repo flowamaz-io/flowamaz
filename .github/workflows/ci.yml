@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cli/package-lock.json
+      - run: npm ci --prefix cli
+      - run: npm run build --prefix cli
+      - run: npm test --prefix cli
+
+  vscode-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: vscode-extension/package-lock.json
+      - run: npm ci --prefix vscode-extension
+      - run: npm run build --prefix vscode-extension
+      - run: npm test --prefix vscode-extension

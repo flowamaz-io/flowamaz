@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flowamaz.io/schemas/workflow-v1.schema.json",
+  "title": "Flowamaz Workflow v1",
+  "description": "Schema for a Flowamaz workflow definition document.",
+  "type": "object",
+  "required": ["workflow", "nodes"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "Workflow",
+      "description": "Document kind marker."
+    },
+    "workflow": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable workflow identifier."
+        },
+        "version": {
+          "type": ["integer", "string"],
+          "description": "Workflow version."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable workflow name."
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Workflow nodes.",
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique node id."
+          },
+          "type": {
+            "type": "string",
+            "description": "Node type.",
+            "enum": [
+              "action",
+              "ai",
+              "human-gate",
+              "router",
+              "end",
+              "trigger",
+              "parallel",
+              "foreach",
+              "trycatch"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "description": "Display label."
+          },
+          "retry": {
+            "type": ["integer", "object"],
+            "description": "Retry count or policy object."
+          },
+          "timeout": {
+            "type": "string",
+            "description": "Per-node timeout, e.g. 30s, 5m."
+          },
+          "config": {
+            "type": "object",
+            "description": "Node-specific configuration.",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "description": "Directed connections between nodes.",
+      "items": {
+        "type": "object",
+        "required": ["from", "to"],
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique edge id."
+          },
+          "from": {
+            "type": "string",
+            "description": "Source node id."
+          },
+          "to": {
+            "type": "string",
+            "description": "Target node id."
+          },
+          "condition": {
+            "type": "string",
+            "description": "Optional boolean expression gating traversal."
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

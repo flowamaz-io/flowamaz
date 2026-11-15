@@ -1,0 +1,119 @@
+{
+  "name": "flowamaz-vscode",
+  "displayName": "Flowamaz",
+  "description": "Author, validate, and operate Flowamaz workflows from VS Code.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "publisher": "flowamaz",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:yaml"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "flowamaz.triggerWorkflow",
+        "title": "Flowamaz: Trigger Workflow"
+      },
+      {
+        "command": "flowamaz.validateWorkflow",
+        "title": "Flowamaz: Validate Workflow"
+      },
+      {
+        "command": "flowamaz.openInApp",
+        "title": "Flowamaz: Open in App"
+      },
+      {
+        "command": "flowamaz.showInstanceLogs",
+        "title": "Flowamaz: Show Instance Logs"
+      },
+      {
+        "command": "flowamaz.switchWorkspace",
+        "title": "Flowamaz: Switch Workspace"
+      },
+      {
+        "command": "flowamaz.refreshWorkflows",
+        "title": "Flowamaz: Refresh Workflows",
+        "icon": "$(refresh)"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "yaml",
+        "path": "./snippets/flowamaz.code-snippets"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "flowamaz",
+          "title": "Flowamaz",
+          "icon": "$(symbol-event)"
+        }
+      ]
+    },
+    "views": {
+      "flowamaz": [
+        {
+          "id": "flowamaz.workflows",
+          "name": "Workflows"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "flowamaz.refreshWorkflows",
+          "when": "view == flowamaz.workflows",
+          "group": "navigation"
+        }
+      ]
+    },
+    "yamlValidation": [
+      {
+        "fileMatch": "*flowamaz-workflow.yaml",
+        "url": "./src/schemas/workflow-v1.schema.json"
+      }
+    ],
+    "configuration": {
+      "title": "Flowamaz",
+      "properties": {
+        "flowamaz.apiUrl": {
+          "type": "string",
+          "default": "https://api.flowamaz.io",
+          "description": "Base URL of the Flowamaz API."
+        },
+        "flowamaz.workspace": {
+          "type": "string",
+          "default": "",
+          "description": "Default Flowamaz workspace slug or ID used for API calls and CLI commands."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.7.4",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}
