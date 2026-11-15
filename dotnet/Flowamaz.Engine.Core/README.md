@@ -6,10 +6,11 @@ The open core of the Flowamaz workflow engine (MIT):
 - **Validator** (`WorkflowValidator`): JSON Schema (`workflow-v1.schema.json`) plus graph checks, with actionable messages.
 - **Condition evaluator** (`ConditionEvaluator`): the router condition rules the engine uses.
 - **Gate forms** (`GateForms`): human-gate form definitions and answer validation.
+- **Cron schedules** (`CronSchedule`): parsing with time zones and next run times.
 - **Workflow Twin** (`TwinCaseGenerator`, `TwinSimulator`, `TwinAnalyzer`): simulates a workflow against generated inputs and reports where it breaks.
 - **Output shape drift** (`OutputShapeDrift`): detects when a connector's responses change shape.
 
-The YAML format is documented in `docs/yaml-spec.md` in this repository.
+The YAML format is documented in `docs/yaml-spec.md` in this repository. Connectors: `Flowamaz.Connectors.Sdk` and `Flowamaz.Connectors.Official`.
 
 ```bash
 dotnet test Flowamaz.Engine.slnx

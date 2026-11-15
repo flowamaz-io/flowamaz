@@ -19,6 +19,19 @@ jobs:
       - run: npm run build --prefix cli
       - run: npm test --prefix cli
 
+  canvas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: canvas/package-lock.json
+      - run: npm ci --prefix canvas
+      - run: npm test --prefix canvas
+      - run: npm run typecheck --prefix canvas
+
   vscode-extension:
     runs-on: ubuntu-latest
     steps:
@@ -32,16 +45,16 @@ jobs:
       - run: npm run build --prefix vscode-extension
       - run: npm test --prefix vscode-extension
 
-  engine:
+  dotnet:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: engine
+        working-directory: dotnet
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          global-json-file: engine/global.json
-      - run: dotnet build Flowamaz.Engine.slnx -c Release
-      - run: dotnet test Flowamaz.Engine.slnx -c Release --no-build
-      - run: dotnet pack Flowamaz.Engine.Core -c Release --no-build -o ../artifacts
+          global-json-file: dotnet/global.json
+      - run: dotnet build Flowamaz.slnx -c Release
+      - run: dotnet test Flowamaz.slnx -c Release --no-build
+      - run: dotnet pack Flowamaz.slnx -c Release --no-build -o ../artifacts

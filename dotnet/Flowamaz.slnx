@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Flowamaz.Engine.Core/Flowamaz.Engine.Core.csproj" />
+  <Project Path="Flowamaz.Engine.Core.Tests/Flowamaz.Engine.Core.Tests.csproj" />
+  <Project Path="Flowamaz.Connectors.Sdk/Flowamaz.Connectors.Sdk.csproj" />
+  <Project Path="Flowamaz.Connectors.Official/Flowamaz.Connectors.Official.csproj" />
+  <Project Path="Flowamaz.Connectors.Tests/Flowamaz.Connectors.Tests.csproj" />
+</Solution>

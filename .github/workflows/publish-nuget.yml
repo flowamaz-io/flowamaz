@@ -1,0 +1,34 @@
+name: Publish NuGet packages
+
+# Publishes Flowamaz.Engine.Core, Flowamaz.Connectors.Sdk and Flowamaz.Connectors.Official to nuget.org when a
+# tag like nuget-v0.1.0 is pushed. The tag's version must match <Version> in all three .csproj files.
+# Needs the repository secret NUGET_API_KEY (a nuget.org API key scoped to Flowamaz.* packages).
+
+on:
+  push:
+    tags: ['nuget-v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dotnet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: dotnet/global.json
+      - name: Check the tag matches every package version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#nuget-v}"
+          for p in Flowamaz.Engine.Core Flowamaz.Connectors.Sdk Flowamaz.Connectors.Official; do
+            V=$(grep -oP '(?<=<Version>)[^<]+' "$p/$p.csproj")
+            if [ "$V" != "$TAG_VERSION" ]; then
+              echo "$p is version $V but the tag is $GITHUB_REF_NAME. Bump <Version> in $p.csproj or retag." >&2
+              exit 1
+            fi
+          done
+      - run: dotnet test Flowamaz.slnx -c Release
+      - run: dotnet pack Flowamaz.slnx -c Release -o ../artifacts
+      - run: dotnet nuget push "../artifacts/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate

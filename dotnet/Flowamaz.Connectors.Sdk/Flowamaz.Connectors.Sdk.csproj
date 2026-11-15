@@ -6,28 +6,19 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Flowamaz.Core</RootNamespace>
-    <AssemblyName>Flowamaz.Engine.Core</AssemblyName>
 
-    <PackageId>Flowamaz.Engine.Core</PackageId>
+    <PackageId>Flowamaz.Connectors.Sdk</PackageId>
     <Version>0.1.0</Version>
     <Authors>Flowamaz</Authors>
-    <Description>Flowamaz workflow engine core: the workflow YAML parser (SFG), JSON Schema and validator, condition evaluator, gate forms, and the Workflow Twin simulator.</Description>
+    <Description>Flowamaz connector SDK: the contract every connector operation implements (IConnectorOperationHandler), credentials, actionable errors, the call context, connector manifests (ConnectorSpec), the egress guard, and the host hooks a connector may use.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>
     <RepositoryUrl>https://github.com/flowamaz-io/flowamaz</RepositoryUrl>
-    <PackageTags>workflow;yaml;engine;flowamaz</PackageTags>
+    <PackageTags>workflow;connectors;sdk;flowamaz</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
-    <PackageReference Include="NJsonSchema" Version="11.2.0" />
-    <PackageReference Include="YamlDotNet" Version="16.3.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Schemas\workflow-v1.schema.json" />
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 

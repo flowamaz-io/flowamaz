@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Flowamaz.Application.Connectors</RootNamespace>
+
+    <PackageId>Flowamaz.Connectors.Official</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Flowamaz</Authors>
+    <Description>The 13 official Flowamaz connectors (HTTP/REST, webhooks, Slack, Microsoft Teams, Microsoft 365, GitHub, email, PostgreSQL, MySQL, file system, script/shell, schedule) and their catalogue.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/flowamaz-io/flowamaz</RepositoryUrl>
+    <PackageTags>workflow;connectors;flowamaz</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="MySqlConnector" Version="2.6.2" />
+    <PackageReference Include="Npgsql" Version="9.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flowamaz.Connectors.Sdk\Flowamaz.Connectors.Sdk.csproj" />
+    <ProjectReference Include="..\Flowamaz.Engine.Core\Flowamaz.Engine.Core.csproj" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="Flowamaz.Connectors.Tests" />
+    <!-- The product's own test suites also exercise a few internal helpers (e.g. webhook signing). -->
+    <InternalsVisibleTo Include="Flowamaz.Tests.Unit" />
+    <InternalsVisibleTo Include="Flowamaz.Tests.Integration" />
+  </ItemGroup>
+
+</Project>
