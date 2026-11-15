@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Flowamaz.Core</RootNamespace>
+    <AssemblyName>Flowamaz.Engine.Core</AssemblyName>
+
+    <PackageId>Flowamaz.Engine.Core</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Flowamaz</Authors>
+    <Description>Flowamaz workflow engine core: the workflow YAML parser (SFG), JSON Schema and validator, condition evaluator, gate forms, and the Workflow Twin simulator.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/flowamaz-io/flowamaz</RepositoryUrl>
+    <PackageTags>workflow;yaml;engine;flowamaz</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="NJsonSchema" Version="11.2.0" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Schemas\workflow-v1.schema.json" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

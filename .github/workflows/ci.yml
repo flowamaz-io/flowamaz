@@ -31,3 +31,17 @@ jobs:
       - run: npm ci --prefix vscode-extension
       - run: npm run build --prefix vscode-extension
       - run: npm test --prefix vscode-extension
+
+  engine:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: engine/global.json
+      - run: dotnet build Flowamaz.Engine.slnx -c Release
+      - run: dotnet test Flowamaz.Engine.slnx -c Release --no-build
+      - run: dotnet pack Flowamaz.Engine.Core -c Release --no-build -o ../artifacts
