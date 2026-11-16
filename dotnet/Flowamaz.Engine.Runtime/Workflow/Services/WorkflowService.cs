@@ -268,6 +268,15 @@ public sealed class WorkflowService
         return versions.Select(ToVersionResponse).ToList();
     }
 
+    /// <summary>One version of the workflow with its YAML; null when either isn't in the workspace.</summary>
+    public async Task<WorkflowVersionDetail?> GetVersionAsync(Guid workspaceId, Guid id, Guid versionId, CancellationToken ct = default)
+    {
+        var version = await _versions.GetByIdForWorkspaceAsync(versionId, workspaceId, ct);
+        if (version is null || version.WorkflowDefinitionId != id) return null;
+        return new WorkflowVersionDetail(version.Id, version.WorkflowDefinitionId, version.CommitSha, version.TagName,
+            version.BranchName, version.Message, version.IsProduction, version.CreatedAt, version.YamlContent);
+    }
+
     public async Task<WorkflowVersionResponse?> PublishAsync(Guid workspaceId, Guid id, Guid publishedBy, CancellationToken ct = default)
     {
         _logger.LogInformation("WorkflowService.PublishAsync enter workspace={WorkspaceId} workflow={WorkflowId}", workspaceId, id);

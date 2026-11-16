@@ -48,6 +48,11 @@ public sealed record WorkflowVersionResponse(
     Guid Id, Guid WorkflowDefinitionId, string CommitSha, string? TagName,
     string BranchName, string Message, bool IsProduction, DateTime CreatedAt);
 
+/// <summary>One published version with the YAML it was published with (for export, e.g. `fmz cloud migrate`).</summary>
+public sealed record WorkflowVersionDetail(
+    Guid Id, Guid WorkflowDefinitionId, string CommitSha, string? TagName,
+    string BranchName, string Message, bool IsProduction, DateTime CreatedAt, string YamlContent);
+
 public sealed record TriggerInstanceResponse(Guid InstanceId, string Status, DateTime TriggeredAt);
 
 public sealed record InstanceListItem(

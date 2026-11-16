@@ -6,6 +6,7 @@ import { registerWorkflowCommands } from "./commands/workflow";
 import { registerInstanceCommands } from "./commands/instance";
 import { registerLibraryCommands } from "./commands/library";
 import { registerVersionCommands } from "./commands/version";
+import { registerCloudCommands } from "./commands/cloud";
 import { error } from "./lib/output";
 import { describeError } from "./lib/util";
 
@@ -26,6 +27,7 @@ registerWorkflowCommands(program);
 registerInstanceCommands(program);
 registerLibraryCommands(program);
 registerVersionCommands(program);
+registerCloudCommands(program);
 
 async function main(): Promise<void> {
   await program.parseAsync(process.argv);

@@ -126,7 +126,12 @@ public sealed class EngineApiEndpointTests : IAsyncLifetime
         var list = await JsonOf(await _client.GetAsync($"{Ws}/workflows"));
         list.GetProperty("total").GetInt32().Should().Be(1);
         list.GetProperty("items")[0].GetProperty("status").GetString().Should().Be("Published");
-        (await JsonOf(await _client.GetAsync($"{Ws}/workflows/{workflowId}/versions"))).GetArrayLength().Should().Be(1);
+        var versions = await JsonOf(await _client.GetAsync($"{Ws}/workflows/{workflowId}/versions"));
+        versions.GetArrayLength().Should().Be(1);
+        var version = await JsonOf(await _client.GetAsync($"{Ws}/workflows/{workflowId}/versions/{versions[0].GetProperty("id").GetGuid()}"));
+        version.GetProperty("yamlContent").GetString().Should().Contain("Leave request");
+        (await _client.GetAsync($"{Ws}/workflows/{Guid.NewGuid()}/versions/{versions[0].GetProperty("id").GetGuid()}")).StatusCode
+            .Should().Be(HttpStatusCode.NotFound, "the version belongs to another workflow");
 
         var started = await _client.PostAsJsonAsync($"{Ws}/workflows/{workflowId}/runs", new { payload = new { days = 3 } });
         started.StatusCode.Should().Be(HttpStatusCode.Accepted);

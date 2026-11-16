@@ -45,6 +45,7 @@ Routes start with the prefix (`/api/v1` here). JSON is camelCase, with enums as 
 | `POST /workspaces/{ws}/workflows/{id}/publish` | Publish | validates the YAML, makes a new production version |
 | `POST /workspaces/{ws}/workflows/{id}/archive`, `/unarchive` | Publish | |
 | `GET /workspaces/{ws}/workflows/{id}/versions` | Read | |
+| `GET /workspaces/{ws}/workflows/{id}/versions/{versionId}` | Read | one version with the YAML it was published with |
 | `POST /workspaces/{ws}/workflows/{id}/runs` | Run | `{ payload?, isTest? }`, header `Idempotency-Key` optional → 202 `{ instanceId, status, triggeredAt }` |
 | `GET /workspaces/{ws}/runs?status&workflowId&includeTest&page&pageSize` | Read | newest first |
 | `GET /workspaces/{ws}/runs/{id}`, `/events`, `/timeline` | Read | variables marked sensitive are masked |

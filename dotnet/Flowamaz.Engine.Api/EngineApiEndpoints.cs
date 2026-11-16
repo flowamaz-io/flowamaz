@@ -94,6 +94,10 @@ public static class EngineApiEndpoints
             As(h, workspaceId, EngineApiAction.Read, ct, async (_, s) =>
                 OkOrNotFound(await s.GetRequiredService<WorkflowService>().GetVersionsAsync(workspaceId, id, ct), "workflow", id)));
 
+        ws.MapGet("/workflows/{id:guid}/versions/{versionId:guid}", (HttpContext h, Guid workspaceId, Guid id, Guid versionId, CancellationToken ct) =>
+            As(h, workspaceId, EngineApiAction.Read, ct, async (_, s) =>
+                OkOrNotFound(await s.GetRequiredService<WorkflowService>().GetVersionAsync(workspaceId, id, versionId, ct), "version", versionId)));
+
         ws.MapPost("/workflows/{id:guid}/runs", (HttpContext h, Guid workspaceId, Guid id, CancellationToken ct) =>
             As(h, workspaceId, EngineApiAction.Run, ct, async (caller, s) =>
             {

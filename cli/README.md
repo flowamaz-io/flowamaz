@@ -52,6 +52,7 @@ fmz library     list [--templates] | search <q> [--templates] | show <id>
                 template  init|validate|publish [file]
 fmz version     history <workflowId> | diff <workflowId> <from> [to]
                 checkout <workflowId> <sha> [--out <file>]
+fmz cloud       migrate --from <url> --from-email <email> [--workspace <ws>] [--dry-run]
 ```
 
 ### Examples
@@ -80,6 +81,26 @@ fmz connector init my-connector
 fmz connector validate my-connector/connector.yaml
 fmz connector publish my-connector/connector.yaml
 ```
+
+### Moving from Community Edition to Flowamaz Cloud
+
+`fmz cloud migrate` copies the workflows of a self-hosted Community Edition install into a cloud workspace:
+
+```bash
+fmz auth login                                   # the cloud account
+fmz cloud migrate --from http://localhost:3000 --from-email you@example.com --dry-run
+fmz cloud migrate --from http://localhost:3000 --from-email you@example.com --workspace ops
+```
+
+- **Sign-in:** the command asks for your Community password, or reads `FMZ_SOURCE_PASSWORD`.
+- **What's copied:**
+  - Each workflow arrives with the version it runs in production, published again in the cloud.
+  - A newer draft becomes the workflow's draft.
+  - An archived workflow arrives archived.
+- **Re-running:** workflows whose slug the cloud workspace already has are skipped, so you can run the command again after fixing a failure.
+- **Not copied:**
+  - Credentials. Their values never leave the install; the command lists the ones to add again.
+  - Run history and older versions. They stay readable on the Community install.
 
 ## Development
 
