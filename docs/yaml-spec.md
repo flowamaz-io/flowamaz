@@ -207,6 +207,10 @@ retry:
   backoff_multiplier: 2.0  # Exponential backoff multiplier
 ```
 
+`max_attempts` counts every try, the first included: `max_attempts: 3` is the first try plus up to 2 retries. The wait before retry *n* is `backoff_seconds × backoff_multiplier^(n−1)` (5s, then 10s above). Retries are durable: the run waits on the delayed queue, so a retry survives a worker restart and doesn't hold a worker while it waits. An HTTP action is retried on a 5xx answer or a network error; a 4xx answer or a timeout fails the step at once. A rejected approval is never retried.
+
+The engine also accepts the camelCase spellings older workflows used (`maxAttempts`, `backoffSeconds`, `timeoutSeconds`, `onTimeoutNodeId`, and `compensation:` with `compensateNodeId`), but new workflows should use the snake_case form shown here; it is the one the validator checks.
+
 ### timeout policy
 
 ```yaml

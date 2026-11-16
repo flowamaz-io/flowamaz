@@ -239,4 +239,61 @@ public class SfgParserTests
         config.GetProperty("version").GetString().Should().Be("1.0");
         config.GetProperty("code").GetString().Should().Be("007");
     }
+
+    private static string WithPolicies(string policies) => $$"""
+        workflow: { id: w, version: v1, name: W }
+        nodes:
+          - { id: start, type: Trigger }
+          - id: call
+            type: Action
+        {{policies}}
+          - { id: undo, type: Action }
+          - { id: done, type: End }
+        edges:
+          - { id: e1, from: start, to: call }
+          - { id: e2, from: call, to: done }
+          - { id: e3, from: start, to: undo }
+          - { id: e4, from: undo, to: done }
+        """;
+
+    [Fact]
+    public void Reads_retry_timeout_and_compensate_blocks_in_the_documented_snake_case_form()
+    {
+        var graph = _parser.Parse(WithPolicies("""
+                retry: { max_attempts: 4, backoff_seconds: 5, backoff_multiplier: 2.5 }
+                timeout: { seconds: 45, on_timeout: undo }
+                compensate: { strategy: backward, node_id: undo }
+            """));
+
+        var node = graph.FindNode("call")!;
+        node.RetryPolicy.Should().Be(new RetryPolicy(4, 5, 2.5));
+        node.TimeoutPolicy.Should().Be(new TimeoutPolicy(45, "undo"));
+        node.Compensation.Should().Be(new CompensationBlock("backward", "undo"));
+    }
+
+    [Fact]
+    public void Still_reads_the_camelCase_form_earlier_versions_used()
+    {
+        var graph = _parser.Parse(WithPolicies("""
+                retry: { maxAttempts: 3, backoffSeconds: 1 }
+                timeout: { timeoutSeconds: 20, onTimeoutNodeId: undo }
+                compensation: { strategy: forward, compensateNodeId: undo }
+            """));
+
+        var node = graph.FindNode("call")!;
+        node.RetryPolicy.Should().Be(new RetryPolicy(3, 1, 1.0), "backoff_multiplier defaults to 1");
+        node.TimeoutPolicy.Should().Be(new TimeoutPolicy(20, "undo"));
+        node.Compensation.Should().Be(new CompensationBlock("forward", "undo"));
+    }
+
+    [Fact]
+    public void A_retry_value_that_is_not_a_number_is_an_actionable_error()
+    {
+        var act = () => _parser.Parse(WithPolicies("""
+                retry: { max_attempts: three }
+            """));
+
+        act.Should().Throw<SfgParseException>()
+            .WithMessage("*'call'*retry.max_attempts*'three'*not a number*max_attempts: 3*");
+    }
 }

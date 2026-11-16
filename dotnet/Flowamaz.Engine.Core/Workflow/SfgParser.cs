@@ -153,9 +153,9 @@ public sealed class SfgParser
                 type,
                 dto.Label ?? dto.Id,
                 ConfigToJson(dto.Config),
-                MapRetry(dto.Retry),
-                MapTimeout(dto.Timeout),
-                MapCompensation(dto.Compensation)));
+                MapRetry(dto.Id, dto.Retry),
+                MapTimeout(dto.Id, dto.Timeout),
+                MapCompensation(dto.Id, dto.Compensate ?? dto.Compensation)));
         }
 
         return nodes;
@@ -286,14 +286,91 @@ public sealed class SfgParser
         return JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
     }
 
-    private static RetryPolicy? MapRetry(RetryDto? d) =>
-        d is null ? null : new RetryPolicy(d.MaxAttempts, d.BackoffSeconds, d.BackoffMultiplier);
+    // Retry, timeout and compensation blocks. The documented form (docs/yaml-spec.md and the v1 JSON
+    // schema) is snake_case: retry.max_attempts / backoff_seconds / backoff_multiplier, timeout.seconds /
+    // on_timeout, compensate.strategy / node_id. Earlier engine versions only read camelCase
+    // (maxAttempts, timeoutSeconds, onTimeoutNodeId, compensation.compensateNodeId), so a block written
+    // the documented way was silently dropped. Both spellings are read; keys are matched ignoring case
+    // and underscores.
 
-    private static TimeoutPolicy? MapTimeout(TimeoutDto? d) =>
-        d is null ? null : new TimeoutPolicy(d.TimeoutSeconds, d.OnTimeoutNodeId);
+    private static RetryPolicy? MapRetry(string nodeId, Dictionary<string, object?>? block)
+    {
+        if (block is null) return null;
+        var keys = Normalise(block);
+        return new RetryPolicy(
+            Int(nodeId, "retry", keys, "maxattempts") ?? 0,
+            Int(nodeId, "retry", keys, "backoffseconds") ?? 0,
+            Number(nodeId, "retry", keys, "backoffmultiplier") ?? 1.0);
+    }
 
-    private static CompensationBlock? MapCompensation(CompensationDto? d) =>
-        d?.Strategy is null ? null : new CompensationBlock(d.Strategy, d.CompensateNodeId);
+    private static TimeoutPolicy? MapTimeout(string nodeId, Dictionary<string, object?>? block)
+    {
+        if (block is null) return null;
+        var keys = Normalise(block);
+        return new TimeoutPolicy(
+            Int(nodeId, "timeout", keys, "seconds", "timeoutseconds") ?? 0,
+            Text(keys, "ontimeout", "ontimeoutnodeid"));
+    }
+
+    private static CompensationBlock? MapCompensation(string nodeId, Dictionary<string, object?>? block)
+    {
+        if (block is null) return null;
+        var keys = Normalise(block);
+        var strategy = Text(keys, "strategy");
+        return strategy is null ? null : new CompensationBlock(strategy, Text(keys, "nodeid", "compensatenodeid"));
+    }
+
+    private static Dictionary<string, object?> Normalise(Dictionary<string, object?> block)
+    {
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var (key, value) in block)
+        {
+            result[key.Replace("_", string.Empty).Replace("-", string.Empty).ToLowerInvariant()] = value;
+        }
+        return result;
+    }
+
+    private static object? First(Dictionary<string, object?> keys, string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (keys.TryGetValue(name, out var value) && value is not null) return value;
+        }
+        return null;
+    }
+
+    private static string? Text(Dictionary<string, object?> keys, params string[] names)
+    {
+        var value = First(keys, names)?.ToString();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static int? Int(string nodeId, string block, Dictionary<string, object?> keys, params string[] names)
+    {
+        var number = Number(nodeId, block, keys, names);
+        return number is null ? null : (int)Math.Round(number.Value);
+    }
+
+    private static double? Number(string nodeId, string block, Dictionary<string, object?> keys, params string[] names)
+    {
+        var value = First(keys, names);
+        if (value is null) return null;
+        var text = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+        if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+        {
+            return parsed;
+        }
+        throw new SfgParseException(
+            $"Node '{nodeId}' has {block}.{Snake(names[0])} = '{text}', which is not a number. Use a number, for example {block}: {{ {Snake(names[0])}: 3 }}.");
+    }
+
+    private static string Snake(string normalised) => normalised switch
+    {
+        "maxattempts" => "max_attempts",
+        "backoffseconds" => "backoff_seconds",
+        "backoffmultiplier" => "backoff_multiplier",
+        _ => normalised,
+    };
 
     private sealed class RootDto
     {
@@ -337,9 +414,12 @@ public sealed class SfgParser
         public string? Type { get; set; }
         public string? Label { get; set; }
         public object? Config { get; set; }
-        public RetryDto? Retry { get; set; }
-        public TimeoutDto? Timeout { get; set; }
-        public CompensationDto? Compensation { get; set; }
+        public Dictionary<string, object?>? Retry { get; set; }
+        public Dictionary<string, object?>? Timeout { get; set; }
+        /// <summary>The documented key (docs/yaml-spec.md).</summary>
+        public Dictionary<string, object?>? Compensate { get; set; }
+        /// <summary>The key earlier engine versions read; still accepted.</summary>
+        public Dictionary<string, object?>? Compensation { get; set; }
     }
 
     private sealed class EdgeDto
@@ -350,24 +430,5 @@ public sealed class SfgParser
         public string? Condition { get; set; }
         /// <summary>Canvas: the label of the router branch this edge belongs to.</summary>
         public string? Via { get; set; }
-    }
-
-    private sealed class RetryDto
-    {
-        public int MaxAttempts { get; set; }
-        public int BackoffSeconds { get; set; }
-        public double BackoffMultiplier { get; set; } = 1.0;
-    }
-
-    private sealed class TimeoutDto
-    {
-        public int TimeoutSeconds { get; set; }
-        public string? OnTimeoutNodeId { get; set; }
-    }
-
-    private sealed class CompensationDto
-    {
-        public string? Strategy { get; set; }
-        public string? CompensateNodeId { get; set; }
     }
 }
