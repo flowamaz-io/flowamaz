@@ -27,8 +27,10 @@ public static class EngineHostingServiceCollectionExtensions
 {
     /// <summary>
     /// The runtime: parser, orchestrator, saga engine, the HTTP action, AI and approval-gate workers,
-    /// <see cref="GateService"/> (approve / reject) and variable evaluation, with the open defaults for the
-    /// host hooks (every run admitted, no run events, no step debugger) and an <see cref="IEmailService"/>
+    /// <see cref="GateService"/> (approve / reject), <see cref="WorkflowService"/> (create, save, publish, archive),
+    /// <see cref="InstanceService"/> (run list, detail, timeline, retry) and variable evaluation, with the open
+    /// defaults for the host hooks (every run and workflow admitted, versions kept in the database only, no run or
+    /// workflow events, no step debugger) and an <see cref="IEmailService"/>
     /// that only logs. Register your own implementations before or after this call to replace them.
     /// HTTP actions go through the egress guard: private and loopback addresses are refused unless
     /// <c>Connectors:AllowPrivateNetworkEgress</c> is true.
@@ -42,11 +44,16 @@ public static class EngineHostingServiceCollectionExtensions
         services.TryAddScoped<IRunEventSink, NullRunEventSink>();
         services.TryAddScoped<IStepInterceptor, NoPauseStepInterceptor>();
         services.TryAddSingleton<IEmailService, LoggingEmailService>();
+        services.TryAddSingleton<IWorkflowVersionStore>(DatabaseWorkflowVersionStore.Instance);
+        services.TryAddSingleton<IWorkflowAdmission>(AllowAllWorkflowAdmission.Instance);
+        services.TryAddSingleton<IWorkflowEventSink>(NullWorkflowEventSink.Instance);
 
         services.TryAddScoped<IVariableEvaluationService, VariableEvaluationService>();
         services.TryAddScoped<IWorkflowOrchestrator, WorkflowOrchestrator>();
         services.TryAddScoped<ISagaEngine, SagaEngine>();
         services.TryAddScoped<GateService>();
+        services.TryAddScoped<WorkflowService>();
+        services.TryAddScoped<InstanceService>();
 
         var allowPrivate = bool.TryParse(configuration[EgressGuard.ConfigKey], out var allow) && allow;
         services.AddHttpClient(HttpActionWorker.HttpClientName)

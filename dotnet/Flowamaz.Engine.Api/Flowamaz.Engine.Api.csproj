@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Flowamaz.Engine.Api</RootNamespace>
+
+    <PackageId>Flowamaz.Engine.Api</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Flowamaz</Authors>
+    <Description>HTTP endpoints for the Flowamaz workflow runtime in an ASP.NET Core host: workflows (create, save, publish, archive, versions), runs (trigger, list, detail, events, timeline, cancel, retry), approval gates and a signed webhook trigger. The host decides who may do what.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/flowamaz-io/flowamaz</RepositoryUrl>
+    <PackageTags>workflow;engine;api;aspnetcore;flowamaz</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flowamaz.Engine.Runtime\Flowamaz.Engine.Runtime.csproj" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="LICENSE" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="Flowamaz.Engine.Runtime.Tests" />
+  </ItemGroup>
+
+</Project>

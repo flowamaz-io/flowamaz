@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Flowamaz.Core.Enums;
 using Flowamaz.Core.Interfaces.Repositories;
 using Flowamaz.Core.Interfaces.Runtime;
@@ -26,7 +25,7 @@ namespace Flowamaz.Application.Workflow.Workers;
 /// </summary>
 public sealed class AiStepWorker : INodeWorker
 {
-    public const string Redacted = "[SENSITIVE_REDACTED]";
+    public const string Redacted = AiPromptRedaction.Redacted;
     private const int DefaultMaxTokens = 1024;
 
     private readonly IAiModelProvider _provider;
@@ -137,28 +136,10 @@ public sealed class AiStepWorker : INodeWorker
         $"AI step '{nodeId}' couldn't record its AI usage, so it was stopped (every AI call must be metered). " +
         "Check the host's usage storage (the engine_ai_usage table), then run it again.");
 
-    private async Task<HashSet<string>> SensitiveNamesAsync(NodeExecutionContext context, CancellationToken cancellationToken)
-    {
-        var names = new HashSet<string>(context.SensitiveVariableNames ?? new HashSet<string>(), StringComparer.Ordinal);
-        foreach (var variable in await _variables.GetForInstanceAsync(context.InstanceId, cancellationToken))
-        {
-            if (variable.IsSensitive) names.Add(variable.Name);
-        }
-        return names;
-    }
+    private Task<HashSet<string>> SensitiveNamesAsync(NodeExecutionContext context, CancellationToken cancellationToken) =>
+        AiPromptRedaction.SensitiveNamesAsync(_variables, context.InstanceId, context.SensitiveVariableNames, cancellationToken);
 
-    /// <summary>
-    /// Replaces <c>{{ name }}</c> and <c>{{ variables.name }}</c> (any spacing, dotted paths under it too)
-    /// for each sensitive name.
-    /// </summary>
-    internal static string Redact(string template, IReadOnlyCollection<string> sensitive)
-    {
-        foreach (var name in sensitive)
-        {
-            template = Regex.Replace(template, @"\{\{\s*(variables\.)?" + Regex.Escape(name) + @"(\.[^}\s]*)?\s*\}\}", Redacted);
-        }
-        return template;
-    }
+    internal static string Redact(string template, IReadOnlyCollection<string> sensitive) => AiPromptRedaction.Redact(template, sensitive);
 
     private static JsonDocument ToOutput(string text)
     {

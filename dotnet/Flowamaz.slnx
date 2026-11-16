@@ -7,5 +7,6 @@
   <Project Path="Flowamaz.Engine.Runtime/Flowamaz.Engine.Runtime.csproj" />
   <Project Path="Flowamaz.Engine.Persistence/Flowamaz.Engine.Persistence.csproj" />
   <Project Path="Flowamaz.Engine.Hosting/Flowamaz.Engine.Hosting.csproj" />
+  <Project Path="Flowamaz.Engine.Api/Flowamaz.Engine.Api.csproj" />
   <Project Path="Flowamaz.Engine.Runtime.Tests/Flowamaz.Engine.Runtime.Tests.csproj" />
 </Solution>

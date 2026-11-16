@@ -15,10 +15,15 @@ builder.Services.AddFlowamazEngineWorker();                          // backgrou
 await builder.Build().RunAsync();
 ```
 
-Then trigger a run and decide its approvals from your own code (an API, a CLI, a test):
+Then create and publish a workflow, trigger a run and decide its approvals from your own code (an API, a CLI, a test):
 
 ```csharp
 using var scope = host.Services.CreateScope();
+var workflows = scope.ServiceProvider.GetRequiredService<WorkflowService>();
+var workflow = await workflows.CreateAsync(workspaceId, userId, new CreateWorkflowDefinitionRequest(
+    "Loan approval", "loan", yaml, NlDescription: null, WorkflowCreatedByMethod.Canvas));
+await workflows.PublishAsync(workspaceId, workflow.Id, userId);   // validates the YAML first
+var workflowId = workflow.Id;
 var run = await scope.ServiceProvider.GetRequiredService<IWorkflowOrchestrator>()
     .TriggerAsync(workspaceId, workflowId, payload: """{"amount":4200}""", idempotencyKey: null);
 // … the worker runs it; at an approval gate the run waits:
@@ -33,11 +38,11 @@ builder.Services.AddFlowamazEnginePersistence(o => o.UseInMemoryDatabase("engine
     .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
 ```
 
-`Flowamaz.Engine.Runtime.Tests/Hosting/InMemoryHostEndToEndTests.cs` is a working example: trigger → HTTP action → approval gate → approve → complete, a rejection, a retry, and a metered AI step.
+`Flowamaz.Engine.Runtime.Tests/Hosting/InMemoryHostEndToEndTests.cs` is a working example: create and publish → trigger → HTTP action → approval gate → approve → complete, a rejection, a retry, a metered AI step, and reading the run back (list, detail, timeline).
 
 ## What each call registers
 
-- **`AddFlowamazEngineRuntime`**: the parser, orchestrator, saga engine, the HTTP action and approval-gate workers, `GateService` and variable evaluation. It also registers the open defaults for the host hooks: every run admitted (`IRunAdmission`), no run events (`IRunEventSink`), no step debugger (`IStepInterceptor`), and an `IEmailService` that only logs. Register your own implementations to replace any of them (for example an SMTP `IEmailService`, so approvers get the gate email). HTTP actions go through the egress guard, which refuses private and loopback addresses unless `Connectors:AllowPrivateNetworkEgress` is `true`.
+- **`AddFlowamazEngineRuntime`**: the parser, orchestrator, saga engine, the HTTP action and approval-gate workers, `GateService`, `WorkflowService` (create, save drafts, publish, archive, versions), `InstanceService` (run list, detail, events, timeline, retry) and variable evaluation. It also registers the open defaults for the host hooks: every run admitted (`IRunAdmission`), no run events (`IRunEventSink`), no step debugger (`IStepInterceptor`), every workflow admitted (`IWorkflowAdmission`), no workflow events (`IWorkflowEventSink`), versions kept in the database only (`IWorkflowVersionStore`: each save gets an opaque reference, each release the tag `{workflowId}/v{n}`), and an `IEmailService` that only logs. Register your own implementations to replace any of them (for example an SMTP `IEmailService`, so approvers get the gate email). HTTP actions go through the egress guard, which refuses private and loopback addresses unless `Connectors:AllowPrivateNetworkEgress` is `true`.
 - **AI steps** (`type: ai`, in `AddFlowamazEngineRuntime`). They run on your own model key: Anthropic by default (`AnthropicModelProvider`), or any `IAiModelProvider` you register. Settings:
 
   ```json

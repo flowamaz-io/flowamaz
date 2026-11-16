@@ -1,5 +1,6 @@
 using System.Net;
 using FluentAssertions;
+using Flowamaz.Application.Workflow.DTOs;
 using Flowamaz.Application.Workflow.Services;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
@@ -115,23 +116,18 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
           - { id: e3, from: approve, to: done }
         """;
 
+    /// <summary>Creates and publishes the workflow through the open WorkflowService (default hooks: database versions only).</summary>
     private async Task<Guid> PublishAsync(string yaml)
     {
         using var scope = _host.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<EngineDbContext>();
-        var definition = new WorkflowDefinition
-        {
-            WorkspaceId = _workspaceId, Name = "Loan approval", Slug = "loan", YamlContent = yaml,
-            Status = WorkflowStatus.Published, CurrentVersion = "v1",
-        };
-        db.WorkflowDefinitions.Add(definition);
-        db.WorkflowVersions.Add(new WorkflowVersion
-        {
-            WorkspaceId = _workspaceId, WorkflowDefinitionId = definition.Id, CommitSha = "v1", BranchName = "main",
-            YamlContent = yaml, Message = "first", IsProduction = true,
-        });
-        await db.SaveChangesAsync();
-        return definition.Id;
+        var workflows = scope.ServiceProvider.GetRequiredService<WorkflowService>();
+        var created = await workflows.CreateAsync(_workspaceId, Guid.NewGuid(), new CreateWorkflowDefinitionRequest(
+            "Loan approval", $"loan-{Guid.NewGuid():N}", yaml, null, WorkflowCreatedByMethod.Canvas));
+        var version = await workflows.PublishAsync(_workspaceId, created.Id, Guid.NewGuid());
+        version.Should().NotBeNull();
+        version!.IsProduction.Should().BeTrue();
+        version.TagName.Should().Be($"{created.Id}/v1");
+        return created.Id;
     }
 
     private async Task<Guid> TriggerAsync(Guid workflowId, string payload = """{"applicant":"Aisha","amount":4200}""")
@@ -194,6 +190,15 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
         done.Status.Should().Be(InstanceStatus.Completed, done.ErrorMessage);
         (await EventTypesAsync(runId)).Should().ContainInOrder(
             "InstanceStarted", "NodeCompleted", "GateDecided", "InstanceCompleted");
+
+        // The run as the open InstanceService reports it: list, detail and timeline with the YAML's labels.
+        using var read = _host.Services.CreateScope();
+        var runs = read.ServiceProvider.GetRequiredService<InstanceService>();
+        (await runs.ListAsync(_workspaceId, null, null, null, null)).Should().ContainSingle(r => r.Id == runId && r.Status == "Completed");
+        (await runs.GetDetailAsync(_workspaceId, runId))!.NodeStates.Select(n => n.NodeId).Should().Contain(["score", "approve"]);
+        var timeline = await runs.GetTimelineAsync(_workspaceId, runId);
+        timeline!.Nodes.Select(n => n.Label).Should().Contain(["Credit check", "Manager approval"]);
+        (await runs.GetDetailAsync(Guid.NewGuid(), runId)).Should().BeNull("another workspace can't see the run");
     }
 
     [Fact]
