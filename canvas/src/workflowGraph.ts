@@ -1,5 +1,5 @@
 import * as jsYaml from 'js-yaml';
-import type { CanvasEdge, CanvasNode } from './types';
+import type { CanvasEdge, CanvasNode, CompensationBlock, RetryPolicy, TimeoutPolicy } from './types';
 
 type Dict = Record<string, unknown>;
 
@@ -73,6 +73,7 @@ export function parseWorkflowGraph(yaml: string): { nodes: CanvasNode[]; edges: 
       type: canvasNodeType(str(raw.type)),
       label: str(raw.label)?.trim() || id,
       config: isDict(raw.config) ? raw.config : {},
+      ...readNodePolicies(raw),
       ...(typeof raw.content === 'string' ? { content: raw.content } : {}),
       ...(position ? { position } : {}),
     });
@@ -96,4 +97,94 @@ export function parseWorkflowGraph(yaml: string): { nodes: CanvasNode[]; edges: 
   });
 
   return nodes.length > 0 ? { nodes, edges } : null;
+}
+
+// ── Retry / timeout / compensate blocks ─────────────────────────────────────────────────────────────
+// The documented YAML (docs/yaml-spec.md, the v1 schema) is snake_case: retry.max_attempts /
+// backoff_seconds / backoff_multiplier, timeout.seconds / on_timeout, compensate.strategy / node_id.
+// Older canvas versions wrote camelCase (and `compensation:`); both are read, only the documented form
+// is written, so editing a node also upgrades it.
+
+/** Keys compared without case, dashes or underscores. */
+function pick(block: Dict, ...names: string[]): unknown {
+  const wanted = new Set(names.map((n) => n.replace(/[-_]/g, '').toLowerCase()));
+  for (const [key, value] of Object.entries(block)) {
+    if (wanted.has(key.replace(/[-_]/g, '').toLowerCase()) && value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
+
+function num(value: unknown): number | undefined {
+  const n = typeof value === 'string' ? Number(value) : value;
+  return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
+}
+
+/** The node's retry, timeout and compensate blocks, from either spelling. */
+export function readNodePolicies(raw: Dict): Pick<CanvasNode, 'retry' | 'timeout' | 'compensate'> {
+  const result: Pick<CanvasNode, 'retry' | 'timeout' | 'compensate'> = {};
+  if (isDict(raw.retry)) {
+    const maxAttempts = num(pick(raw.retry, 'max_attempts'));
+    if (maxAttempts !== undefined) {
+      result.retry = {
+        maxAttempts,
+        backoffSeconds: num(pick(raw.retry, 'backoff_seconds')) ?? 0,
+        backoffMultiplier: num(pick(raw.retry, 'backoff_multiplier')) ?? 1,
+      };
+    }
+  }
+  if (isDict(raw.timeout)) {
+    const seconds = num(pick(raw.timeout, 'seconds', 'timeout_seconds'));
+    const onTimeout = str(pick(raw.timeout, 'on_timeout', 'on_timeout_node_id'));
+    if (seconds !== undefined || onTimeout) {
+      result.timeout = { seconds: seconds ?? 0, ...(onTimeout ? { onTimeout } : {}) };
+    }
+  }
+  const comp = isDict(raw.compensate) ? raw.compensate : isDict(raw.compensation) ? raw.compensation : null;
+  if (comp) {
+    const strategy = str(pick(comp, 'strategy'));
+    if (strategy === 'backward' || strategy === 'forward' || strategy === 'pivot') {
+      const nodeId = str(pick(comp, 'node_id', 'compensate_node_id'));
+      result.compensate = { strategy, ...(nodeId ? { nodeId } : {}) };
+    }
+  }
+  return result;
+}
+
+/**
+ * Writes policies onto a YAML node in the documented form. `undefined` leaves a block as it is; `null`
+ * removes it. Older spellings of a block that is written are dropped.
+ */
+export function writeNodePolicies(
+  node: Dict,
+  policies: { retry?: RetryPolicy | null; timeout?: TimeoutPolicy | null; compensate?: CompensationBlock | null },
+): void {
+  if (policies.retry !== undefined) {
+    if (policies.retry === null) delete node.retry;
+    else {
+      node.retry = {
+        max_attempts: Math.max(1, Math.round(policies.retry.maxAttempts)),
+        backoff_seconds: Math.max(0, Math.round(policies.retry.backoffSeconds)),
+        backoff_multiplier: Math.max(1, policies.retry.backoffMultiplier),
+      };
+    }
+  }
+  if (policies.timeout !== undefined) {
+    if (policies.timeout === null) delete node.timeout;
+    else {
+      node.timeout = {
+        ...(policies.timeout.seconds > 0 ? { seconds: Math.round(policies.timeout.seconds) } : {}),
+        ...(policies.timeout.onTimeout ? { on_timeout: policies.timeout.onTimeout } : {}),
+      };
+    }
+  }
+  if (policies.compensate !== undefined) {
+    delete node.compensation;
+    if (policies.compensate === null) delete node.compensate;
+    else {
+      node.compensate = {
+        strategy: policies.compensate.strategy,
+        ...(policies.compensate.nodeId ? { node_id: policies.compensate.nodeId } : {}),
+      };
+    }
+  }
 }
