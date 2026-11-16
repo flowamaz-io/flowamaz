@@ -1,3 +1,12 @@
+/** Slugify org / workspace names: lowercase, non-alphanumerics → single dash, trimmed. */
+export function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 /** Turns a machine id ("manager-approval", "send_email", "riskReview") into "Manager approval". */
 export function humanizeId(id: string): string {
   const words = id

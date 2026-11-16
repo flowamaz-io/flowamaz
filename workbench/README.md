@@ -9,10 +9,31 @@ Workbench screens for Vue 3 (MIT): the parts of the Flowamaz app for working wit
 - the `WorkbenchApi` interface and its engine API client;
 - date and run helpers (`runDuration`, `instanceStatusVariant`, `isRunEnded`, …);
 - **runs:** `RunsPage` and `RunDetailPage` (see below), and the parts they're built from: `RunTable`, `RunDetail`, `FmRunTimeline` and `VariableInspector`;
+- **workflows:** `WorkflowsPage` and `WorkflowDetailPage`, with `CreateWorkflowDialog` and `StartRunDialog`, plus `workflowStatusVariant`, `starterWorkflowYaml` and `slugify`;
 - **editing:** `WorkflowEditorPage` (the YAML on the left, a live picture of the workflow on the right, Save and Publish), with `FmYamlEditor` and `WorkflowGraphPreview`. Visual editing on the canvas comes later;
 - **approvals:** `GatesPage`, the approval inbox, with `GateApproveDialog`, `GateFormFields` and `FmAlert`, plus the gate form rules (`gateForm`) and `humanizeId`.
 
-The workflow list comes next.
+Visual editing on the canvas comes next.
+
+## Workflows
+
+`WorkflowsPage` and `WorkflowDetailPage` need only the installed API. They emit navigation instead of using a router:
+
+```vue
+<WorkflowsPage @open="(id) => router.push(`/workflows/${id}`)" @edit="(id) => router.push(`/workflows/${id}/edit`)"
+  @run-started="(runId) => router.push(`/runs/${runId}`)" />
+<WorkflowDetailPage :workflow-id="id" @edit="…" @open-run="…" @run-started="…" @back="…" />
+```
+
+The list has:
+
+- search;
+- Active, All and Archived filters (archived workflows are hidden by default);
+- New workflow, which starts from a small workflow (trigger, approval, end) that publishes as it is;
+- start a run (a draft runs as a test run);
+- edit, archive or unarchive a published workflow, and delete a draft.
+
+The detail page shows the workflow's published versions and its runs. Use `can-edit` and `can-run` to hide actions a user may not take.
 
 ## Editing
 

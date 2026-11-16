@@ -1,5 +1,6 @@
 // @flowamaz/workbench — Flowamaz workbench screens for Vue 3 (MIT).
-// Shared basics, the YAML editor, the runs screens and the approval inbox; the workflow list follows (docs/COMMUNITY-EDITION.md §10, phase 5b).
+// Shared basics, the workflow list and detail, the YAML editor, the runs screens and the approval inbox
+// (docs/COMMUNITY-EDITION.md §10, phase 5b).
 
 export * from './types';
 export * from './api';
@@ -9,6 +10,7 @@ export * from './date';
 export * from './runs';
 export * from './gateForm';
 export * from './strings';
+export * from './workflows';
 
 export { default as FmBadge } from './components/FmBadge.vue';
 export { default as FmButton } from './components/FmButton.vue';
@@ -31,3 +33,7 @@ export { default as GatesPage } from './components/GatesPage.vue';
 export { default as FmYamlEditor } from './components/FmYamlEditor.vue';
 export { default as WorkflowGraphPreview } from './components/WorkflowGraphPreview.vue';
 export { default as WorkflowEditorPage } from './components/WorkflowEditorPage.vue';
+export { default as StartRunDialog } from './components/StartRunDialog.vue';
+export { default as CreateWorkflowDialog } from './components/CreateWorkflowDialog.vue';
+export { default as WorkflowsPage } from './components/WorkflowsPage.vue';
+export { default as WorkflowDetailPage } from './components/WorkflowDetailPage.vue';
