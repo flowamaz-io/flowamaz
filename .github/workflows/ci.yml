@@ -40,7 +40,11 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: workbench/package-lock.json
+          cache-dependency-path: |
+            workbench/package-lock.json
+            canvas/package-lock.json
+      # The workbench uses @flowamaz/canvas from the sibling folder's source, so the canvas needs its packages too.
+      - run: npm ci --prefix canvas
       - run: npm ci --prefix workbench
       - run: npm test --prefix workbench
       - run: npm run typecheck --prefix workbench

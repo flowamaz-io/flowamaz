@@ -9,9 +9,21 @@ Workbench screens for Vue 3 (MIT): the parts of the Flowamaz app for working wit
 - the `WorkbenchApi` interface and its engine API client;
 - date and run helpers (`runDuration`, `instanceStatusVariant`, `isRunEnded`, …);
 - **runs:** `RunsPage` and `RunDetailPage` (see below), and the parts they're built from: `RunTable`, `RunDetail`, `FmRunTimeline` and `VariableInspector`;
+- **editing:** `WorkflowEditorPage` (the YAML on the left, a live picture of the workflow on the right, Save and Publish), with `FmYamlEditor` and `WorkflowGraphPreview`. Visual editing on the canvas comes later;
 - **approvals:** `GatesPage`, the approval inbox, with `GateApproveDialog`, `GateFormFields` and `FmAlert`, plus the gate form rules (`gateForm`) and `humanizeId`.
 
-The workflow screens come next.
+The workflow list comes next.
+
+## Editing
+
+`<WorkflowEditorPage :workflow-id="id" @published="…" @back="…" />` needs only the installed API:
+
+- **Save:** the Save button or Ctrl/Cmd+S.
+- **Publish:** saves first, then shows the server's validation message as it is if publishing is refused.
+- **Leaving:** the browser warns before you leave with unsaved changes.
+- **`read-only`:** hides Save and Publish.
+
+The picture is drawn with [`@flowamaz/canvas`](../canvas/README.md). The workbench uses the canvas from its sibling folder's source, so install both (`npm ci --prefix canvas && npm ci --prefix workbench`).
 
 ## Approvals
 
