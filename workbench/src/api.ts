@@ -23,6 +23,14 @@ export interface RunListFilters {
   pageSize?: number;
 }
 
+/** Options for {@link WorkbenchApi.listGates}. */
+export interface GateListOptions {
+  /** Include gates of test runs (they come back with isTest = true). */
+  includeTest?: boolean;
+  /** Include decided gates (the "All" tab). */
+  includeDecided?: boolean;
+}
+
 /** What to start a run with. `payload` is the run's trigger payload as JSON text. */
 export interface StartRunRequest {
   payload?: string | null;
@@ -56,7 +64,8 @@ export interface WorkbenchApi {
   cancelRun(id: string): Promise<InstanceDetailResponse>;
   retryRun(id: string): Promise<TriggerInstanceResponse>;
 
-  listPendingGates(includeTest?: boolean): Promise<GateResponse[]>;
+  /** Gates waiting for a decision; with includeDecided, decided ones too, newest first. */
+  listGates(options?: GateListOptions): Promise<GateResponse[]>;
   decideGate(
     runId: string,
     nodeId: string,

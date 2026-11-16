@@ -50,7 +50,7 @@ Routes start with the prefix (`/api/v1` here). JSON is camelCase, with enums as 
 | `GET /workspaces/{ws}/runs/{id}`, `/events`, `/timeline` | Read | variables marked sensitive are masked |
 | `POST /workspaces/{ws}/runs/{id}/cancel` | Operate | |
 | `POST /workspaces/{ws}/runs/{id}/retry` | Operate | a new run on the same pinned version → 202 |
-| `GET /workspaces/{ws}/gates?includeTest` | Read | gates waiting for a decision |
+| `GET /workspaces/{ws}/gates?includeTest&status` | Read | `status=pending` (default): gates waiting for a decision; `status=all`: decided ones too, newest first (up to 200) |
 | `GET /workspaces/{ws}/gates/{runId}/{nodeId}` | Read | |
 | `POST /workspaces/{ws}/gates/{runId}/{nodeId}/decide` | Decide | `{ decision: "approved" \| "rejected", note?, values? }` |
 | `POST /hooks/workspaces/{ws}/workflows/{id}` | (signature) | the webhook trigger, below |

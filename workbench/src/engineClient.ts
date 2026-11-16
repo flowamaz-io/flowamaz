@@ -1,4 +1,4 @@
-import { WorkbenchApiError, type RunListFilters, type StartRunRequest, type WorkbenchApi } from './api';
+import { WorkbenchApiError, type GateListOptions, type RunListFilters, type StartRunRequest, type WorkbenchApi } from './api';
 import type {
   CreateWorkflowDefinitionRequest,
   EventResponse,
@@ -101,7 +101,9 @@ export function createEngineApiClient(options: EngineApiClientOptions): Workbenc
     cancelRun: (run) => call<InstanceDetailResponse>('POST', `/runs/${id(run)}/cancel`),
     retryRun: (run) => call<TriggerInstanceResponse>('POST', `/runs/${id(run)}/retry`),
 
-    listPendingGates: (includeTest) => call<GateResponse[]>('GET', `/gates${query({ includeTest })}`),
+    listGates: (options: GateListOptions = {}) => call<GateResponse[]>('GET', `/gates${query({
+      includeTest: options.includeTest, status: options.includeDecided ? 'all' : undefined,
+    })}`),
     decideGate: (run, nodeId, decision, note?: string, values?: Record<string, GateFormValue>) =>
       call<GateResponse>('POST', `/gates/${id(run)}/${id(nodeId)}/decide`, { decision, note, values }),
   };

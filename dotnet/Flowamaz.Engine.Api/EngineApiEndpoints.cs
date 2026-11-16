@@ -152,9 +152,18 @@ public static class EngineApiEndpoints
             }));
 
         // ── Gates ─────────────────────────────────────────────────────────────
-        ws.MapGet("/gates", (HttpContext h, Guid workspaceId, bool? includeTest, CancellationToken ct) =>
+        // status=pending (default): the gates waiting for a decision. status=all: decided ones too, newest first (up to 200).
+        ws.MapGet("/gates", (HttpContext h, Guid workspaceId, bool? includeTest, string? status, CancellationToken ct) =>
             As(h, workspaceId, EngineApiAction.Read, ct, async (_, s) =>
-                Ok(await s.GetRequiredService<GateService>().ListPendingAsync(workspaceId, includeTest ?? false, ct))));
+            {
+                var gates = s.GetRequiredService<GateService>();
+                if (string.IsNullOrWhiteSpace(status) || status.Equals("pending", StringComparison.OrdinalIgnoreCase))
+                    return Ok(await gates.ListPendingAsync(workspaceId, includeTest ?? false, ct));
+                if (status.Equals("all", StringComparison.OrdinalIgnoreCase))
+                    return Ok(await gates.ListRecentAsync(workspaceId, includeTest ?? false, ct));
+                return Problem(StatusCodes.Status400BadRequest, "INVALID_STATUS",
+                    $"'{status}' isn't a gate list. Use status=pending (waiting for a decision) or status=all (decided ones too).");
+            }));
 
         ws.MapGet("/gates/{runId:guid}/{nodeId}", (HttpContext h, Guid workspaceId, Guid runId, string nodeId, CancellationToken ct) =>
             As(h, workspaceId, EngineApiAction.Read, ct, async (_, s) =>

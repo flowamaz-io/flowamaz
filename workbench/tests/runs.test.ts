@@ -34,7 +34,7 @@ function fakeApi(over: Partial<WorkbenchApi> = {}): WorkbenchApi {
     listRunVariables: vi.fn(async () => run().variables),
     getRunTimeline: vi.fn(async () => timeline),
     cancelRun: vi.fn(async () => run({ status: 'Cancelled' })), retryRun: notUsed,
-    listPendingGates: notUsed, decideGate: notUsed,
+    listGates: notUsed, decideGate: notUsed,
     ...over,
   };
 }

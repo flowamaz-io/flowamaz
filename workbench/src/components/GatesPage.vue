@@ -1,0 +1,471 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue';
+import { CheckCircle, XCircle, Clock, ClipboardList } from 'lucide-vue-next';
+import FmSpinner from './FmSpinner.vue';
+import FmEmptyState from './FmEmptyState.vue';
+import FmErrorState from './FmErrorState.vue';
+import FmBadge from './FmBadge.vue';
+import GateApproveDialog from './GateApproveDialog.vue';
+import { describeError } from '../api';
+import { useWorkbenchApi } from '../host';
+import { formatDate, fromNow } from '../date';
+import { humanizeId } from '../strings';
+import { displayValue } from '../gateForm';
+import type { GateFormValue, GateResponse } from '../types';
+
+// The approval inbox on the WorkbenchApi: pending and all gates, an "Include test runs" switch, approve / reject
+// with an optional note, and a gate's form before approving. Emits `decided` after each recorded decision.
+const props = withDefaults(defineProps<{
+  /** Where "Learn about human gates" goes. */
+  docsUrl?: string;
+  /** localStorage key that remembers the "Include test runs" switch. */
+  showTestStorageKey?: string;
+}>(), { docsUrl: 'https://docs.flowamaz.io/human-gates', showTestStorageKey: 'fmz_gates_show_test' });
+
+const emit = defineEmits<{ decided: [gate: GateResponse] }>();
+
+type Tab = 'pending' | 'all';
+
+const api = useWorkbenchApi();
+
+/** Prefer the gate node's label when the API sends one; otherwise humanise the node id. */
+function gateDisplayName(gate: GateResponse): string {
+  const label = (gate.gateLabel ?? gate.label ?? '').trim();
+  return label.length > 0 ? label : humanizeId(gate.nodeId);
+}
+
+function openHumanGatesDocs(): void {
+  window.open(props.docsUrl, '_blank', 'noopener');
+}
+
+const allGates = ref<GateResponse[]>([]);
+const loading = ref(false);
+const error = ref<string | null>(null);
+const activeTab = ref<Tab>('pending');
+
+// Run 4: a test run stopped at an approval could only be moved on through the API, because test-run gates
+// are kept out of the queue. This switch brings them in (tagged TEST). Remembered per browser.
+function readShowTest(): boolean {
+  try { return localStorage.getItem(props.showTestStorageKey) === 'true'; } catch { return false; }
+}
+const showTest = ref(readShowTest());
+function toggleShowTest(): void {
+  showTest.value = !showTest.value;
+  try { localStorage.setItem(props.showTestStorageKey, String(showTest.value)); } catch { /* storage unavailable */ }
+  load();
+}
+
+// Per-row note inputs and submitting state.
+const notes = ref<Record<string, string>>({});
+const submitting = ref<Record<string, boolean>>({});
+
+const pendingCount = computed(() =>
+  allGates.value.filter((g) => g.decision === 'Pending').length,
+);
+
+// Run 5: approving on the Pending tab made the row vanish, so the decision was never seen. Rows decided
+// here stay (showing Approved/Rejected) until the list is reloaded or the tab changes.
+const decidedHere = ref<Set<string>>(new Set());
+
+const displayedGates = computed<GateResponse[]>(() =>
+  activeTab.value === 'pending'
+    ? allGates.value.filter((g) => g.decision === 'Pending' || decidedHere.value.has(rowKey(g)))
+    : allGates.value,
+);
+
+async function load(): Promise<void> {
+  loading.value = true;
+  error.value = null;
+  decidedHere.value = new Set();
+
+  try {
+    // "All" needs decided gates too; the default endpoint returns only the pending queue.
+    allGates.value = await api.listGates({ includeTest: showTest.value, includeDecided: true });
+  } catch (err: unknown) {
+    error.value =
+      describeError(err).message || 'Could not load approval gates. Check that the Flowamaz API is reachable, then select "Try again".';
+  } finally {
+    loading.value = false;
+  }
+}
+
+// A gate with a form opens the form first; the answers go with the approval (FUNCTIONAL.md §23.2).
+const formGate = ref<GateResponse | null>(null);
+const formError = ref<string | null>(null);
+const formOpen = computed({
+  get: () => formGate.value !== null,
+  set: (open: boolean) => { if (!open) { formGate.value = null; formError.value = null; } },
+});
+
+function hasForm(gate: GateResponse): boolean {
+  return (gate.form ?? []).length > 0;
+}
+
+function formAnswers(gate: GateResponse): { label: string; value: string }[] {
+  if (!gate.formValues) return [];
+  const fields = gate.form ?? [];
+  return Object.entries(gate.formValues).map(([key, value]) => ({
+    label: fields.find((f) => f.key === key)?.label ?? humanizeId(key),
+    value: displayValue(value),
+  }));
+}
+
+function approve(gate: GateResponse): void {
+  if (hasForm(gate)) {
+    formError.value = null;
+    formGate.value = gate;
+    return;
+  }
+  void decide(gate, 'approved');
+}
+
+async function approveWithForm(values: Record<string, GateFormValue>, note: string | undefined): Promise<void> {
+  const gate = formGate.value;
+  if (!gate) return;
+  formError.value = null;
+  const ok = await decide(gate, 'approved', values, note);
+  if (ok) formGate.value = null;
+}
+
+async function decide(
+  gate: GateResponse,
+  decision: 'approved' | 'rejected',
+  values?: Record<string, GateFormValue>,
+  noteOverride?: string,
+): Promise<boolean> {
+  const key = `${gate.instanceId}-${gate.nodeId}`;
+  submitting.value[key] = true;
+
+  try {
+    const updated = await api.decideGate(
+      gate.instanceId,
+      gate.nodeId,
+      decision,
+      noteOverride ?? (notes.value[key] || undefined),
+      values,
+    );
+
+    const idx = allGates.value.findIndex(
+      (g) => g.instanceId === gate.instanceId && g.nodeId === gate.nodeId,
+    );
+    if (idx !== -1) allGates.value[idx] = updated;
+    decidedHere.value = new Set(decidedHere.value).add(key);
+    emit('decided', updated);
+
+    delete notes.value[key];
+    return true;
+  } catch (err: unknown) {
+    const message =
+      describeError(err).message || 'The decision was not recorded. Reload the page and decide again.';
+    // Inside the form, the problem shows next to the answers; elsewhere it replaces the list.
+    if (values !== undefined) formError.value = message;
+    else error.value = message;
+    return false;
+  } finally {
+    submitting.value[key] = false;
+  }
+}
+
+function rowKey(gate: GateResponse): string {
+  return `${gate.instanceId}-${gate.nodeId}`;
+}
+
+function decisionVariant(decision: string): 'primary' | 'accent' | 'amber' | 'danger' | 'slate' | 'blue' {
+  if (decision === 'Approved') return 'accent';
+  if (decision === 'Rejected') return 'danger';
+  if (decision === 'Expired' || decision === 'Escalated') return 'amber';
+  return 'slate';
+}
+
+onMounted(load);
+</script>
+
+<template>
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-semibold text-slate-900">
+          Approval Gates
+        </h1>
+        <p class="text-sm text-slate-500">
+          Review and decide pending workflow approvals.
+        </p>
+      </div>
+      <div
+        v-if="pendingCount > 0"
+        class="flex items-center gap-2"
+      >
+        <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
+          {{ pendingCount }}
+        </span>
+        <span class="text-sm font-medium text-amber-700">pending</span>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex flex-wrap items-center gap-4">
+      <div class="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit">
+        <button
+          :class="[
+            'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+            activeTab === 'pending'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700',
+          ]"
+          @click="activeTab = 'pending'; decidedHere = new Set()"
+        >
+          Pending
+          <span
+            v-if="pendingCount > 0"
+            class="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-700"
+          >
+            {{ pendingCount }}
+          </span>
+        </button>
+        <button
+          :class="[
+            'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+            activeTab === 'all'
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-700',
+          ]"
+          @click="activeTab = 'all'"
+        >
+          All
+        </button>
+      </div>
+      <label class="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+        <input
+          type="checkbox"
+          class="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-200"
+          :checked="showTest"
+          data-testid="gates-show-test"
+          @change="toggleShowTest"
+        >
+        Include test runs
+      </label>
+    </div>
+
+    <!-- Loading -->
+    <div
+      v-if="loading"
+      class="flex justify-center py-16"
+    >
+      <FmSpinner size="lg" />
+    </div>
+
+    <!-- Error -->
+    <FmErrorState
+      v-else-if="error"
+      title="Couldn't load gates"
+      :description="error"
+      action-label="Try again"
+      @action="load"
+    />
+
+    <!-- Empty -->
+    <FmEmptyState
+      v-else-if="displayedGates.length === 0"
+      :icon="CheckCircle"
+      :title="activeTab === 'pending' ? 'No pending approvals' : 'No gates yet'"
+      :description="
+        activeTab === 'pending'
+          ? (showTest
+            ? 'All caught up — no workflows are waiting for your approval right now.'
+            : 'All caught up — no workflows are waiting for your approval right now. Approvals from test runs are hidden; tick Include test runs above to see them.')
+          : 'Gates will appear here once workflows reach a human-approval step.'
+      "
+      cta-label="Learn about human gates"
+      @cta="openHumanGatesDocs"
+    />
+
+    <!-- Table -->
+    <div
+      v-else
+      class="overflow-hidden rounded-xl border border-slate-200 bg-white"
+    >
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Gate
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Assignee
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Channel
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Submitted
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Expires
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Status
+            </th>
+            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Note
+            </th>
+            <th class="px-4 py-3" />
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr
+            v-for="gate in displayedGates"
+            :key="gate.id"
+            class="hover:bg-slate-50 transition-colors"
+          >
+            <!-- Gate node info -->
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2 font-medium text-slate-800">
+                {{ gateDisplayName(gate) }}
+                <span
+                  v-if="gate.isTest === true"
+                  class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800"
+                  title="This gate belongs to a test run"
+                  data-testid="gate-test-tag"
+                >TEST</span>
+              </div>
+              <div class="font-mono text-xs text-slate-400">
+                {{ gate.nodeId }} · {{ gate.instanceId.slice(0, 8) }}…
+              </div>
+              <div
+                v-if="gate.decision === 'Pending' && hasForm(gate)"
+                class="mt-1 inline-flex items-center gap-1 text-xs text-slate-500"
+                data-testid="gate-has-form"
+              >
+                <ClipboardList class="h-3.5 w-3.5" />
+                Asks for {{ gate.form?.length }} {{ gate.form?.length === 1 ? 'detail' : 'details' }}
+              </div>
+              <dl
+                v-if="formAnswers(gate).length > 0"
+                class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs"
+                data-testid="gate-form-answers"
+              >
+                <template
+                  v-for="a in formAnswers(gate)"
+                  :key="a.label"
+                >
+                  <dt class="text-slate-500">
+                    {{ a.label }}
+                  </dt>
+                  <dd class="text-slate-800">
+                    {{ a.value }}
+                  </dd>
+                </template>
+              </dl>
+            </td>
+
+            <!-- Assignee -->
+            <td class="px-4 py-3 text-slate-600">
+              {{ gate.assignedToEmail ?? '—' }}
+            </td>
+
+            <!-- Channel -->
+            <td class="px-4 py-3 text-slate-600 capitalize">
+              {{ gate.deliveryChannel.toLowerCase() }}
+            </td>
+
+            <!-- Submitted -->
+            <td class="px-4 py-3 text-slate-500">
+              <span :title="formatDate(gate.createdAt)">
+                {{ fromNow(gate.createdAt) }}
+              </span>
+            </td>
+
+            <!-- Expires -->
+            <td class="px-4 py-3 text-slate-500">
+              <span
+                v-if="gate.expiresAt"
+                :title="formatDate(gate.expiresAt)"
+              >
+                {{ fromNow(gate.expiresAt) }}
+              </span>
+              <span
+                v-else
+                class="text-slate-300"
+              >—</span>
+            </td>
+
+            <!-- Status badge -->
+            <td class="px-4 py-3">
+              <FmBadge :variant="decisionVariant(gate.decision)">
+                {{ gate.decision }}
+              </FmBadge>
+            </td>
+
+            <!-- Note input (pending only) -->
+            <td class="px-4 py-3">
+              <input
+                v-if="gate.decision === 'Pending'"
+                v-model="notes[rowKey(gate)]"
+                type="text"
+                placeholder="Optional note…"
+                class="w-40 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-200"
+              >
+              <span
+                v-else-if="gate.decisionNote"
+                class="text-xs text-slate-500 italic"
+              >
+                {{ gate.decisionNote }}
+              </span>
+              <span
+                v-else
+                class="text-slate-300"
+              >—</span>
+            </td>
+
+            <!-- Actions -->
+            <td class="px-4 py-3">
+              <div
+                v-if="gate.decision === 'Pending'"
+                class="flex items-center gap-2"
+              >
+                <button
+                  :disabled="submitting[rowKey(gate)]"
+                  class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  :data-testid="`gate-approve-${gate.nodeId}`"
+                  @click="approve(gate)"
+                >
+                  <CheckCircle class="h-3.5 w-3.5" />
+                  {{ hasForm(gate) ? 'Approve…' : 'Approve' }}
+                </button>
+                <button
+                  :disabled="submitting[rowKey(gate)]"
+                  class="inline-flex items-center gap-1 rounded-md bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  @click="decide(gate, 'rejected')"
+                >
+                  <XCircle class="h-3.5 w-3.5" />
+                  Reject
+                </button>
+              </div>
+              <div
+                v-else
+                class="flex items-center gap-1 text-xs text-slate-400"
+              >
+                <Clock class="h-3.5 w-3.5" />
+                {{ gate.decidedAt ? formatDate(gate.decidedAt) : gate.decision }}
+                <span
+                  v-if="gate.decidedByLabel"
+                  class="text-slate-500"
+                >· by {{ gate.decidedByLabel }}</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <GateApproveDialog
+      v-model="formOpen"
+      :gate-name="formGate ? gateDisplayName(formGate) : ''"
+      :fields="formGate?.form ?? []"
+      :submitting="formGate ? submitting[rowKey(formGate)] === true : false"
+      :server-error="formError"
+      @approve="approveWithForm"
+    />
+  </div>
+</template>

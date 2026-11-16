@@ -8,9 +8,20 @@ Workbench screens for Vue 3 (MIT): the parts of the Flowamaz app for working wit
 - the engine DTO types;
 - the `WorkbenchApi` interface and its engine API client;
 - date and run helpers (`runDuration`, `instanceStatusVariant`, `isRunEnded`, …);
-- **runs:** `RunsPage` and `RunDetailPage` (see below), and the parts they're built from: `RunTable`, `RunDetail`, `FmRunTimeline` and `VariableInspector`.
+- **runs:** `RunsPage` and `RunDetailPage` (see below), and the parts they're built from: `RunTable`, `RunDetail`, `FmRunTimeline` and `VariableInspector`;
+- **approvals:** `GatesPage`, the approval inbox, with `GateApproveDialog`, `GateFormFields` and `FmAlert`, plus the gate form rules (`gateForm`) and `humanizeId`.
 
-The gates and workflow screens come next.
+The workflow screens come next.
+
+## Approvals
+
+`<GatesPage @decided="refreshBadge" />` is the whole inbox:
+
+- **Tabs:** Pending, and All (which includes decided gates).
+- **Include test runs:** a switch, remembered in localStorage (`showTestStorageKey`).
+- **Deciding:** Approve or Reject with an optional note. A gate with a form asks for its answers first and checks them, using the same rules as the server.
+- **After a decision:** the row stays, showing the decision. `decided` fires once each decision is recorded.
+- **Links:** "Learn about human gates" goes to `docsUrl`.
 
 ## Runs
 

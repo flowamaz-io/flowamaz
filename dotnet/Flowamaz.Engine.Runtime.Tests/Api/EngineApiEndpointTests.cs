@@ -140,6 +140,12 @@ public sealed class EngineApiEndpointTests : IAsyncLifetime
         var decided = await _client.PostAsJsonAsync($"{Ws}/gates/{runId}/approve/decide", new { decision = "approved", note = "ok" });
         decided.StatusCode.Should().Be(HttpStatusCode.OK, await decided.Content.ReadAsStringAsync());
 
+        (await JsonOf(await _client.GetAsync($"{Ws}/gates"))).GetArrayLength().Should().Be(0, "nothing is waiting any more");
+        var all = await JsonOf(await _client.GetAsync($"{Ws}/gates?status=all"));
+        all.GetArrayLength().Should().Be(1);
+        all[0].GetProperty("decision").GetString().Should().Be("Approved");
+        (await _client.GetAsync($"{Ws}/gates?status=nope")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
         var done = await WaitForRunAsync(runId, "Completed");
         done.GetProperty("triggerType").GetString().Should().Be("Api");
         var timeline = await JsonOf(await _client.GetAsync($"{Ws}/runs/{runId}/timeline"));
