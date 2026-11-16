@@ -1,3 +1,5 @@
+using Flowamaz.Application.Connectors;
+using Flowamaz.Application.Connectors.Handlers;
 using Flowamaz.Application.Connectors.Security;
 using Flowamaz.Application.Connectors.Services;
 using Flowamaz.Application.Workflow.Orchestrator;
@@ -74,6 +76,47 @@ public static class EngineHostingServiceCollectionExtensions
         // uses the registry. Without registered handlers it is empty and gates are delivered by email.
         services.TryAddScoped<ConnectorOperationHandlerRegistry>();
         services.TryAddScoped<IConnectorOperationHandlerRegistry>(sp => sp.GetRequiredService<ConnectorOperationHandlerRegistry>());
+        return services;
+    }
+
+    /// <summary>
+    /// Connector steps (<c>connector_id</c> + <c>operation</c>) with the official connectors running in this process:
+    /// HTTP/REST, Slack, Teams, email, GitHub, PostgreSQL, MySQL, webhook emit, schedule, Microsoft 365, file system
+    /// and shell. Every outbound HTTP client goes through the egress guard. The file-system and shell connectors stay
+    /// off until configured (<c>Connectors:FileSystem:RootPath</c>, <c>Connectors:ScriptShell:Enabled</c>), and the
+    /// email connector sends through the host's <see cref="IEmailService"/>. The host must register an
+    /// <see cref="IConnectorCredentialResolver"/>: credentials are always the host's to store.
+    /// </summary>
+    public static IServiceCollection AddFlowamazOfficialConnectors(this IServiceCollection services, IConfiguration configuration)
+    {
+        var allowPrivate = bool.TryParse(configuration[EgressGuard.ConfigKey], out var allow) && allow;
+        foreach (var client in new[]
+                 {
+                     HttpRestConnectorHandlerBase.HttpClientName, SlackHandlerBase.HttpClientName,
+                     TeamsSendMessageHandler.HttpClientName, GitHubHandlerBase.HttpClientName,
+                     WebhookEmitHandler.HttpClientName, Microsoft365HandlerBase.HttpClientName,
+                 })
+        {
+            services.AddHttpClient(client).ConfigurePrimaryHttpMessageHandler(() => EgressGuard.CreateHandler(allowPrivate));
+        }
+        services.TryAddScoped<ConnectorCallContext>();
+        services.TryAddScoped<ConnectorActionExecutor>();
+        foreach (var handler in new[]
+                 {
+                     typeof(HttpGetHandler), typeof(HttpPostHandler), typeof(HttpPutHandler), typeof(HttpPatchHandler),
+                     typeof(HttpDeleteHandler), typeof(HttpHeadHandler), typeof(SlackSendMessageHandler), typeof(SlackSendDmHandler),
+                     typeof(SlackPostApprovalMessageHandler), typeof(TeamsSendMessageHandler), typeof(TeamsSendWebhookMessageHandler),
+                     typeof(TeamsPostAdaptiveCardHandler), typeof(EmailSendHandler), typeof(GitHubCreateIssueHandler),
+                     typeof(GitHubGetIssueHandler), typeof(GitHubCreatePrHandler), typeof(GitHubAddCommentHandler),
+                     typeof(PostgreSqlQueryHandler), typeof(PostgreSqlExecuteHandler), typeof(MySqlQueryHandler),
+                     typeof(MySqlExecuteHandler), typeof(WebhookEmitHandler), typeof(ScheduleCronValidateHandler),
+                     typeof(FileSystemReadHandler), typeof(FileSystemWriteHandler), typeof(FileSystemListHandler),
+                     typeof(ScriptShellRunHandler), typeof(Microsoft365SendMailHandler), typeof(Microsoft365CreateEventHandler),
+                     typeof(Microsoft365UploadFileHandler),
+                 })
+        {
+            services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(IConnectorOperationHandler), handler));
+        }
         return services;
     }
 
