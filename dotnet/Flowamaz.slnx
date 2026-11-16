@@ -4,4 +4,8 @@
   <Project Path="Flowamaz.Connectors.Sdk/Flowamaz.Connectors.Sdk.csproj" />
   <Project Path="Flowamaz.Connectors.Official/Flowamaz.Connectors.Official.csproj" />
   <Project Path="Flowamaz.Connectors.Tests/Flowamaz.Connectors.Tests.csproj" />
+  <Project Path="Flowamaz.Engine.Runtime/Flowamaz.Engine.Runtime.csproj" />
+  <Project Path="Flowamaz.Engine.Persistence/Flowamaz.Engine.Persistence.csproj" />
+  <Project Path="Flowamaz.Engine.Hosting/Flowamaz.Engine.Hosting.csproj" />
+  <Project Path="Flowamaz.Engine.Runtime.Tests/Flowamaz.Engine.Runtime.Tests.csproj" />
 </Solution>

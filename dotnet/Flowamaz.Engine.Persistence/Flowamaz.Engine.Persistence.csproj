@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Flowamaz.Infrastructure.Persistence</RootNamespace>
+
+    <PackageId>Flowamaz.Engine.Persistence</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Flowamaz</Authors>
+    <Description>Storage for the Flowamaz workflow runtime on EF Core and PostgreSQL: EngineDbContext with its conventions (snake_case names, soft delete, audit stamps), the run entity mappings, the repositories, the unit of work and the engine's own migrations.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/flowamaz-io/flowamaz</RepositoryUrl>
+    <PackageTags>workflow;engine;efcore;postgresql;flowamaz</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <!-- Npgsql pulls System.Security.Cryptography.Xml 9.0.0 (GHSA-37gx-xxp4-5rgx / GHSA-w3x6-4m5h-cxqf). Pin patched. -->
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flowamaz.Engine.Runtime\Flowamaz.Engine.Runtime.csproj" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="LICENSE" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="Flowamaz.Engine.Runtime.Tests" />
+    <InternalsVisibleTo Include="Flowamaz.Infrastructure" />
+    <InternalsVisibleTo Include="Flowamaz.Tests.Unit" />
+    <InternalsVisibleTo Include="Flowamaz.Tests.Integration" />
+  </ItemGroup>
+
+</Project>

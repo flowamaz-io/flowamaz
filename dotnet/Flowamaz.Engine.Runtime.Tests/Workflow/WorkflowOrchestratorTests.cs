@@ -1,0 +1,534 @@
+using FluentAssertions;
+using Flowamaz.Application.Workflow.Orchestrator;
+using Flowamaz.Core.Entities.Workflow;
+using Flowamaz.Core.Enums;
+using Flowamaz.Core.Exceptions;
+using Flowamaz.Core.Interfaces.Persistence;
+using Flowamaz.Core.Interfaces.Queue;
+using Flowamaz.Core.Interfaces.Repositories;
+using Flowamaz.Core.Interfaces.Services;
+using Flowamaz.Core.Interfaces.Workflow;
+using Flowamaz.Core.Workflow;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+
+namespace Flowamaz.Tests.Unit.Workflow;
+
+/// <summary>
+/// Orchestrator behaviour with mocked persistence/queue and a real <see cref="SfgParser"/>:
+/// trigger creates + enqueues an instance and emits InstanceStarted, idempotency dedups, parallel
+/// nodes fan out, and routers select only the matching branch.
+/// </summary>
+public class WorkflowOrchestratorTests
+{
+    private readonly Mock<IWorkflowDefinitionRepository> _definitions = new();
+    private readonly Mock<IWorkflowVersionRepository> _versions = new();
+    private readonly Mock<IWorkflowInstanceRepository> _instances = new();
+    private readonly Mock<IWorkflowNodeStateRepository> _nodeStates = new();
+    private readonly Mock<IWorkflowVariableRepository> _variables = new();
+    private readonly Mock<IWorkflowEventRepository> _events = new();
+    private readonly Mock<ITaskQueue> _queue = new();
+    private readonly Mock<IVariableEvaluationService> _variableEvaluation = new();
+    private readonly Mock<IUnitOfWork> _unitOfWork = new();
+
+    private readonly Guid _workspaceId = Guid.NewGuid();
+    private readonly Guid _definitionId = Guid.NewGuid();
+    private readonly Guid _versionId = Guid.NewGuid();
+
+    private WorkflowOrchestrator NewOrchestrator() => new(
+        _definitions.Object, _versions.Object, _instances.Object, _nodeStates.Object,
+        _variables.Object, _events.Object, _queue.Object, _variableEvaluation.Object,
+        _unitOfWork.Object, new SfgParser(), NullLogger<WorkflowOrchestrator>.Instance);
+
+    [Fact]
+    public async Task TriggerAsync_creates_instance_records_event_and_enqueues()
+    {
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowDefinition { Id = _definitionId, WorkspaceId = _workspaceId, Name = "W", Slug = "w", Status = WorkflowStatus.Published });
+        _versions.Setup(r => r.GetProductionAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowVersion { Id = _versionId, WorkspaceId = _workspaceId, WorkflowDefinitionId = _definitionId });
+
+        WorkflowEvent? appended = null;
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowEvent, CancellationToken>((e, _) => appended = e)
+            .Returns(Task.CompletedTask);
+
+        var instance = await NewOrchestrator().TriggerAsync(_workspaceId, _definitionId, """{"x":1}""", idempotencyKey: null);
+
+        instance.Status.Should().Be(InstanceStatus.Pending);
+        instance.WorkflowVersionId.Should().Be(_versionId);
+        appended.Should().NotBeNull();
+        appended!.EventType.Should().Be("InstanceStarted");
+        _instances.Verify(r => r.AddAsync(It.IsAny<WorkflowInstance>(), It.IsAny<CancellationToken>()), Times.Once);
+        _queue.Verify(q => q.EnqueueAsync(_workspaceId, instance.Id, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TriggerAsync_test_run_sets_IsTest_and_TestExpiresAt()
+    {
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowDefinition { Id = _definitionId, WorkspaceId = _workspaceId, Name = "W", Slug = "w", Status = WorkflowStatus.Draft });
+        _versions.Setup(r => r.GetProductionAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((WorkflowVersion?)null);
+        _versions.Setup(r => r.GetLatestAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowVersion { Id = _versionId, WorkspaceId = _workspaceId, WorkflowDefinitionId = _definitionId });
+
+        WorkflowInstance? added = null;
+        _instances.Setup(r => r.AddAsync(It.IsAny<WorkflowInstance>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowInstance, CancellationToken>((i, _) => added = i)
+            .Returns(Task.CompletedTask);
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var instance = await NewOrchestrator().TriggerAsync(
+            _workspaceId, _definitionId, null, null, isTest: true);
+
+        instance.IsTest.Should().BeTrue();
+        instance.TestExpiresAt.Should().NotBeNull();
+        instance.TestExpiresAt!.Value.Should().BeCloseTo(DateTime.UtcNow.AddHours(24), precision: TimeSpan.FromSeconds(5));
+        added.Should().NotBeNull();
+        added!.IsTest.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TriggerAsync_production_run_rejects_draft_workflow()
+    {
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowDefinition { Id = _definitionId, WorkspaceId = _workspaceId, Name = "W", Slug = "w", Status = WorkflowStatus.Draft });
+
+        var orchestrator = NewOrchestrator();
+        await Assert.ThrowsAsync<WorkflowNotPublishedException>(
+            () => orchestrator.TriggerAsync(_workspaceId, _definitionId, null, null, isTest: false));
+    }
+
+    [Fact]
+    public async Task TriggerAsync_with_duplicate_idempotency_key_returns_existing_and_creates_nothing()
+    {
+        var existing = new WorkflowInstance { Id = Guid.NewGuid(), WorkspaceId = _workspaceId, IdempotencyKey = "dup" };
+        _instances.Setup(r => r.GetByIdempotencyKeyAsync(_workspaceId, "dup", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+
+        var result = await NewOrchestrator().TriggerAsync(_workspaceId, _definitionId, null, idempotencyKey: "dup");
+
+        result.Id.Should().Be(existing.Id);
+        _instances.Verify(r => r.AddAsync(It.IsAny<WorkflowInstance>(), It.IsAny<CancellationToken>()), Times.Never);
+        _queue.Verify(q => q.EnqueueAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task StepAsync_fans_out_parallel_branches()
+    {
+        const string yaml = """
+            workflow: { id: w, version: v1, name: W }
+            nodes:
+              - { id: start, type: Trigger }
+              - { id: fan, type: Parallel }
+              - { id: a, type: Action }
+              - { id: b, type: Action }
+              - { id: done, type: End }
+            edges:
+              - { id: e1, from: start, to: fan }
+              - { id: e2, from: fan, to: a }
+              - { id: e3, from: fan, to: b }
+              - { id: e4, from: a, to: done }
+              - { id: e5, from: b, to: done }
+            """;
+        var instanceId = SetupRunnableInstance(yaml);
+        AllConditionsTrue();
+
+        var result = await NewOrchestrator().StepAsync(instanceId, "worker-1");
+
+        result.IsComplete.Should().BeFalse();
+        result.NextNodes.Should().BeEquivalentTo(["a", "b"]);
+    }
+
+    [Fact]
+    public async Task StepAsync_router_selects_only_matching_branch()
+    {
+        const string yaml = """
+            workflow: { id: w, version: v1, name: W }
+            nodes:
+              - { id: start, type: Trigger }
+              - { id: router, type: Router }
+              - { id: approve, type: Action }
+              - { id: reject, type: Action }
+              - { id: done, type: End }
+            edges:
+              - { id: e1, from: start, to: router }
+              - { id: e2, from: router, to: approve, condition: '{{ decision }} == "approve"' }
+              - { id: e3, from: router, to: reject, condition: '{{ decision }} == "reject"' }
+              - { id: e4, from: approve, to: done }
+              - { id: e5, from: reject, to: done }
+            """;
+        var instanceId = SetupRunnableInstance(yaml);
+        // Unconditional edges (null) pass; only the "approve" branch condition is true.
+        _variableEvaluation.Setup(v => v.EvaluateConditionAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns<Guid, string?, CancellationToken>((_, cond, _) =>
+                Task.FromResult(string.IsNullOrWhiteSpace(cond) || cond.Contains("approve")));
+
+        var result = await NewOrchestrator().StepAsync(instanceId, "worker-1");
+
+        result.NextNodes.Should().ContainSingle().Which.Should().Be("approve");
+    }
+
+    [Fact]
+    public async Task CompleteNodeAsync_marks_completed_stores_output_and_requeues()
+    {
+        var instanceId = Guid.NewGuid();
+        var instance = new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, WorkflowVersionId = _versionId, Status = InstanceStatus.Running };
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(instance);
+        var state = new WorkflowNodeState { WorkspaceId = _workspaceId, InstanceId = instanceId, NodeId = "a", NodeType = "Action", Status = NodeStatus.Pending };
+        _nodeStates.Setup(r => r.GetByNodeAsync(instanceId, "a", It.IsAny<CancellationToken>())).ReturnsAsync(state);
+        _variables.Setup(r => r.GetByNameAsync(instanceId, "a.output", It.IsAny<CancellationToken>())).ReturnsAsync((WorkflowVariable?)null);
+        WorkflowEvent? appended = null;
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowEvent, CancellationToken>((e, _) => appended = e).Returns(Task.CompletedTask);
+
+        await NewOrchestrator().CompleteNodeAsync(instanceId, "a", """{"ok":true}""", "worker-1");
+
+        state.Status.Should().Be(NodeStatus.Completed);
+        state.OutputPayload.Should().Contain("ok");
+        _variables.Verify(r => r.AddAsync(It.Is<WorkflowVariable>(v => v.Name == "a.output"), It.IsAny<CancellationToken>()), Times.Once);
+        appended!.EventType.Should().Be("NodeCompleted");
+        _queue.Verify(q => q.EnqueueAsync(_workspaceId, instanceId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(InstanceStatus.Cancelled)]
+    [InlineData(InstanceStatus.Completed)]
+    [InlineData(InstanceStatus.Failed)]
+    public async Task Node_results_for_a_run_that_already_ended_change_nothing(InstanceStatus ended)
+    {
+        // The run was cancelled while its node was executing: the late result must not reopen it.
+        var instanceId = Guid.NewGuid();
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, WorkflowVersionId = _versionId, Status = ended });
+
+        await NewOrchestrator().CompleteNodeAsync(instanceId, "a", "{}", "worker-1");
+        await NewOrchestrator().FailNodeAsync(instanceId, "a", "boom", "worker-1");
+        await NewOrchestrator().ParkAtGateAsync(instanceId, "a", Guid.NewGuid());
+
+        _nodeStates.Verify(r => r.Update(It.IsAny<WorkflowNodeState>()), Times.Never);
+        _events.Verify(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+        _queue.Verify(q => q.EnqueueAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Every_change_takes_the_runs_row_lock_before_reading_it_and_commits()
+    {
+        var instanceId = Guid.NewGuid();
+        var order = new List<string>();
+        var transaction = new Mock<IUnitOfWorkTransaction>();
+        transaction.Setup(t => t.CommitAsync(It.IsAny<CancellationToken>())).Callback(() => order.Add("commit")).Returns(Task.CompletedTask);
+        _unitOfWork.Setup(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>())).Callback(() => order.Add("begin")).ReturnsAsync(transaction.Object);
+        _instances.Setup(r => r.LockForUpdateAsync(instanceId, It.IsAny<CancellationToken>())).Callback(() => order.Add("lock")).Returns(Task.CompletedTask);
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).Callback(() => order.Add("read"))
+            .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, Status = InstanceStatus.Completed });
+
+        await NewOrchestrator().CancelAsync(instanceId, Guid.NewGuid());
+
+        order.Should().Equal("begin", "lock", "read", "commit");
+    }
+
+    [Fact]
+    public async Task Inside_a_callers_transaction_the_lock_joins_it()
+    {
+        var instanceId = Guid.NewGuid();
+        _unitOfWork.Setup(u => u.HasActiveTransaction).Returns(true);
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, Status = InstanceStatus.Completed });
+
+        await NewOrchestrator().CancelAsync(instanceId, Guid.NewGuid());
+
+        _unitOfWork.Verify(u => u.BeginTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _instances.Verify(r => r.LockForUpdateAsync(instanceId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CancelAsync_running_instance_sets_cancelled_releases_lease_and_appends_event()
+    {
+        var instanceId = Guid.NewGuid();
+        var instance = new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, Status = InstanceStatus.Running, WorkerLeaseId = "worker-1" };
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(instance);
+        WorkflowEvent? appended = null;
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowEvent, CancellationToken>((e, _) => appended = e).Returns(Task.CompletedTask);
+
+        await NewOrchestrator().CancelAsync(instanceId, Guid.NewGuid());
+
+        instance.Status.Should().Be(InstanceStatus.Cancelled);
+        appended!.EventType.Should().Be("InstanceCancelled");
+        _instances.Verify(r => r.ReleaseLeaseAsync(instanceId, "worker-1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CancelAsync_completed_instance_is_noop()
+    {
+        var instanceId = Guid.NewGuid();
+        var instance = new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, Status = InstanceStatus.Completed };
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(instance);
+
+        await NewOrchestrator().CancelAsync(instanceId, Guid.NewGuid());
+
+        instance.Status.Should().Be(InstanceStatus.Completed);
+        _events.Verify(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+        _instances.Verify(r => r.ReleaseLeaseAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task FailNodeAsync_no_retry_no_compensation_fails_instance()
+    {
+        var instanceId = SetupNodeOps(ActionYaml(), out var instance, out var state);
+
+        await NewOrchestrator().FailNodeAsync(instanceId, "a", "boom", "worker-1");
+
+        state.Status.Should().Be(NodeStatus.Failed);
+        instance.Status.Should().Be(InstanceStatus.Failed);
+        instance.ErrorMessage.Should().Be("boom");
+    }
+
+    [Fact]
+    public async Task FailNodeAsync_with_retries_remaining_requeues_with_backoff()
+    {
+        const string yaml = """
+            workflow: { id: w, version: v1, name: W }
+            nodes:
+              - { id: start, type: Trigger }
+              - { id: a, type: Action, retry: { maxAttempts: 3, backoffSeconds: 1, backoffMultiplier: 2 } }
+              - { id: done, type: End }
+            edges:
+              - { id: e1, from: start, to: a }
+              - { id: e2, from: a, to: done }
+            """;
+        var instanceId = SetupNodeOps(yaml, out var instance, out var state);
+
+        await NewOrchestrator().FailNodeAsync(instanceId, "a", "transient", "worker-1");
+
+        state.RetryCount.Should().Be(1);
+        state.Status.Should().Be(NodeStatus.Pending);
+        instance.Status.Should().Be(InstanceStatus.Running); // not failed — retry pending
+        _queue.Verify(q => q.EnqueueDelayedAsync(_workspaceId, instanceId, It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private const string SnakeRetryYaml = """
+        workflow: { id: w, version: v1, name: W }
+        nodes:
+          - { id: start, type: Trigger }
+          - id: a
+            type: Action
+            retry: { max_attempts: 3, backoff_seconds: 10, backoff_multiplier: 2 }
+          - { id: done, type: End }
+        edges:
+          - { id: e1, from: start, to: a }
+          - { id: e2, from: a, to: done }
+        """;
+
+    [Fact]
+    public async Task FailNodeAsync_reads_the_documented_snake_case_retry_block()
+    {
+        var instanceId = SetupNodeOps(SnakeRetryYaml, out var instance, out var state);
+
+        await NewOrchestrator().FailNodeAsync(instanceId, "a", "HTTP 500", "worker-1");
+
+        state.RetryCount.Should().Be(1);
+        state.Status.Should().Be(NodeStatus.Pending);
+        instance.Status.Should().Be(InstanceStatus.Running);
+        _queue.Verify(q => q.EnqueueDelayedAsync(_workspaceId, instanceId, 10, It.IsAny<CancellationToken>()), Times.Once,
+            "the first retry waits backoff_seconds");
+    }
+
+    [Fact]
+    public async Task FailNodeAsync_after_max_attempts_tries_fails_the_run()
+    {
+        var instanceId = SetupNodeOps(SnakeRetryYaml, out var instance, out var state);
+        state.RetryCount = 2; // tries 1 and 2 failed; this is the third (max_attempts: 3)
+
+        await NewOrchestrator().FailNodeAsync(instanceId, "a", "HTTP 500", "worker-1");
+
+        state.Status.Should().Be(NodeStatus.Failed);
+        state.ErrorMessage.Should().Be("Failed after 3 tries: HTTP 500");
+        instance.Status.Should().Be(InstanceStatus.Failed);
+        _queue.Verify(q => q.EnqueueDelayedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(-30, true)]  // backoff (10s for retry 1) has passed
+    [InlineData(0, false)]   // just scheduled: not yet
+    public async Task StepAsync_hands_out_a_step_waiting_for_its_retry_once_its_backoff_has_passed(int lastRetrySecondsAgo, bool expectDispatched)
+    {
+        var instanceId = Guid.NewGuid();
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(new WorkflowInstance
+        {
+            Id = instanceId, WorkspaceId = _workspaceId, WorkflowDefinitionId = _definitionId, WorkflowVersionId = _versionId,
+            Status = InstanceStatus.Running,
+        });
+        _versions.Setup(r => r.GetByIdForWorkspaceAsync(_versionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowVersion { Id = _versionId, WorkspaceId = _workspaceId, YamlContent = SnakeRetryYaml });
+        _nodeStates.Setup(r => r.GetForInstanceAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new WorkflowNodeState { WorkspaceId = _workspaceId, InstanceId = instanceId, NodeId = "start", NodeType = "Trigger", Status = NodeStatus.Completed },
+            new WorkflowNodeState
+            {
+                WorkspaceId = _workspaceId, InstanceId = instanceId, NodeId = "a", NodeType = "Action", Status = NodeStatus.Pending,
+                RetryCount = 1, LastRetryAt = DateTime.UtcNow.AddSeconds(lastRetrySecondsAgo),
+            },
+        ]);
+        _events.Setup(r => r.GetNextSequenceNumberAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(5);
+        AllConditionsTrue();
+
+        var result = await NewOrchestrator().StepAsync(instanceId, "worker-1");
+
+        result.IsComplete.Should().BeFalse();
+        if (expectDispatched) result.NextNodes.Should().Equal("a");
+        else result.NextNodes.Should().BeEmpty("the delayed queue wakes the run again when the backoff ends");
+    }
+
+    [Fact]
+    public async Task FailNodeAsync_with_compensation_no_saga_engine_marks_compensating()
+    {
+        const string yaml = """
+            workflow: { id: w, version: v1, name: W }
+            nodes:
+              - { id: start, type: Trigger }
+              - { id: a, type: Action, compensation: { strategy: backward, compensateNodeId: cA } }
+              - { id: done, type: End }
+            edges:
+              - { id: e1, from: start, to: a }
+              - { id: e2, from: a, to: done }
+            """;
+        var instanceId = SetupNodeOps(yaml, out var instance, out var state);
+        var appended = new List<WorkflowEvent>();
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowEvent, CancellationToken>((e, _) => appended.Add(e)).Returns(Task.CompletedTask);
+
+        await NewOrchestrator().FailNodeAsync(instanceId, "a", "boom", "worker-1");
+
+        instance.Status.Should().Be(InstanceStatus.Compensating);
+        instance.SagaState.Should().Be(SagaState.Compensating);
+        appended.Select(e => e.EventType).Should().Contain("CompensationStarted");
+    }
+
+    private (Guid InstanceId, WorkflowInstance Instance) SetupCapturedRunnableInstance(string yaml)
+    {
+        var instanceId = Guid.NewGuid();
+        var instance = new WorkflowInstance
+        {
+            Id = instanceId,
+            WorkspaceId = _workspaceId,
+            WorkflowDefinitionId = _definitionId,
+            WorkflowVersionId = _versionId,
+            Status = InstanceStatus.Pending,
+        };
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(instance);
+        _versions.Setup(r => r.GetByIdForWorkspaceAsync(_versionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowVersion { Id = _versionId, WorkspaceId = _workspaceId, YamlContent = yaml });
+        _nodeStates.Setup(r => r.GetForInstanceAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        _events.Setup(r => r.GetNextSequenceNumberAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        return (instanceId, instance);
+    }
+
+    private static string ActionYaml() => """
+        workflow: { id: w, version: v1, name: W }
+        nodes:
+          - { id: start, type: Trigger }
+          - { id: a, type: Action }
+          - { id: done, type: End }
+        edges:
+          - { id: e1, from: start, to: a }
+          - { id: e2, from: a, to: done }
+        """;
+
+    private Guid SetupNodeOps(string yaml, out WorkflowInstance instance, out WorkflowNodeState state)
+    {
+        var instanceId = Guid.NewGuid();
+        instance = new WorkflowInstance { Id = instanceId, WorkspaceId = _workspaceId, WorkflowVersionId = _versionId, Status = InstanceStatus.Running };
+        var captured = instance;
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(captured);
+        _versions.Setup(r => r.GetByIdForWorkspaceAsync(_versionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowVersion { Id = _versionId, WorkspaceId = _workspaceId, YamlContent = yaml });
+        state = new WorkflowNodeState { WorkspaceId = _workspaceId, InstanceId = instanceId, NodeId = "a", NodeType = "Action", Status = NodeStatus.Pending };
+        var capturedState = state;
+        _nodeStates.Setup(r => r.GetByNodeAsync(instanceId, "a", It.IsAny<CancellationToken>())).ReturnsAsync(capturedState);
+        return instanceId;
+    }
+
+    private Guid SetupRunnableInstance(string yaml)
+    {
+        var instanceId = Guid.NewGuid();
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowInstance
+            {
+                Id = instanceId,
+                WorkspaceId = _workspaceId,
+                WorkflowDefinitionId = _definitionId,
+                WorkflowVersionId = _versionId,
+                Status = InstanceStatus.Pending,
+            });
+        _versions.Setup(r => r.GetByIdForWorkspaceAsync(_versionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowVersion { Id = _versionId, WorkspaceId = _workspaceId, YamlContent = yaml });
+        _nodeStates.Setup(r => r.GetForInstanceAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _events.Setup(r => r.GetNextSequenceNumberAsync(instanceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        return instanceId;
+    }
+
+    private void AllConditionsTrue() =>
+        _variableEvaluation.Setup(v => v.EvaluateConditionAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+    [Theory]
+    [InlineData("approved", "approved", true)]
+    [InlineData("Approve", "approved", true)]
+    [InlineData("yes", "approved", true)]
+    [InlineData("rejected", "rejected", true)]
+    [InlineData("no", "rejected", true)]
+    [InlineData("rejected", "approved", false)]
+    [InlineData("escalated", "escalated", true)]
+    public void DecisionMatches_NormalisesCommonLabels(string via, string decision, bool expected) =>
+        Flowamaz.Application.Workflow.Orchestrator.WorkflowOrchestrator.DecisionMatches(via, decision).Should().Be(expected);
+
+    [Fact]
+    public async Task CancelAsync_closes_in_flight_nodes_and_stamps_the_end_time()
+    {
+        // B6: a run cancelled while waiting at a gate must not leave the gate "Running" forever.
+        var instanceId = Guid.NewGuid();
+        var instance = new WorkflowInstance
+        {
+            Id = instanceId, WorkspaceId = _workspaceId, Status = InstanceStatus.Waiting,
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+        };
+        _instances.Setup(r => r.GetByIdAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(instance);
+        var gate = new WorkflowNodeState
+        {
+            WorkspaceId = _workspaceId, InstanceId = instanceId, NodeId = "manager-approval", NodeType = "HumanGate",
+            Status = NodeStatus.Running, StartedAt = DateTime.UtcNow.AddMinutes(-4),
+        };
+        var done = new WorkflowNodeState
+        {
+            WorkspaceId = _workspaceId, InstanceId = instanceId, NodeId = "start", NodeType = "Trigger",
+            Status = NodeStatus.Completed, StartedAt = DateTime.UtcNow.AddMinutes(-5), CompletedAt = DateTime.UtcNow.AddMinutes(-5),
+        };
+        var doneCompletedAt = done.CompletedAt;
+        _nodeStates.Setup(r => r.GetForInstanceAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync([done, gate]);
+        _events.Setup(r => r.GetNextSequenceNumberAsync(instanceId, It.IsAny<CancellationToken>())).ReturnsAsync(7);
+        var appended = new List<WorkflowEvent>();
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowEvent, CancellationToken>((e, _) => appended.Add(e))
+            .Returns(Task.CompletedTask);
+
+        await NewOrchestrator().CancelAsync(instanceId, Guid.NewGuid());
+
+        instance.Status.Should().Be(InstanceStatus.Cancelled);
+        instance.CompletedAt.Should().NotBeNull().And.BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+        gate.Status.Should().Be(NodeStatus.Cancelled);
+        gate.CompletedAt.Should().NotBeNull();
+        done.Status.Should().Be(NodeStatus.Completed);
+        done.CompletedAt.Should().Be(doneCompletedAt);
+        appended.Select(e => e.EventType).Should().Equal("NodeCancelled", "InstanceCancelled");
+        appended.Select(e => e.SequenceNumber).Should().Equal(7, 8);
+        _nodeStates.Verify(r => r.Update(gate), Times.Once);
+    }
+
+}

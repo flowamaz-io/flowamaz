@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tests for the open runtime (MIT). References only open projects, so it builds and runs in the
+       public repository. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Flowamaz.Engine.Runtime.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="FluentAssertions" Version="7.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\Flowamaz.Engine.Core\Flowamaz.Engine.Core.csproj" />
+    <ProjectReference Include="..\Flowamaz.Connectors.Official\Flowamaz.Connectors.Official.csproj" />
+    <ProjectReference Include="..\Flowamaz.Engine.Runtime\Flowamaz.Engine.Runtime.csproj" />
+    <ProjectReference Include="..\Flowamaz.Engine.Persistence\Flowamaz.Engine.Persistence.csproj" />
+    <ProjectReference Include="..\Flowamaz.Engine.Hosting\Flowamaz.Engine.Hosting.csproj" />
+  </ItemGroup>
+
+</Project>

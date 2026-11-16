@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Flowamaz.Infrastructure</RootNamespace>
+
+    <PackageId>Flowamaz.Engine.Hosting</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Flowamaz</Authors>
+    <Description>Runs the Flowamaz workflow runtime in a .NET host: the Redis task queue (per-workspace lists, atomic claim, delayed retries) and the background worker that claims runs, leases them and steps the orchestrator.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/flowamaz-io/flowamaz</RepositoryUrl>
+    <PackageTags>workflow;engine;redis;worker;flowamaz</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="2.8.41" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flowamaz.Engine.Runtime\Flowamaz.Engine.Runtime.csproj" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="LICENSE" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="Flowamaz.Engine.Runtime.Tests" />
+    <InternalsVisibleTo Include="Flowamaz.Tests.Unit" />
+    <InternalsVisibleTo Include="Flowamaz.Tests.Integration" />
+  </ItemGroup>
+
+</Project>
