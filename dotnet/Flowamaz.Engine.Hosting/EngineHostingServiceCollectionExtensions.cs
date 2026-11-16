@@ -9,6 +9,7 @@ using Flowamaz.Core.Interfaces.Runtime;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Workflow;
+using Flowamaz.Infrastructure.Ai;
 using Flowamaz.Infrastructure.Queue;
 using Flowamaz.Infrastructure.Services;
 using Flowamaz.Infrastructure.Workers;
@@ -25,7 +26,7 @@ namespace Microsoft.Extensions.DependencyInjection;
 public static class EngineHostingServiceCollectionExtensions
 {
     /// <summary>
-    /// The runtime: parser, orchestrator, saga engine, the HTTP action and approval-gate workers,
+    /// The runtime: parser, orchestrator, saga engine, the HTTP action, AI and approval-gate workers,
     /// <see cref="GateService"/> (approve / reject) and variable evaluation, with the open defaults for the
     /// host hooks (every run admitted, no run events, no step debugger) and an <see cref="IEmailService"/>
     /// that only logs. Register your own implementations before or after this call to replace them.
@@ -52,6 +53,13 @@ public static class EngineHostingServiceCollectionExtensions
             .ConfigurePrimaryHttpMessageHandler(() => EgressGuard.CreateHandler(allowPrivate));
         services.TryAddEnumerable(ServiceDescriptor.Scoped<INodeWorker, HttpActionWorker>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<INodeWorker, HumanGateNodeWorker>());
+
+        // AI steps: the host's own key (Ai:Anthropic:ApiKey) by default; register another IAiModelProvider
+        // to use a different provider. Metering (IAiUsageMeter) is required: AddFlowamazEnginePersistence
+        // registers one that writes engine_ai_usage.
+        services.AddHttpClient(AnthropicModelProvider.HttpClientName);
+        services.TryAddScoped<IAiModelProvider, AnthropicModelProvider>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<INodeWorker, AiStepWorker>());
         services.TryAddScoped<INodeWorkerRegistry, NodeWorkerRegistry>();
 
         // Connector steps (connector: http-rest, slack, …) also need the host to resolve credentials and

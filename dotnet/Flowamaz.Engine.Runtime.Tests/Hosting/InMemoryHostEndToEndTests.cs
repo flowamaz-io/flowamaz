@@ -3,7 +3,9 @@ using FluentAssertions;
 using Flowamaz.Application.Workflow.Services;
 using Flowamaz.Core.Entities.Workflow;
 using Flowamaz.Core.Enums;
+using Flowamaz.Core.Interfaces.Runtime;
 using Flowamaz.Core.Interfaces.Workflow;
+using Flowamaz.Infrastructure.Persistence.Ai;
 using Flowamaz.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -61,7 +63,7 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
         public void Dispose() { _listener.Stop(); _listener.Close(); }
     }
 
-    private async Task StartAsync(int failFirst = 0)
+    private async Task StartAsync(int failFirst = 0, Action<IServiceCollection>? services = null)
     {
         _stub = new StubServer(failFirst);
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -72,13 +74,14 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
         var databaseName = $"engine-{Guid.NewGuid():N}";
 
         _host = Host.CreateDefaultBuilder()
-            .ConfigureServices(services =>
+            .ConfigureServices(collection =>
             {
-                services.AddFlowamazEngineRuntime(configuration);
-                services.AddFlowamazEnginePersistence(o => o
+                services?.Invoke(collection); // registered first, so the runtime's defaults don't replace them
+                collection.AddFlowamazEngineRuntime(configuration);
+                collection.AddFlowamazEnginePersistence(o => o
                     .UseInMemoryDatabase(databaseName)
                     .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
-                services.AddFlowamazEngineWorker();
+                collection.AddFlowamazEngineWorker();
             })
             .Build();
         await _host.StartAsync();
@@ -131,11 +134,11 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
         return definition.Id;
     }
 
-    private async Task<Guid> TriggerAsync(Guid workflowId)
+    private async Task<Guid> TriggerAsync(Guid workflowId, string payload = """{"applicant":"Aisha","amount":4200}""")
     {
         using var scope = _host.Services.CreateScope();
         var run = await scope.ServiceProvider.GetRequiredService<IWorkflowOrchestrator>()
-            .TriggerAsync(_workspaceId, workflowId, """{"applicant":"Aisha","amount":4200}""", idempotencyKey: null);
+            .TriggerAsync(_workspaceId, workflowId, payload, idempotencyKey: null);
         return run.Id;
     }
 
@@ -216,5 +219,52 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
         await WaitForAsync(runId, r => r.Status == InstanceStatus.Waiting);
 
         _stub.Calls.Should().Be(2, "one 500, then the retry after the 1s backoff succeeded");
+    }
+
+    /// <summary>A model that answers in JSON and remembers the prompt it was sent (no key, no cost).</summary>
+    private sealed class FakeModel : IAiModelProvider
+    {
+        public string Name => "fake";
+        public string? DefaultModel => "fake-model";
+        public List<string> Prompts { get; } = [];
+
+        public Task<AiCompletion> CompleteAsync(AiCompletionRequest request, CancellationToken cancellationToken = default)
+        {
+            Prompts.Add(request.Prompt);
+            return Task.FromResult(new AiCompletion("""{"risk":"low","reason":"small amount"}""", request.Model, 42, 7, 0.0001m));
+        }
+    }
+
+    [Fact]
+    public async Task An_ai_step_runs_on_the_hosts_model_and_is_metered()
+    {
+        var model = new FakeModel();
+        await StartAsync(services: s => s.AddScoped<IAiModelProvider>(_ => model));
+        const string yaml = """
+            workflow: { id: assess, version: v1, name: Risk check }
+            nodes:
+              - { id: start, type: Trigger }
+              - id: assess
+                type: Ai
+                config: { prompt: "Rate the risk of a loan of {{ amount }} to {{ applicant }}", max_tokens: 200 }
+              - { id: done, type: End }
+            edges:
+              - { id: e1, from: start, to: assess }
+              - { id: e2, from: assess, to: done }
+            """;
+        var runId = await TriggerAsync(await PublishAsync(yaml));
+
+        var done = await WaitForAsync(runId, r => r.Status is InstanceStatus.Completed or InstanceStatus.Failed);
+
+        done.Status.Should().Be(InstanceStatus.Completed, done.ErrorMessage);
+        model.Prompts.Should().ContainSingle().Which.Should().Contain("4200").And.Contain("Aisha");
+        using var scope = _host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<EngineDbContext>();
+        var usage = await db.Set<EngineAiUsage>().AsNoTracking().SingleAsync();
+        (usage.WorkspaceId, usage.InstanceId, usage.NodeId, usage.Provider, usage.ModelId, usage.FunctionId,
+            usage.TokensInput, usage.TokensOutput, usage.CostUsd, usage.Succeeded)
+            .Should().Be((_workspaceId, (Guid?)runId, "assess", "fake", "fake-model", AiFunctions.NodeExec, 42, 7, 0.0001m, true));
+        var output = await db.WorkflowVariables.AsNoTracking().SingleAsync(v => v.InstanceId == runId && v.Name == "assess.output");
+        output.Value.Should().Contain("\"risk\":\"low\"");
     }
 }

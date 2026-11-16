@@ -146,6 +146,8 @@ A list of node definitions. At least one trigger node and one end node are requi
         confidence: { type: number }
 ```
 
+Also: `system_prompt` (instructions for the model) and `max_tokens` (default 1024). Variables marked sensitive are never sent to the model; their placeholders are replaced with `[SENSITIVE_REDACTED]`. Every AI call is metered (tokens, model, cost). In the open runtime the model runs on the host's own key (`Ai:Anthropic:ApiKey`), and `output_schema` is not validated there.
+
 ### human-gate node config
 
 ```yaml

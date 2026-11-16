@@ -4,7 +4,7 @@ The Flowamaz workflow runtime (MIT): what runs a workflow once it's triggered.
 
 - **Orchestration** (`WorkflowOrchestrator`): trigger (idempotency keys, versions, test runs), step through the graph, resume after a gate, cancel, fail. Every change is an event in the run's event log.
 - **Saga compensation** (`SagaEngine`): undo completed steps when a run fails and the workflow declares a compensation block.
-- **Node workers:** action steps (`HttpActionWorker` → the connector pipeline), human gates (`HumanGateNodeWorker`: email, Slack and Teams delivery, signed approve/reject links, timeouts), and the worker registry. The AI node worker is supplied by the host.
+- **Node workers:** action steps (`HttpActionWorker` → the connector pipeline), human gates (`HumanGateNodeWorker`: email, Slack and Teams delivery, signed approve/reject links, timeouts), AI steps (`AiStepWorker`: your own model key through `IAiModelProvider`, every call metered through `IAiUsageMeter`, sensitive variables withheld), and the worker registry.
 - **Gates** (`GateService`, `GateHmacHelper`, `GateEmailTemplates`): decide, validate gate forms, and resume the run.
 - **Connector pipeline** (`ConnectorActionExecutor`, `ConnectorDispatcher`, `ConnectorOperationHandlerRegistry`): resolve the credential, interpolate inputs, and run the operation in-process or in the sandboxed connector runner.
 - **Variables** (`VariableEvaluationService`): resolve `{{ name }}` placeholders and edge conditions against a run's stored variables.

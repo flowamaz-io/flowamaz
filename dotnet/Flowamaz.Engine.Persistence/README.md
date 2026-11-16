@@ -4,6 +4,7 @@ Storage for the Flowamaz workflow runtime (MIT), on EF Core and PostgreSQL.
 
 - **`EngineDbContext`**: the 7 run entities (definitions, versions, instances, node states, variables, the event log, gate decisions) and the conventions every Flowamaz table follows: snake_case names, a soft-delete query filter on every `BaseEntity`, and CreatedAt/UpdatedAt (and CreatedBy/UpdatedBy) stamped on save.
 - **Repositories** for each `I…Repository` contract in `Flowamaz.Engine.Runtime`, and `EfUnitOfWork` (`IUnitOfWork`). Workspace-scoped reads always filter on `workspace_id`.
+- **AI usage:** `EfAiUsageMeter` writes every AI call to `engine_ai_usage` (registered by `AddFlowamazEnginePersistence`). The Flowamaz product meters into its own table and leaves `engine_ai_usage` out of its model.
 - **Migrations** for `EngineDbContext` (`Migrations/`), for a standalone host. Apply them with `FLOWAMAZ_ENGINE_DB="Host=…;Database=…;Username=…;Password=…" dotnet ef database update --project Flowamaz.Engine.Persistence --context EngineDbContext`, or call `Database.MigrateAsync()` at startup. Use `EngineDbContextOptions.ConfigureNpgsql` when you register the context.
 
 Register it in a host with one call (it adds the context, the 7 repositories and the unit of work):
