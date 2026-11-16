@@ -12,6 +12,7 @@ Open parts of [Flowamaz](https://flowamaz.com), the AI-native workflow platform.
 | `dotnet/Flowamaz.Engine.Hosting` | Run it in a .NET host (NuGet): the background worker, the Redis or in-memory task queue and one-call service registration. [README](dotnet/Flowamaz.Engine.Hosting/README.md) | MIT |
 | `dotnet/Flowamaz.Engine.Api` | HTTP endpoints for an ASP.NET Core host (NuGet): workflows (create, save, publish, archive, versions), runs (start, list, detail, timeline, cancel, retry), approval gates and a signed webhook trigger. Your host decides who may do what. [README](dotnet/Flowamaz.Engine.Api/README.md) | MIT |
 | `canvas/` | `@flowamaz/canvas`: the workflow canvas for Vue 3 (YAML ↔ graph, Cytoscape.js composable, YAML patching, toolbar, palette, minimap). See [canvas/README.md](canvas/README.md) | MIT |
+| `workbench/` | `@flowamaz/workbench`: workbench screens for Vue 3 over a pluggable API (`WorkbenchApi`; `createEngineApiClient` for Flowamaz.Engine.Api). Now: the shared basics (buttons, badges, empty and error states, modal, skeleton, spinner), the engine DTO types and the API client; the runs, gates and workflow screens follow. See [workbench/README.md](workbench/README.md) | MIT |
 | `cli/` | `fmz`, the Flowamaz command-line interface (`npm i -g @flowamaz/cli`) | MIT |
 | `vscode-extension/` | Author, validate and run Flowamaz workflows from VS Code | MIT |
 | `docs/yaml-spec.md` | Workflow YAML specification v1 | MIT |
@@ -28,6 +29,7 @@ This repository is published automatically from Flowamaz's development repositor
 ```bash
 dotnet test dotnet/Flowamaz.slnx
 npm ci --prefix canvas && npm test --prefix canvas && npm run typecheck --prefix canvas
+npm ci --prefix workbench && npm test --prefix workbench && npm run typecheck --prefix workbench
 npm ci --prefix cli && npm run build --prefix cli && npm test --prefix cli
 npm ci --prefix vscode-extension && npm run build --prefix vscode-extension && npm test --prefix vscode-extension
 ```

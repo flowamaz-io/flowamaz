@@ -32,6 +32,19 @@ jobs:
       - run: npm test --prefix canvas
       - run: npm run typecheck --prefix canvas
 
+  workbench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: workbench/package-lock.json
+      - run: npm ci --prefix workbench
+      - run: npm test --prefix workbench
+      - run: npm run typecheck --prefix workbench
+
   vscode-extension:
     runs-on: ubuntu-latest
     steps:

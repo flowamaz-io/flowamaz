@@ -1,0 +1,35 @@
+{
+  "name": "@flowamaz/workbench",
+  "version": "0.1.0",
+  "description": "Flowamaz workbench screens for Vue 3: workflows, runs, run timeline and approval gates, over a pluggable API (the Flowamaz engine API or your own).",
+  "license": "MIT",
+  "type": "module",
+  "repository": { "type": "git", "url": "https://github.com/flowamaz-io/flowamaz", "directory": "workbench" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./components/*": "./src/components/*",
+    "./theme.css": "./src/theme.css",
+    "./*": "./src/*.ts"
+  },
+  "files": ["src", "README.md", "LICENSE"],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.19",
+    "lucide-vue-next": "^0.577.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.2",
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "^28.0.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.16",
+    "vue": "^3.5.24",
+    "vue-tsc": "^3.2.0"
+  }
+}
