@@ -94,6 +94,8 @@ export function createEngineApiClient(options: EngineApiClientOptions): Workbenc
       status: filters.status, workflowId: filters.workflowId, includeTest: filters.includeTest, page: filters.page, pageSize: filters.pageSize,
     })}`),
     getRun: (run) => call<InstanceDetailResponse>('GET', `/runs/${id(run)}`),
+    // The engine API returns variables (sensitive ones masked) with the run's detail.
+    listRunVariables: async (run) => (await call<InstanceDetailResponse>('GET', `/runs/${id(run)}`)).variables,
     listRunEvents: (run) => call<EventResponse[]>('GET', `/runs/${id(run)}/events`),
     getRunTimeline: (run) => call<TimelineResponse>('GET', `/runs/${id(run)}/timeline`),
     cancelRun: (run) => call<InstanceDetailResponse>('POST', `/runs/${id(run)}/cancel`),

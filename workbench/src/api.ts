@@ -8,6 +8,7 @@ import type {
   Page,
   TimelineResponse,
   TriggerInstanceResponse,
+  VariableResponse,
   WorkflowDefinitionListItem,
   WorkflowDefinitionResponse,
   WorkflowVersionResponse,
@@ -49,6 +50,8 @@ export interface WorkbenchApi {
   listRuns(filters?: RunListFilters): Promise<Page<InstanceListItem>>;
   getRun(id: string): Promise<InstanceDetailResponse>;
   listRunEvents(id: string): Promise<EventResponse[]>;
+  /** The run's variables; sensitive values come back masked. */
+  listRunVariables(id: string): Promise<VariableResponse[]>;
   getRunTimeline(id: string): Promise<TimelineResponse>;
   cancelRun(id: string): Promise<InstanceDetailResponse>;
   retryRun(id: string): Promise<TriggerInstanceResponse>;

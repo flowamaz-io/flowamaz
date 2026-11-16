@@ -7,9 +7,27 @@ Workbench screens for Vue 3 (MIT): the parts of the Flowamaz app for working wit
 - the shared basics: `FmButton`, `FmBadge`, `FmEmptyState`, `FmErrorState`, `FmModal`, `FmSkeleton` and `FmSpinner`;
 - the engine DTO types;
 - the `WorkbenchApi` interface and its engine API client;
-- date helpers.
+- date and run helpers (`runDuration`, `instanceStatusVariant`, `isRunEnded`, …);
+- **runs:** `RunsPage` and `RunDetailPage` (see below), and the parts they're built from: `RunTable`, `RunDetail`, `FmRunTimeline` and `VariableInspector`.
 
-The runs, gates and workflow screens come next.
+The gates and workflow screens come next.
+
+## Runs
+
+`RunsPage` and `RunDetailPage` need nothing but the installed API. They refresh by polling while a run is going (every 5 s for the list, 2 s for a run) and stop once it has ended. They emit navigation instead of using a router:
+
+```vue
+<RunsPage @open="(id) => router.push(`/runs/${id}`)" @go-to-workflows="router.push('/workflows')" />
+<RunDetailPage :run-id="id" @retried="(newId) => router.push(`/runs/${newId}`)" @back="router.push('/runs')" />
+```
+
+To build your own page (live updates, your own roles), use `RunTable` and `RunDetail` directly. `RunDetail` has these slots:
+
+- `back`: a link back to the list;
+- `actions`: more buttons next to Cancel and Retry;
+- `timeline-extra`: content under the timeline;
+- `data-hidden`: the note shown when the viewer can't see run data;
+- one `tab-<name>` slot for each entry in `extraTabs`.
 
 ## Setup
 
