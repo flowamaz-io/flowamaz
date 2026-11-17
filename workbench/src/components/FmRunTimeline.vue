@@ -14,6 +14,8 @@ interface Bar {
 const STATUS_COLOUR: Record<string, string> = {
   Completed: 'bg-teal-500',
   Failed: 'bg-danger-500',
+  // The approval step whose "no" ended a Rejected run: an outcome, not an error.
+  Rejected: 'bg-accent-500',
   Running: 'bg-blue-500 animate-pulse',
   Waiting: 'bg-amber-500',
   Compensating: 'bg-orange-500',

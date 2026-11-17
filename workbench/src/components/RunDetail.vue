@@ -163,13 +163,13 @@ const activeTab = ref('timeline');
               <span class="font-medium text-slate-800">{{ node.nodeId }}</span>
               <span class="ml-2 text-xs text-slate-400">{{ node.nodeType }}</span>
             </td>
-            <td class="px-4 py-3 text-slate-600">
+            <td :class="['px-4 py-3', node.status === 'Rejected' ? 'text-accent-700' : 'text-slate-600']">
               {{ node.status }}
             </td>
             <td class="px-4 py-3 tabular-nums text-slate-600">
               {{ node.retryCount }}
             </td>
-            <td class="px-4 py-3 text-xs text-danger-600">
+            <td :class="['px-4 py-3 text-xs', node.status === 'Rejected' ? 'text-accent-700' : 'text-danger-600']">
               {{ node.errorMessage ?? '—' }}
             </td>
           </tr>

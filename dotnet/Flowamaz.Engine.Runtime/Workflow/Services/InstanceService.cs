@@ -98,7 +98,7 @@ public sealed class InstanceService
             instance.FailedAt,
             instance.ErrorMessage,
             instance.CurrentNodeId,
-            states.Select(ToNodeState).ToList(),
+            states.Select(st => ToNodeState(instance, st)).ToList(),
             access.CanSeeData ? variables.Select(ToVariable).ToList() : [],
             events.TakeLast(50).Select(ToEvent).Select(e => access.CanSeeData ? e : WithoutData(e)).ToList(),
             instance.CreatedBy,
@@ -163,7 +163,7 @@ public sealed class InstanceService
                 s.NodeId,
                 s.NodeType,
                 labels.GetValueOrDefault(s.NodeId, s.NodeId),
-                s.Status.ToString(),
+                StepStatus(instance, s),
                 s.StartedAt,
                 s.CompletedAt,
                 durationMs,
@@ -236,8 +236,18 @@ public sealed class InstanceService
             .ThenBy(s => s.CreatedAt)
             .ToList();
 
-    private static NodeStateResponse ToNodeState(WorkflowNodeState s) => new(
-        s.NodeId, s.NodeType, s.Status.ToString(), s.StartedAt, s.CompletedAt, s.RetryCount, s.ErrorMessage);
+    private static NodeStateResponse ToNodeState(WorkflowInstance instance, WorkflowNodeState s) => new(
+        s.NodeId, s.NodeType, StepStatus(instance, s), s.StartedAt, s.CompletedAt, s.RetryCount, s.ErrorMessage);
+
+    /// <summary>
+    /// The status a step is shown with. On a Rejected run, the approval step whose "no" ended it is stored Failed (with
+    /// the run's reason) but shown "Rejected", so it isn't read as an error (B10b).
+    /// </summary>
+    internal static string StepStatus(WorkflowInstance instance, WorkflowNodeState s) =>
+        instance.Status == InstanceStatus.Rejected && s.Status == NodeStatus.Failed
+            && s.NodeType == nameof(NodeType.HumanGate) && s.ErrorMessage == instance.ErrorMessage
+            ? nameof(InstanceStatus.Rejected)
+            : s.Status.ToString();
 
     private static VariableResponse ToVariable(WorkflowVariable v) => new(
         v.Name, v.IsSensitive ? Masked : v.Value, v.IsSensitive);

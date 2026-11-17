@@ -83,6 +83,52 @@ public class TwinAnalyzerTests
         report.Findings.Should().NotContain(f => f.Kind == "ends-rejected");
     }
 
+    private const string SpendApproval = """
+        apiVersion: flowamaz/v1
+        kind: Workflow
+        metadata: { id: spend, name: Spend approval }
+        spec:
+          nodes:
+            - { id: start, type: trigger }
+            - { id: approve, type: human-gate, label: Budget approval }
+            - { id: book, type: action, label: Book spend }
+            - { id: tell, type: action, label: Notify rejected }
+            - { id: done, type: end }
+          edges:
+            - { from: start, to: approve }
+            - { from: approve, to: book }
+            - { from: approve, to: tell, via: rejected }
+            - { from: book, to: done }
+            - { from: tell, to: done }
+        """;
+
+    [Theory]
+    [InlineData("rejected", "tell", "book")]
+    [InlineData("approved", "book", "tell")]
+    public void Simulator_runs_a_gates_unlabelled_link_only_on_approved(string decision, string ran, string skipped)
+    {
+        // B10b, as the engine: the unlabelled link next to a "rejected" branch is the approved path.
+        var trace = TwinSimulator.Run(Parser.Parse(SpendApproval), JsonNode.Parse("{}"),
+            new Dictionary<string, JsonNode?>(), new Dictionary<string, string> { ["approve"] = decision });
+
+        trace.NodesVisited.Should().Contain(ran).And.NotContain(skipped);
+        trace.Issues.Should().BeEmpty();
+        trace.RejectedAt.Should().BeNull("a rejected path exists");
+    }
+
+    [Fact]
+    public void The_approved_only_link_is_noted_and_the_gate_counts_as_a_decision_point()
+    {
+        var report = TwinAnalyzer.Analyse(Parser.Parse(SpendApproval), TwinHistory.Empty);
+
+        var note = report.Findings.Single(f => f.Kind == "approved-only-link");
+        note.Severity.Should().Be(TwinSeverity.Info);
+        note.Title.Should().Be("\"Book spend\" runs only when \"Budget approval\" is approved");
+        note.Cases.Should().Be(0);
+        report.Breaks.Should().Be(0);
+        report.RoutersTested.Should().BeGreaterThanOrEqualTo(1);
+    }
+
     [Fact]
     public void Simulator_stops_at_a_rejected_gate_with_no_rejected_path()
     {

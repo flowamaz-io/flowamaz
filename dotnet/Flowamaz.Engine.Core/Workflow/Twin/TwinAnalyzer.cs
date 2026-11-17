@@ -95,8 +95,10 @@ public static class TwinAnalyzer
             .ToList();
         findings.AddRange(NeverTaken(graph, edgesTaken, nodesVisited, cases.Count));
         findings.AddRange(endsRejected.Select(kv => EndsRejected(graph, kv.Key, kv.Value)));
+        findings.AddRange(ApprovedOnlyLinks(graph));
 
-        var routers = graph.Nodes.Count(n => n.Type is NodeType.Router or NodeType.IfElse or NodeType.Switch
+        // Approval steps are decision points too: every case is tried with them approved and rejected.
+        var routers = graph.Nodes.Count(n => n.Type is NodeType.Router or NodeType.IfElse or NodeType.Switch or NodeType.HumanGate
             || graph.OutgoingEdges(n.Id).Any(e => e.Condition is not null || e.Via is not null || e.IsDefault));
         return new TwinReport(cases.Count, routers, findings
             .OrderBy(f => f.Severity)
@@ -114,8 +116,29 @@ public static class TwinAnalyzer
             $"Ends as Rejected when \"{label}\" is rejected",
             $"The workflow has no rejected path after \"{label}\", so a \"no\" ends the run with the status Rejected and the steps after it don't run. "
             + "Rejected runs are counted apart from failures.",
-            "If something should still happen after a \"no\" (for example, telling the requester), add a branch labelled \"rejected\" after the approval step.",
+            "If something should still happen after a \"no\" (for example, telling the requester), add a branch labelled \"rejected\" after the approval step. "
+            + "Its other, unlabelled link then runs only when the step is approved.",
             new Dictionary<string, string> { [gateId] = TwinSimulator.Rejected }, [], cases);
+    }
+
+    /// <summary>
+    /// An unlabelled link out of an approval step that also has labelled branches runs only on "approved" (B10b). Said
+    /// once per link, so authors who expected it to run on every decision see the rule.
+    /// </summary>
+    private static IEnumerable<TwinFinding> ApprovedOnlyLinks(WorkflowGraph graph)
+    {
+        foreach (var edge in graph.Edges.Where(e => TwinSimulator.IsApprovedOnlyLink(graph, e.FromNodeId, e)))
+        {
+            var gate = graph.FindNode(edge.FromNodeId)!;
+            var gateLabel = string.IsNullOrWhiteSpace(gate.Label) ? gate.Id : gate.Label;
+            var target = graph.FindNode(edge.ToNodeId) is { } t && !string.IsNullOrWhiteSpace(t.Label) ? t.Label : edge.ToNodeId;
+            yield return new TwinFinding(
+                "approved-only-link", TwinSeverity.Info, gate.Id, gateLabel,
+                $"\"{target}\" runs only when \"{gateLabel}\" is approved",
+                $"\"{gateLabel}\" has labelled branches, so its unlabelled link to \"{target}\" is treated as the approved path and does not run on a \"no\".",
+                $"If \"{target}\" should run whatever the decision, run it before \"{gateLabel}\", or add it to each branch.",
+                new Dictionary<string, string> { [gate.Id] = TwinSimulator.Approved }, [], 0); // a rule, not an input count
+        }
     }
 
     private static TwinSeverity SeverityOf(TwinCase c, Dictionary<string, WorkflowInput> declared) => c.VariedValue?.Kind switch
@@ -271,7 +294,9 @@ public static class TwinAnalyzer
         var name = e.Label ?? e.ToNodeId;
         if (e.IsDefault) return $"\"{name}\" (default)";
         if (e.Condition is not null) return $"\"{name}\" when {e.Condition.Trim()}";
-        return e.Label is not null ? $"\"{name}\" on decision {e.Label}" : $"\"{name}\" always";
+        if (e.Label is not null) return $"\"{name}\" on decision {e.Label}";
+        // An approval step's unlabelled main path next to labelled branches (B10b).
+        return e.ResolvedValues.ContainsKey("decision") ? $"\"{name}\" on decision approved" : $"\"{name}\" always";
     }
 
     private static string BranchName(WorkflowGraph graph, TwinEdgeEvaluation e) =>

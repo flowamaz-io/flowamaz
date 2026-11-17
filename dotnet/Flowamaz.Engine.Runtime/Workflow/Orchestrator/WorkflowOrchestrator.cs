@@ -718,6 +718,16 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
                 }
                 continue;
             }
+            // An approval step's unlabelled link next to labelled branches is its main path: "approved" only (B10b).
+            if (decision is not null && Core.Workflow.Twin.TwinSimulator.IsApprovedOnlyLink(graph, nodeId, edge))
+            {
+                if (DecisionMatches(Core.Workflow.Twin.TwinSimulator.Approved, decision))
+                {
+                    targets.Add(edge.ToNodeId);
+                    anyConditionalMatched = true;
+                }
+                continue;
+            }
             if (await _variableEvaluation.EvaluateConditionAsync(instanceId, edge.Condition, ct))
             {
                 targets.Add(edge.ToNodeId);

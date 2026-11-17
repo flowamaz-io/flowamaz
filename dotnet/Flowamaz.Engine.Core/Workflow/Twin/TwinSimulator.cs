@@ -155,6 +155,11 @@ public static class TwinSimulator
                 matched = DecisionMatches(edge.Via!, decision);
                 if (matched) anyConditionalMatched = true;
             }
+            else if (decision is not null && IsApprovedOnlyLink(graph, from.Id, edge))
+            {
+                matched = DecisionMatches(Approved, decision);
+                if (matched) anyConditionalMatched = true;
+            }
             else
             {
                 matched = ConditionEvaluator.Evaluate(edge.Condition, vars);
@@ -170,10 +175,11 @@ public static class TwinSimulator
             r.Edge.Condition,
             r.Edge.IsDefault,
             r.Edge.IsDefault ? !anyConditionalMatched : r.Matched,
-            ResolveValues(r.Edge, vars, decision))).ToList();
+            ResolveValues(r.Edge, vars, decision, IsApprovedOnlyLink(graph, from.Id, r.Edge)))).ToList();
     }
 
-    private static Dictionary<string, string?> ResolveValues(SfgEdge edge, Dictionary<string, JsonElement> vars, string? decision)
+    private static Dictionary<string, string?> ResolveValues(SfgEdge edge, Dictionary<string, JsonElement> vars, string? decision,
+        bool approvedOnly)
     {
         var values = new Dictionary<string, string?>(StringComparer.Ordinal);
         if (!string.IsNullOrWhiteSpace(edge.Condition))
@@ -183,7 +189,7 @@ public static class TwinSimulator
                     ? ConditionEvaluator.ToText(v)
                     : null;
         }
-        else if (IsLabelOnly(edge))
+        else if (IsLabelOnly(edge) || (approvedOnly && decision is not null))
         {
             values["decision"] = decision;
         }
@@ -206,6 +212,20 @@ public static class TwinSimulator
 
     public static bool IsLabelOnly(SfgEdge edge) =>
         !edge.IsDefault && string.IsNullOrWhiteSpace(edge.Condition) && !string.IsNullOrWhiteSpace(edge.Via);
+
+    /// <summary>A link with no label, condition or default flag: followed whatever happens, except as below.</summary>
+    public static bool IsPlainLink(SfgEdge edge) =>
+        !edge.IsDefault && string.IsNullOrWhiteSpace(edge.Condition) && string.IsNullOrWhiteSpace(edge.Via);
+
+    /// <summary>
+    /// A plain link out of an approval step that also has a labelled branch (approved, rejected…) is the main path, so
+    /// it runs only on "approved" (B10b). Before, it ran on every decision: a "rejected" branch next to it ran both
+    /// paths on a "no". The engine uses the same rule.
+    /// </summary>
+    public static bool IsApprovedOnlyLink(WorkflowGraph graph, string fromNodeId, SfgEdge edge) =>
+        IsPlainLink(edge)
+        && graph.FindNode(fromNodeId) is { Type: NodeType.HumanGate }
+        && graph.OutgoingEdges(fromNodeId).Any(IsLabelOnly);
 
     /// <summary>
     /// Whether the workflow handles <paramref name="decision"/> at gate <paramref name="nodeId"/>: a label-only branch

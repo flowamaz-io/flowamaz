@@ -105,6 +105,7 @@ public sealed class WorkflowValidator : IWorkflowValidator
             if (workspaceId.HasValue) RunLayer4(doc, info);
             RunLayer5(yamlContent, doc, errors);
             RunLayer6(doc, warnings, info);
+            if (errors.Count == 0) RunApprovedOnlyLinks(yamlContent, info);
         }
 
         _log.LogDebug("[WorkflowValidator] Exit errors={E} warnings={W} info={I}",
@@ -375,6 +376,32 @@ public sealed class WorkflowValidator : IWorkflowValidator
             info.Add(new ValidationIssue(4, "CAP-001",
                 $"AI node '{node.Id}' will use the workspace/org default model. Set config.model to override.",
                 node.Id, null, null));
+        }
+    }
+
+    /// <summary>
+    /// BPR-013 (B10b): an approval step's unlabelled link next to labelled branches runs only on "approved". Said so
+    /// authors who expected it to run on every decision see the rule. Uses the engine's own graph and rule.
+    /// </summary>
+    private void RunApprovedOnlyLinks(string yaml, List<ValidationIssue> info)
+    {
+        WorkflowGraph graph;
+        try { graph = new SfgParser().Parse(yaml); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.LogDebug(ex, "[WorkflowValidator] BPR-013 skipped: the graph did not parse");
+            return;
+        }
+        foreach (var edge in graph.Edges.Where(e => Twin.TwinSimulator.IsApprovedOnlyLink(graph, e.FromNodeId, e)))
+        {
+            var gate = graph.FindNode(edge.FromNodeId)!;
+            var gateLabel = string.IsNullOrWhiteSpace(gate.Label) ? gate.Id : gate.Label;
+            var target = graph.FindNode(edge.ToNodeId) is { } t && !string.IsNullOrWhiteSpace(t.Label) ? t.Label : edge.ToNodeId;
+            // Labels, as the Twin and the canvas show them; the ids are on the issue for markers.
+            info.Add(new ValidationIssue(6, "BPR-013",
+                $"\u201c{target}\u201d runs only when \u201c{gateLabel}\u201d is approved: the approval step has labelled branches, so its unlabelled link is the approved path. " +
+                $"To run \u201c{target}\u201d whatever the decision, move it before the approval step or add it to each branch.",
+                gate.Id, null, null));
         }
     }
 

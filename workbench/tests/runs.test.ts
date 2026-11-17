@@ -63,6 +63,19 @@ describe('Rejected runs (B10)', () => {
     expect(runDuration({ status: 'Rejected', startedAt: '2026-11-16T00:00:00Z', completedAt: null, failedAt: '2026-11-16T00:00:30Z' })).toBe('30.0s');
   });
 
+  it('shows the approval step that ended it as Rejected, not as a red failure (B10b)', () => {
+    const wrapper = mount(RunDetail, {
+      props: {
+        run: run({ status: 'Rejected', errorMessage: 'Gate rejected: over budget', nodeStates: [
+          { nodeId: 'approve', nodeType: 'HumanGate', status: 'Rejected', startedAt: null, completedAt: null, retryCount: 0, errorMessage: 'Gate rejected: over budget' },
+        ] }),
+        timeline: { ...timeline, nodes: [{ ...timeline.nodes[0]!, status: 'Rejected' }] },
+      },
+    });
+    expect(wrapper.html()).toContain('bg-accent-500');
+    expect(wrapper.html()).not.toContain('bg-danger-500');
+  });
+
   it('shows the reason, no Retry and no Cancel', () => {
     const wrapper = mount(RunDetail, {
       props: { run: run({ status: 'Rejected', failedAt: '2026-11-16T00:01:00Z', errorMessage: 'Gate rejected: over budget' }), timeline, canAct: true },

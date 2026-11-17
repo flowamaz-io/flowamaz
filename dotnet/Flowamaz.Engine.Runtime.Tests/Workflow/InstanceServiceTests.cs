@@ -51,6 +51,20 @@ public class InstanceServiceTests
         _instances.Setup(r => r.GetByIdForWorkspaceAsync(_instanceId, _ws, It.IsAny<CancellationToken>()))
             .ReturnsAsync(instance);
 
+    [Theory]
+    // B10b: only the approval step whose "no" ended a Rejected run is shown Rejected.
+    [InlineData(InstanceStatus.Rejected, "HumanGate", "Gate rejected: over budget", "Rejected")]
+    [InlineData(InstanceStatus.Rejected, "Action", "Gate rejected: over budget", "Failed")]
+    [InlineData(InstanceStatus.Rejected, "HumanGate", "Approval gate timed out", "Failed")]
+    [InlineData(InstanceStatus.Failed, "HumanGate", "Gate rejected: over budget", "Failed")]
+    public void StepStatus_shows_the_rejecting_gate_as_Rejected(InstanceStatus run, string nodeType, string stepError, string expected)
+    {
+        var instance = new WorkflowInstance { Status = run, ErrorMessage = "Gate rejected: over budget" };
+        var step = new WorkflowNodeState { NodeId = "approve", NodeType = nodeType, Status = NodeStatus.Failed, ErrorMessage = stepError };
+
+        InstanceService.StepStatus(instance, step).Should().Be(expected);
+    }
+
     [Fact]
     public async Task GetDetailAsync_MasksSensitiveVariableValues()
     {

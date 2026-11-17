@@ -44,6 +44,47 @@ public sealed class WorkflowValidatorTests
               to: done
         """;
 
+    private const string SpendYaml = """
+        apiVersion: flowamaz/v1
+        kind: Workflow
+        metadata: { id: spend, name: Spend approval, description: "Spend approval" }
+        spec:
+          trigger: { type: manual }
+          nodes:
+            - { id: start, type: trigger, label: Start }
+            - { id: approve, type: human-gate, label: Budget approval, config: { timeout_hours: 24 } }
+            - { id: book, type: action, label: Book spend }
+            - { id: tell, type: action, label: Notify rejected }
+            - { id: done, type: end, label: Done }
+          edges:
+            - { id: e1, from: start, to: approve }
+            - { id: e2, from: approve, to: book }
+            - { id: e3, from: approve, to: tell, via: rejected }
+            - { id: e4, from: book, to: done }
+            - { id: e5, from: tell, to: done }
+        """;
+
+    [Fact]
+    public async Task An_approval_steps_unlabelled_link_next_to_a_labelled_branch_is_noted_as_approved_only()
+    {
+        // B10b: that link now runs only on "approved"; the editor says so.
+        var result = await Create().ValidateAsync(SpendYaml);
+
+        result.Errors.Should().BeEmpty();
+        var note = result.Info.Single(i => i.Code == "BPR-013");
+        note.NodeId.Should().Be("approve");
+        note.Message.Should().StartWith("\u201cBook spend\u201d runs only when \u201cBudget approval\u201d is approved").And.NotContain("'book'");
+        result.Warnings.Should().NotContain(i => i.Code == "BPR-013");
+    }
+
+    [Fact]
+    public async Task An_approval_step_with_only_unlabelled_links_gets_no_approved_only_note()
+    {
+        var result = await Create().ValidateAsync(SpendYaml.Replace(", via: rejected", ""));
+
+        result.Info.Should().NotContain(i => i.Code == "BPR-013");
+    }
+
     [Fact]
     public async Task ValidYaml_Returns_IsValid_True()
     {

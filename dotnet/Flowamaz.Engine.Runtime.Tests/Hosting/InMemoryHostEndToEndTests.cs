@@ -217,6 +217,56 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
         using var read = _host.Services.CreateScope();
         var runs = read.ServiceProvider.GetRequiredService<InstanceService>();
         (await runs.ListAsync(_workspaceId, null, null, null, null)).Should().ContainSingle(r => r.Id == runId && r.Status == "Rejected");
+        // B10b: the approval step that ended it is shown Rejected, not as a red Failed step.
+        (await runs.GetDetailAsync(_workspaceId, runId))!.NodeStates.Single(n => n.NodeId == "approve").Status.Should().Be("Rejected");
+        (await runs.GetTimelineAsync(_workspaceId, runId))!.Nodes.Single(n => n.NodeId == "approve").Status.Should().Be("Rejected");
+        (await runs.GetDetailAsync(_workspaceId, runId))!.NodeStates.Single(n => n.NodeId == "score").Status.Should().Be("Completed");
+    }
+
+    /// <summary>A gate with a "rejected" branch and an unlabelled main path (B10b).</summary>
+    private string BranchedYaml() => $$"""
+        workflow: { id: spend, version: v1, name: Spend approval }
+        nodes:
+          - { id: start, type: Trigger }
+          - id: approve
+            type: HumanGate
+            label: Budget approval
+            config: { assignee: manager@example.com, gate_label: Approve the spend }
+          - id: book
+            type: Action
+            label: Book spend
+            config: { url: "{{_stub.Url}}book", method: GET }
+          - id: tell
+            type: Action
+            label: Notify rejected
+            config: { url: "{{_stub.Url}}tell", method: GET }
+          - { id: done, type: End }
+        edges:
+          - { id: e1, from: start, to: approve }
+          - { id: e2, from: approve, to: book }
+          - { id: e3, from: approve, to: tell, via: rejected }
+          - { id: e4, from: book, to: done }
+          - { id: e5, from: tell, to: done }
+        """;
+
+    [Theory]
+    [InlineData("reject", "tell", "book")]
+    [InlineData("approve", "book", "tell")]
+    public async Task A_gates_unlabelled_link_next_to_a_rejected_branch_runs_only_on_approved(string decision, string ran, string skipped)
+    {
+        // B10b: before, a "no" ran both the rejected branch and the unlabelled main path (it booked the spend).
+        await StartAsync();
+        var runId = await TriggerAsync(await PublishAsync(BranchedYaml()));
+        await WaitForAsync(runId, r => r.Status == InstanceStatus.Waiting);
+
+        await DecideAsync(runId, decision);
+
+        var done = await WaitForAsync(runId, r => r.Status is InstanceStatus.Completed or InstanceStatus.Failed or InstanceStatus.Rejected);
+        done.Status.Should().Be(InstanceStatus.Completed);
+        using var read = _host.Services.CreateScope();
+        var steps = (await read.ServiceProvider.GetRequiredService<InstanceService>().GetDetailAsync(_workspaceId, runId))!.NodeStates;
+        steps.Should().Contain(n => n.NodeId == ran && n.Status == "Completed");
+        steps.Should().NotContain(n => n.NodeId == skipped && n.Status == "Completed");
     }
 
     [Fact]
