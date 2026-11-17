@@ -4,6 +4,7 @@
   "description": "Author, validate, and operate Flowamaz workflows from VS Code.",
   "version": "0.1.0",
   "license": "MIT",
+  "author": "TOOTKER SOLUTIONS PTE. LTD.",
   "publisher": "flowamaz",
   "engines": {
     "vscode": "^1.85.0"

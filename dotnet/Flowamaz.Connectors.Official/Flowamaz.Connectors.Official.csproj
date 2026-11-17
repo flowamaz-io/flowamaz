@@ -9,7 +9,10 @@
 
     <PackageId>Flowamaz.Connectors.Official</PackageId>
     <Version>0.1.0</Version>
-    <Authors>Flowamaz</Authors>
+    <Authors>TOOTKER SOLUTIONS PTE. LTD.</Authors>
+    <Company>TOOTKER SOLUTIONS PTE. LTD.</Company>
+    <Product>Flowamaz</Product>
+    <Copyright>Copyright (c) 2026 TOOTKER SOLUTIONS PTE. LTD.</Copyright>
     <Description>The 13 official Flowamaz connectors (HTTP/REST, webhooks, Slack, Microsoft Teams, Microsoft 365, GitHub, email, PostgreSQL, MySQL, file system, script/shell, schedule) and their catalogue.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>

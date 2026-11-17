@@ -37,3 +37,7 @@ npm ci --prefix vscode-extension && npm run build --prefix vscode-extension && n
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: see [SECURITY.md](SECURITY.md); please don't open a public issue.
+
+## Licence
+
+MIT (see each folder's LICENSE). Flowamaz is a product of TOOTKER SOLUTIONS PTE. LTD.

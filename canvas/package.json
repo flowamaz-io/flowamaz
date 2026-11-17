@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "The Flowamaz workflow canvas for Vue 3: renders and edits workflow YAML as a graph with Cytoscape.js.",
   "license": "MIT",
+  "author": "TOOTKER SOLUTIONS PTE. LTD.",
   "type": "module",
   "repository": { "type": "git", "url": "https://github.com/flowamaz-io/flowamaz", "directory": "canvas" },
   "exports": {

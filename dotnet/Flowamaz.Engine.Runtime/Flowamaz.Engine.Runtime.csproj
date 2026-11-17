@@ -9,7 +9,10 @@
 
     <PackageId>Flowamaz.Engine.Runtime</PackageId>
     <Version>0.1.0</Version>
-    <Authors>Flowamaz</Authors>
+    <Authors>TOOTKER SOLUTIONS PTE. LTD.</Authors>
+    <Company>TOOTKER SOLUTIONS PTE. LTD.</Company>
+    <Product>Flowamaz</Product>
+    <Copyright>Copyright (c) 2026 TOOTKER SOLUTIONS PTE. LTD.</Copyright>
     <Description>The Flowamaz workflow runtime: durable orchestration (trigger, step, resume, cancel), saga compensation, action and human-gate workers, gate decisions, the connector execution pipeline, run entities, repository and queue contracts, and the runtime hooks a host plugs into.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>

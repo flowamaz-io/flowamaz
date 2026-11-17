@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Flowamaz platform command-line interface",
   "license": "MIT",
+  "author": "TOOTKER SOLUTIONS PTE. LTD.",
   "bin": {
     "fmz": "./dist/index.js"
   },

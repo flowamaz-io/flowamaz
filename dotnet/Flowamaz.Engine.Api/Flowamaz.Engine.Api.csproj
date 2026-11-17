@@ -9,7 +9,10 @@
 
     <PackageId>Flowamaz.Engine.Api</PackageId>
     <Version>0.1.0</Version>
-    <Authors>Flowamaz</Authors>
+    <Authors>TOOTKER SOLUTIONS PTE. LTD.</Authors>
+    <Company>TOOTKER SOLUTIONS PTE. LTD.</Company>
+    <Product>Flowamaz</Product>
+    <Copyright>Copyright (c) 2026 TOOTKER SOLUTIONS PTE. LTD.</Copyright>
     <Description>HTTP endpoints for the Flowamaz workflow runtime in an ASP.NET Core host: workflows (create, save, publish, archive, versions), runs (trigger, list, detail, events, timeline, cancel, retry), approval gates and a signed webhook trigger. The host decides who may do what.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>

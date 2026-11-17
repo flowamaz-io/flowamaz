@@ -9,7 +9,10 @@
 
     <PackageId>Flowamaz.Engine.Persistence</PackageId>
     <Version>0.1.0</Version>
-    <Authors>Flowamaz</Authors>
+    <Authors>TOOTKER SOLUTIONS PTE. LTD.</Authors>
+    <Company>TOOTKER SOLUTIONS PTE. LTD.</Company>
+    <Product>Flowamaz</Product>
+    <Copyright>Copyright (c) 2026 TOOTKER SOLUTIONS PTE. LTD.</Copyright>
     <Description>Storage for the Flowamaz workflow runtime on EF Core and PostgreSQL: EngineDbContext with its conventions (snake_case names, soft delete, audit stamps), the run entity mappings, the repositories, the unit of work and the engine's own migrations.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>

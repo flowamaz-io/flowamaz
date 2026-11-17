@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Flowamaz workbench screens for Vue 3: workflows, the YAML editor, the visual canvas editor, runs, run timeline and approval gates, over a pluggable API (the Flowamaz engine API or your own).",
   "license": "MIT",
+  "author": "TOOTKER SOLUTIONS PTE. LTD.",
   "type": "module",
   "repository": {
     "type": "git",

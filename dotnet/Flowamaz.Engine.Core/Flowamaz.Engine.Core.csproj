@@ -10,7 +10,10 @@
 
     <PackageId>Flowamaz.Engine.Core</PackageId>
     <Version>0.1.0</Version>
-    <Authors>Flowamaz</Authors>
+    <Authors>TOOTKER SOLUTIONS PTE. LTD.</Authors>
+    <Company>TOOTKER SOLUTIONS PTE. LTD.</Company>
+    <Product>Flowamaz</Product>
+    <Copyright>Copyright (c) 2026 TOOTKER SOLUTIONS PTE. LTD.</Copyright>
     <Description>Flowamaz workflow engine core: the workflow YAML parser (SFG), JSON Schema and validator, condition evaluator, gate forms, and the Workflow Twin simulator.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>

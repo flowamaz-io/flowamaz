@@ -9,7 +9,10 @@
 
     <PackageId>Flowamaz.Connectors.Sdk</PackageId>
     <Version>0.1.0</Version>
-    <Authors>Flowamaz</Authors>
+    <Authors>TOOTKER SOLUTIONS PTE. LTD.</Authors>
+    <Company>TOOTKER SOLUTIONS PTE. LTD.</Company>
+    <Product>Flowamaz</Product>
+    <Copyright>Copyright (c) 2026 TOOTKER SOLUTIONS PTE. LTD.</Copyright>
     <Description>Flowamaz connector SDK: the contract every connector operation implements (IConnectorOperationHandler), credentials, actionable errors, the call context, connector manifests (ConnectorSpec), the egress guard, and the host hooks a connector may use.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/flowamaz-io/flowamaz</PackageProjectUrl>
