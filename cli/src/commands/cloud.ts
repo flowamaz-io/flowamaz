@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { createClient } from "../lib/api-client";
 import { connectCommunity, type CommunitySource, type SourceWorkflow } from "../lib/community-source";
-import { error, info, printTable, success, warn } from "../lib/output";
+import { error, info, notice, printTable, success } from "../lib/output";
 import { describeError, requireWorkspaceId, unwrap } from "../lib/util";
 
 // `fmz cloud migrate`: copies the workflows of a self-hosted Community Edition install into a Flowamaz Cloud
@@ -171,7 +171,7 @@ export function registerCloudCommands(program: Command): void {
 
       const credentials = await source.listCredentials();
       if (credentials.length > 0) {
-        warn("Credentials aren't copied (their values never leave the install). Add these again in the cloud, Settings → Credentials:");
+        notice("Credentials aren't copied (their values never leave the install). Add these again in the cloud, Settings → Credentials:");
         printTable(["Connector", "Name"], credentials.map((c) => [c.connectorId, c.name]));
       }
       if (opts.dryRun) info("Dry run: nothing was changed. Run it again without --dry-run to copy.");

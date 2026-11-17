@@ -34,3 +34,19 @@ describe("format", () => {
     expect(format(42)).toBe("42");
   });
 });
+
+import { vi } from "vitest";
+import { notice, warn } from "../src/lib/output";
+
+describe("notice", () => {
+  it("writes to stdout (so a heading stays above its table), while warn writes to stderr", () => {
+    const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    notice("Add these again:");
+    warn("careful");
+    expect(String(out.mock.calls[0][0])).toContain("Add these again:");
+    expect(String(err.mock.calls[0][0])).toContain("careful");
+    out.mockRestore();
+    err.mockRestore();
+  });
+});

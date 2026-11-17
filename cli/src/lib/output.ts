@@ -74,6 +74,14 @@ export function info(message: string): void {
   process.stdout.write(chalk.gray(message) + "\n");
 }
 
+/**
+ * A heading for output that follows on stdout (a table, a list). Yellow like a warning, but on stdout so it always
+ * appears right above what it introduces; warn() goes to stderr and can land after it in a terminal.
+ */
+export function notice(message: string): void {
+  process.stdout.write(chalk.yellow("! " + message) + "\n");
+}
+
 export function warn(message: string): void {
   process.stderr.write(chalk.yellow("! " + message) + "\n");
 }
