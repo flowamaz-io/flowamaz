@@ -11,6 +11,8 @@ export * from './runs';
 export * from './gateForm';
 export * from './strings';
 export * from './workflows';
+export * from './connectors';
+export * from './canvasCollab';
 
 export { default as FmBadge } from './components/FmBadge.vue';
 export { default as FmButton } from './components/FmButton.vue';

@@ -13,6 +13,39 @@ import type {
   WorkflowDefinitionResponse,
   WorkflowVersionResponse,
 } from './types';
+import type { GateFormField } from './types';
+
+/** A connector a step can use, as the canvas's step settings list it. */
+export interface ConnectorSummary {
+  /** The id a step's YAML uses (`config.connector`). */
+  connectorId: string;
+  displayName: string;
+  /** The connector manifest as JSON: its operations and how it signs in. */
+  manifestJson: string;
+  /** Official connectors and installed ones are offered; others are left out of the list. */
+  isOfficial?: boolean;
+  isInstalled?: boolean;
+}
+
+/** A saved credential, by name. Its value is never returned. */
+export interface CredentialSummary {
+  id: string;
+  /** The name a step's YAML refers to (`config.credential`). */
+  name: string;
+  connectorId: string | null;
+  isActive: boolean;
+}
+
+/** A reusable approval form (fields an approver fills in), as a Library offers it. */
+export interface LibraryFormSummary {
+  id: string;
+  slug: string;
+  name: string;
+  isOfficial: boolean;
+  isWorkspaceForm?: boolean;
+  publisher: string | null;
+  fields: GateFormField[];
+}
 
 /** Filters for {@link WorkbenchApi.listRuns}. */
 export interface RunListFilters {
@@ -73,6 +106,17 @@ export interface WorkbenchApi {
     note?: string,
     values?: Record<string, GateFormValue>,
   ): Promise<GateResponse>;
+
+  // Used by the canvas's step settings. Optional: without them the settings still edit the YAML, they just can't
+  // offer a list to pick from (connectors, credentials) or the Library (approval forms).
+  /** Connectors a step can use. */
+  listConnectors?(): Promise<ConnectorSummary[]>;
+  /** Saved credentials, optionally for one connector. */
+  listCredentials?(connectorId?: string): Promise<CredentialSummary[]>;
+  /** Approval forms in the Library. */
+  listLibraryForms?(): Promise<LibraryFormSummary[]>;
+  /** Saves an approval form to the Library, so other gates can reuse it. */
+  saveLibraryForm?(form: { name: string; fields: GateFormField[] }): Promise<LibraryFormSummary>;
 }
 
 /** A failed API call, with a message that says what happened and what to do next. */

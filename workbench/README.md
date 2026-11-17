@@ -10,10 +10,8 @@ Workbench screens for Vue 3 (MIT): the parts of the Flowamaz app for working wit
 - date and run helpers (`runDuration`, `instanceStatusVariant`, `isRunEnded`, …);
 - **runs:** `RunsPage` and `RunDetailPage` (see below), and the parts they're built from: `RunTable`, `RunDetail`, `FmRunTimeline` and `VariableInspector`;
 - **workflows:** `WorkflowsPage` and `WorkflowDetailPage`, with `CreateWorkflowDialog` and `StartRunDialog`, plus `workflowStatusVariant`, `starterWorkflowYaml` and `slugify`;
-- **editing:** `WorkflowEditorPage` (the YAML on the left, a live picture of the workflow on the right, Save and Publish), with `FmYamlEditor` and `WorkflowGraphPreview`. Visual editing on the canvas comes later;
+- **editing:** `WorkflowEditorPage` (the YAML on the left, a live picture of the workflow on the right, Save and Publish), with `FmYamlEditor` and `WorkflowGraphPreview`, and the visual editor `SfgCanvas` (see below);
 - **approvals:** `GatesPage`, the approval inbox, with `GateApproveDialog`, `GateFormFields` and `FmAlert`, plus the gate form rules (`gateForm`) and `humanizeId`.
-
-Visual editing on the canvas comes next.
 
 ## Workflows
 
@@ -43,6 +41,21 @@ The detail page shows the workflow's published versions and its runs. Use `can-e
 - **Publish:** saves first, then shows the server's validation message as it is if publishing is refused.
 - **Leaving:** the browser warns before you leave with unsaved changes.
 - **`read-only`:** hides Save and Publish.
+
+### The visual editor
+
+`SfgCanvas` (`@flowamaz/workbench/components/canvas/SfgCanvas.vue`, not in the package index, because it brings in
+Cytoscape) is the full canvas editor: drag steps from the palette, connect them, edit each step's settings in its panel,
+undo and redo, and keep the YAML in step.
+
+`<SfgCanvas :workflow-id="id" :initial-yaml="yaml" @yaml-change="yaml = $event" @save="save" />`
+
+- It loads the workflow with the API's `getWorkflow`. `initial-yaml` and `yaml-change` keep it in step with a YAML editor beside it.
+- `state` shares the canvas state (selection, undo) with the rest of your page; without it the canvas keeps its own.
+- `read-only` shows the workflow without editing. `collab` joins a shared editing session (`CanvasCollab`).
+- The step settings list connectors, credentials and Library approval forms when the API has the optional
+  `listConnectors`, `listCredentials`, `listLibraryForms` and `saveLibraryForm`. Without them, the settings still
+  work; they just have no list to pick from.
 
 The picture is drawn with [`@flowamaz/canvas`](../canvas/README.md). The workbench uses the canvas from its sibling folder's source, so install both (`npm ci --prefix canvas && npm ci --prefix workbench`).
 
@@ -109,6 +122,7 @@ The package is published as TypeScript and `.vue` source, so your Vite build com
 - **Workflows:** list, get, create, save, delete, publish, archive, unarchive and versions.
 - **Runs:** start, list, get, events, timeline, cancel and retry.
 - **Gates:** list pending and decide.
+- **Canvas step settings (optional):** connectors, credentials, and Library approval forms (list and save).
 
 A failed call throws a `WorkbenchApiError` with the server's message, its code (e.g. `WORKFLOW_SLUG_TAKEN`) and the HTTP status. `describeError(e)` turns anything thrown into a message to show.
 

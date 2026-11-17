@@ -12,7 +12,15 @@ export interface WorkbenchHost {
   articleForError?: (status?: number, code?: string) => string | null;
   /** Opens a help article. Without it, no help links are shown. */
   openHelp?: (article: string) => void;
+  /**
+   * Opens one of the host's own pages that the screens point to (where credentials or webhooks are managed). Without
+   * it, the screens name the page in words instead of linking to it.
+   */
+  openPage?: (page: WorkbenchPage) => void;
 }
+
+/** Host pages the workbench screens can link to. */
+export type WorkbenchPage = 'credentials' | 'webhooks';
 
 export const WORKBENCH_HOST: InjectionKey<WorkbenchHost> = Symbol('flowamaz-workbench-host');
 
