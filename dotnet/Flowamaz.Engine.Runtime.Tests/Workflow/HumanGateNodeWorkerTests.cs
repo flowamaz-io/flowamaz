@@ -301,6 +301,27 @@ public class HumanGateNodeWorkerTests
         GateHmacHelper.ValidateHmac("message", "wrongsig", "key").Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("approver@example.com", "approver@example.com")]
+    [InlineData("  approver@example.com ", "approver@example.com")]
+    [InlineData("{{ variables.approver }}", null)]
+    [InlineData("approver", null)]
+    public async Task ExecuteAsync_BareAssigneeEmail_IsTheApprover(string assignee, string? expected)
+    {
+        // Hand-written YAML (e.g. the Community starter workflow) sets assignee: <email> without assigneeType.
+        GateDecision? created = null;
+        _gateRepo.Setup(r => r.AddAsync(It.IsAny<GateDecision>(), It.IsAny<CancellationToken>()))
+            .Callback<GateDecision, CancellationToken>((g, _) => created = g).Returns(Task.CompletedTask);
+        var config = JsonDocument.Parse(JsonSerializer.Serialize(new { assignee, gate_label = "Approve" }));
+        var ctx = new NodeExecutionContext(Guid.NewGuid(), Guid.NewGuid(),
+            new SfgNode("approve", NodeType.HumanGate, "Approval", config, null, null, null),
+            new WorkflowGraph("w", "v", [], [], new WorkflowMetadata("w", null)), new Dictionary<string, JsonElement>(), "lease");
+
+        await BuildWorker().ExecuteAsync(ctx, CancellationToken.None);
+
+        created!.AssignedToEmail.Should().Be(expected);
+    }
+
     [Fact]
     public async Task ExecuteAsync_CanvasKeys_AreHonoured_UserAssignee_SlackChannel_DayTimeout()
     {

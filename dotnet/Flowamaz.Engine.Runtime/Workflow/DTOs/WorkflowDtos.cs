@@ -97,7 +97,8 @@ public sealed record InstanceDetailResponse(
     IReadOnlyList<VariableResponse> Variables,
     IReadOnlyList<EventResponse> Events,
     Guid? TriggeredByUserId = null,
-    bool DataHidden = false);
+    bool DataHidden = false,
+    bool IsTest = false);
 
 // ── Run timeline (waterfall, prompt 02-05) ───────────────────────────────────
 

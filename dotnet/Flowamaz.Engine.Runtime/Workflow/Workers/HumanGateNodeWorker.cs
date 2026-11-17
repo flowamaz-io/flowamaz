@@ -80,7 +80,10 @@ public sealed class HumanGateNodeWorker : INodeWorker
             var assigneeRaw = GetString(config, "assignee");
             var assignedToVariable = GetString(config, "assigned_to_variable")
                 ?? (assigneeType == "variable" ? StripPlaceholder(assigneeRaw) : null);
-            var directAssigneeEmail = assigneeType == "user" && !string.IsNullOrWhiteSpace(assigneeRaw) ? assigneeRaw.Trim() : null;
+            // assignee: someone@example.com with no assigneeType (hand-written YAML) is that person, as for type user.
+            var directAssigneeEmail = !string.IsNullOrWhiteSpace(assigneeRaw)
+                && (assigneeType == "user" || (assigneeType is null && LooksLikeEmail(assigneeRaw)))
+                ? assigneeRaw.Trim() : null;
             var deliveryChannelRaw = GetString(config, "delivery_channel") ?? ChannelFromCanvas(config) ?? "Portal";
             var gateLabel = GetString(config, "gate_label") ?? (string.IsNullOrWhiteSpace(context.Node.Label) ? "Approval Required" : context.Node.Label);
             var gateSummary = GetString(config, "gate_summary") ?? string.Empty;
@@ -348,6 +351,13 @@ public sealed class HumanGateNodeWorker : INodeWorker
             return;
         }
         using var __ = await handler.ExecuteAsync(input, credential, ct);
+    }
+
+    private static bool LooksLikeEmail(string value)
+    {
+        var v = value.Trim();
+        var at = v.IndexOf('@');
+        return at > 0 && at < v.Length - 1 && v.IndexOf('@', at + 1) < 0 && !v.Contains(' ') && !v.Contains('{') && !v.Contains('$');
     }
 
     /// <summary>"${approver}" / "{{ variables.approver }}" / "approver" → "approver".</summary>

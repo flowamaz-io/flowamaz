@@ -10,7 +10,7 @@ import type { InstanceDetailResponse, TimelineResponse } from '../types';
 
 // One run on the WorkbenchApi alone, refreshed while it is going. Cancel and retry are shown when canAct.
 const props = withDefaults(defineProps<{ runId: string; canAct?: boolean; pollMs?: number }>(), { canAct: true, pollMs: 2000 });
-const emit = defineEmits<{ retried: [newRunId: string]; back: [] }>();
+const emit = defineEmits<{ retried: [newRunId: string]; back: [testRun: boolean] }>();
 
 const api = useWorkbenchApi();
 const run = ref<InstanceDetailResponse | null>(null);
@@ -65,7 +65,7 @@ onUnmounted(stop);
       :status-code="error.status"
       :error-code="error.code"
       :action-label="error.status === 404 ? 'Back to runs' : 'Retry'"
-      @action="error.status === 404 ? emit('back') : load()"
+      @action="error.status === 404 ? emit('back', false) : load()"
     />
     <div
       v-else-if="!run"
@@ -93,7 +93,7 @@ onUnmounted(stop);
           <button
             type="button"
             class="text-sm text-slate-400 hover:text-slate-600"
-            @click="emit('back')"
+            @click="emit('back', run?.isTest === true)"
           >
             ← Runs
           </button>

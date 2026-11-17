@@ -48,7 +48,7 @@ public sealed record WorkflowChangedEvent(
 
 /// <summary>
 /// Default version store: no history beyond the database. Each save gets a new opaque reference and each
-/// release the tag <c>{workflowId}/v{n}</c>; the published YAML is the version row's own copy.
+/// release the tag <c>v{n}</c> (tags are per workflow); the published YAML is the version row's own copy.
 /// </summary>
 public sealed class DatabaseWorkflowVersionStore : IWorkflowVersionStore
 {
@@ -58,7 +58,7 @@ public sealed class DatabaseWorkflowVersionStore : IWorkflowVersionStore
         Task.FromResult<WorkflowSaveResult?>(new WorkflowSaveResult(Guid.NewGuid().ToString("N"), "main"));
 
     public Task<string?> TagReleaseAsync(Guid workspaceId, Guid workflowId, int versionNumber, CancellationToken ct) =>
-        Task.FromResult<string?>($"{workflowId}/v{versionNumber}");
+        Task.FromResult<string?>($"v{versionNumber}");
 }
 
 /// <summary>Default admission: every workflow may be added.</summary>

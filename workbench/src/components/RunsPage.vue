@@ -11,15 +11,18 @@ import { isRunEnded, RUN_STATUSES } from '../runs';
 import type { InstanceListItem } from '../types';
 
 // The runs page on the WorkbenchApi alone: status filter, production / test tabs, and polling while runs are going.
-const props = withDefaults(defineProps<{ pollMs?: number }>(), { pollMs: 5000 });
-const emit = defineEmits<{ open: [runId: string]; 'go-to-workflows': [] }>();
+const props = withDefaults(
+  defineProps<{ pollMs?: number; initialTab?: 'production' | 'test' }>(),
+  { pollMs: 5000, initialTab: 'production' },
+);
+const emit = defineEmits<{ open: [runId: string]; 'go-to-workflows': []; 'tab-change': [tab: 'production' | 'test'] }>();
 
 const api = useWorkbenchApi();
 const runs = ref<InstanceListItem[]>([]);
 const names = ref(new Map<string, string>());
 const loading = ref(true);
 const error = ref<{ message: string; code?: string; status?: number } | null>(null);
-const tab = ref<'production' | 'test'>('production');
+const tab = ref<'production' | 'test'>(props.initialTab);
 const status = ref('');
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -54,6 +57,7 @@ function reload(): void {
 
 function switchTab(next: 'production' | 'test'): void {
   tab.value = next;
+  emit('tab-change', next);
   reload();
 }
 
@@ -118,6 +122,12 @@ defineExpose({ reload });
       :error-code="error.code"
       action-label="Try again"
       @action="reload"
+    />
+    <FmEmptyState
+      v-else-if="shown.length === 0 && status"
+      :icon="Activity"
+      title="No runs match"
+      :description="`No ${tab === 'test' ? 'test ' : ''}runs are ${status}. Choose All statuses to see the rest.`"
     />
     <FmEmptyState
       v-else-if="shown.length === 0"

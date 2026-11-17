@@ -147,6 +147,8 @@ export interface InstanceDetailResponse {
   triggeredByUserId?: string | null;
   /** True for Viewers: variables, payloads and step inputs/outputs are left out (FUNCTIONAL.md §4). */
   dataHidden?: boolean;
+  /** A test run (a draft's run, kept apart from production runs). */
+  isTest?: boolean;
 }
 
 export interface TimelineNode {

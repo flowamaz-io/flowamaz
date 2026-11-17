@@ -145,3 +145,32 @@ describe('RunsPage', () => {
     expect(api.listRuns).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('RunsPage tabs and filters', () => {
+  it('opens on the given tab, reports tab changes, and says when a filter matches nothing', async () => {
+    const api = fakeApi({ listRuns: vi.fn(async () => ({ items: [], total: 0, page: 1, pageSize: 100 })) });
+    const wrapper = mount(RunsPage, { props: { initialTab: 'test' }, ...host(api) });
+    await flushPromises();
+    expect(api.listRuns).toHaveBeenCalledWith(expect.objectContaining({ includeTest: true }));
+    expect(wrapper.text()).toContain('No test runs yet');
+
+    await wrapper.get('select').setValue('Failed');
+    await flushPromises();
+    expect(wrapper.text()).toContain('No runs match');
+    expect(wrapper.text()).toContain('No test runs are Failed');
+
+    await wrapper.findAll('button').find((b) => b.text() === 'production')!.trigger('click');
+    expect(wrapper.emitted('tab-change')![0]).toEqual(['production']);
+  });
+});
+
+describe('RunDetailPage back link', () => {
+  it('says whether the run was a test run, so the host can return to the right tab', async () => {
+    const api = fakeApi({ getRun: vi.fn(async () => run({ status: 'Completed', isTest: true })) });
+    const wrapper = mount(RunDetailPage, { props: { runId: 'r1' }, ...host(api) });
+    await flushPromises();
+    await wrapper.findAll('button').find((b) => b.text().includes('Runs'))!.trigger('click');
+    expect(wrapper.emitted('back')![0]).toEqual([true]);
+  });
+});
+

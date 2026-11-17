@@ -155,7 +155,7 @@ Also: `system_prompt` (instructions for the model) and `max_tokens` (default 102
   type: human-gate
   label: "Manager Approval"
   config:
-    assigned_to_variable: manager_email
+    assigned_to_variable: manager_email   # or a fixed approver: assignee: manager@example.com
     delivery_channel: slack        # One of: slack, teams, email, portal
     timeout_hours: 48
     escalate_to_variable: director_email

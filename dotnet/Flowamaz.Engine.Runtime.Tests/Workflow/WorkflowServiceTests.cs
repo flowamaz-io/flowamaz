@@ -438,6 +438,6 @@ public class WorkflowServiceTests
 
         first!.VersionRef.Should().NotBe(second!.VersionRef);
         first.VersionRef.Length.Should().BeLessThanOrEqualTo(64);
-        (await store.TagReleaseAsync(_ws, _id, 3, default)).Should().Be($"{_id}/v3");
+        (await store.TagReleaseAsync(_ws, _id, 3, default)).Should().Be("v3");
     }
 }

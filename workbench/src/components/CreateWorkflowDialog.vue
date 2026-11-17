@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import FmButton from './FmButton.vue';
 import FmModal from './FmModal.vue';
 import { describeError } from '../api';
@@ -18,6 +18,7 @@ const slug = ref('');
 const slugEdited = ref(false);
 const problem = ref<string | null>(null);
 const submitting = ref(false);
+const nameInput = ref<HTMLInputElement | null>(null);
 
 watch(() => props.modelValue, (open) => {
   if (!open) return;
@@ -25,6 +26,7 @@ watch(() => props.modelValue, (open) => {
   slug.value = '';
   slugEdited.value = false;
   problem.value = null;
+  void nextTick(() => nameInput.value?.focus());
 });
 watch(name, (value) => { if (!slugEdited.value) slug.value = slugify(value); });
 
@@ -65,6 +67,7 @@ async function submit(): Promise<void> {
         >Name</label>
         <input
           id="new-workflow-name"
+          ref="nameInput"
           v-model="name"
           type="text"
           placeholder="Leave request"

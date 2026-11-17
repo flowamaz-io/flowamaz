@@ -126,7 +126,7 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
         var version = await workflows.PublishAsync(_workspaceId, created.Id, Guid.NewGuid());
         version.Should().NotBeNull();
         version!.IsProduction.Should().BeTrue();
-        version.TagName.Should().Be($"{created.Id}/v1");
+        version.TagName.Should().Be("v1");
         return created.Id;
     }
 

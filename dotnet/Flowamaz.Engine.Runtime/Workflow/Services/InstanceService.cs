@@ -102,7 +102,8 @@ public sealed class InstanceService
             access.CanSeeData ? variables.Select(ToVariable).ToList() : [],
             events.TakeLast(50).Select(ToEvent).Select(e => access.CanSeeData ? e : WithoutData(e)).ToList(),
             instance.CreatedBy,
-            !access.CanSeeData);
+            !access.CanSeeData,
+            instance.IsTest);
     }
 
     /// <summary>Runners only see the runs they started.</summary>

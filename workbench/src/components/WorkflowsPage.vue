@@ -287,7 +287,7 @@ defineExpose({ reload: load });
       @update:model-value="(open: boolean) => { if (!open) deleteTarget = null; }"
     >
       <p class="text-sm text-slate-600">
-        “{{ deleteTarget?.name }}” will be deleted. It has never been published, so no runs depend on it.
+        “{{ deleteTarget?.name }}” will be deleted. It has never been published, so no production runs use it; any test runs of it go too.
       </p>
       <template #footer>
         <FmButton
