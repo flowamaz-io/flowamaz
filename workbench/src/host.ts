@@ -13,10 +13,10 @@ export interface WorkbenchHost {
   /** Opens a help article. Without it, no help links are shown. */
   openHelp?: (article: string) => void;
   /**
-   * Opens one of the host's own pages that the screens point to (where credentials or webhooks are managed). Without
-   * it, the screens name the page in words instead of linking to it.
+   * Opens the host's own pages that the screens point to (where credentials or webhooks are managed), for the pages it
+   * has. For a page it leaves out, the screens name the page in words, or say nothing when there's no such page.
    */
-  openPage?: (page: WorkbenchPage) => void;
+  pages?: Partial<Record<WorkbenchPage, () => void>>;
 }
 
 /** Host pages the workbench screens can link to. */

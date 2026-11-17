@@ -121,6 +121,7 @@
       :x="ctxMenu.x"
       :y="ctxMenu.y"
       :node-type="ctxMenu.nodeType"
+      :show-help="!!host.openHelp"
       @edit="onCtxEdit"
       @duplicate="onCtxDuplicate"
       @add-connected="onCtxAddConnected"
@@ -766,9 +767,11 @@ function addEdge(from: string, to: string): boolean {
 }
 
 function onCtxHelp() {
+  // The node's type as drawn (the right-click read it from the graph). The store's node list only has nodes dropped
+  // from the palette, so loaded nodes had no help before.
   const id = ctxMenu.value.nodeId || canvasStore.selectedNodeId;
-  const node = canvasStore.nodes.find(n => n.id === id);
-  if (node) openArticle(`node-types/${node.type}-nodes`);
+  const type = ctxMenu.value.nodeType || (id ? (canvas.cy.value?.getElementById(id).data('nodeType') as string | undefined) : undefined);
+  if (type) openArticle(`node-types/${canvasNodeType(type)}-nodes`);
   ctxMenu.value.visible = false;
 }
 

@@ -14,6 +14,9 @@ const api = useWorkbenchHost().api;
 /** The host has a Library of approval forms (pick one, or save this one to it). */
 const hasLibrary = !!(api?.listLibraryForms && api.saveLibraryForm);
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : '');
+const emptyHint = hasLibrary
+  ? 'No form yet — the approver just approves or rejects. Add a field, or start from a Library form such as Purchase details.'
+  : 'No form yet — the approver just approves or rejects. Add a field to ask them for details.';
 const emit = defineEmits<{ update: [config: Config] }>();
 
 function readFields(config: Config): GateFormField[] {
@@ -159,8 +162,7 @@ const inputClass = 'w-full rounded-md border border-gray-600 bg-gray-800 px-2 py
       class="rounded-md border border-dashed border-gray-600 px-3 py-2 text-xs text-gray-400"
       data-test="gate-form-empty"
     >
-      No form yet — the approver just approves or rejects. Add a field, or start from a Library form such as
-      Purchase details.
+      {{ emptyHint }}
     </p>
 
     <div

@@ -54,6 +54,7 @@ Routes start with the prefix (`/api/v1` here). JSON is camelCase, with enums as 
 | `GET /workspaces/{ws}/gates?includeTest&status` | Read | `status=pending` (default): gates waiting for a decision; `status=all`: decided ones too, newest first (up to 200) |
 | `GET /workspaces/{ws}/gates/{runId}/{nodeId}` | Read | |
 | `POST /workspaces/{ws}/gates/{runId}/{nodeId}/decide` | Decide | `{ decision: "approved" \| "rejected", note?, values? }` |
+| `GET /workspaces/{ws}/connectors` | Read | The connectors this host registered: `[{ connectorId, displayName, manifestJson, isOfficial, isInstalled }]` (official ones with the catalog's manifest) |
 | `POST /hooks/workspaces/{ws}/workflows/{id}` | (signature) | the webhook trigger, below |
 
 ## Webhook trigger

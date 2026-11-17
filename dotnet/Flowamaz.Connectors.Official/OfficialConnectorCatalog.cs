@@ -147,6 +147,17 @@ public static class OfficialConnectorCatalog
     public static ConnectorSpec? FindConnector(string connectorId) =>
         Connectors.FirstOrDefault(c => c.ConnectorId == connectorId);
 
+    private static readonly Dictionary<string, string> DisplayNames = new(StringComparer.Ordinal)
+    {
+        ["http-rest"] = "HTTP/REST", ["postgresql"] = "PostgreSQL", ["mysql"] = "MySQL", ["slack"] = "Slack",
+        ["microsoft-teams"] = "Microsoft Teams", ["email-smtp"] = "Email (SMTP/Resend)", ["webhook-emit"] = "Webhook Emit",
+        ["webhook-receive"] = "Webhook Receive", ["file-system"] = "File System", ["schedule-cron"] = "Schedule/Cron",
+        ["script-shell"] = "Script/Shell", ["github"] = "GitHub", ["microsoft-365"] = "Microsoft 365",
+    };
+
+    /// <summary>The name people see for an official connector; null for one this catalog doesn't list.</summary>
+    public static string? DisplayName(string connectorId) => DisplayNames.GetValueOrDefault(connectorId);
+
     /// <summary>Manifest JSON stored on the seeded ConnectorDefinition (deterministic for EF HasData).</summary>
     public static string ManifestJson(string connectorId)
     {

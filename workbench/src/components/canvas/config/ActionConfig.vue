@@ -198,10 +198,10 @@ onMounted(async () => {
       >
         No {{ selectedConnector.displayName }} credential yet.
         <button
-          v-if="host.openPage"
+          v-if="host.pages?.credentials"
           type="button"
           class="underline hover:text-amber-300"
-          @click="host.openPage('credentials')"
+          @click="host.pages.credentials()"
         >
           Add one in Settings → Credentials
         </button>

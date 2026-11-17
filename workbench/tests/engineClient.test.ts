@@ -19,6 +19,16 @@ describe('createEngineApiClient', () => {
     expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer t');
   });
 
+  it('lists the connectors the host registered, and leaves credentials and Library forms to the host', async () => {
+    const fetch = fakeFetch(200, [{ connectorId: 'slack', displayName: 'Slack', manifestJson: '{}', isOfficial: true }]);
+    const api = createEngineApiClient({ baseUrl: '/api/v1', workspaceId: 'ws', fetch });
+
+    expect(await api.listConnectors!()).toEqual([{ connectorId: 'slack', displayName: 'Slack', manifestJson: '{}', isOfficial: true }]);
+    expect(fetch.mock.calls[0]![0]).toBe('/api/v1/workspaces/ws/connectors');
+    expect(api.listCredentials).toBeUndefined();
+    expect(api.listLibraryForms).toBeUndefined();
+  });
+
   it('sends a run payload as JSON and the idempotency key as a header', async () => {
     const fetch = fakeFetch(202, { instanceId: 'r1', status: 'Pending', triggeredAt: '2026-11-16T00:00:00Z' });
     const api = createEngineApiClient({ baseUrl: '/api/v1', workspaceId: 'ws', fetch });

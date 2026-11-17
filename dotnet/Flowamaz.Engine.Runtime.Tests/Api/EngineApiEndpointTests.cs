@@ -75,6 +75,9 @@ public sealed class EngineApiEndpointTests : IAsyncLifetime
         builder.Services.AddFlowamazEngineWorker();
         builder.Services.AddFlowamazEngineApi(builder.Configuration);
         builder.Services.AddSingleton<IEngineApiAccess>(new SignedInUserAccess(_workspaceId));
+        builder.Services.AddScoped<Flowamaz.Core.Interfaces.Services.IConnectorOperationHandler>(_ => new FakeHandler("slack", "send-message"));
+        builder.Services.AddScoped<Flowamaz.Core.Interfaces.Services.IConnectorOperationHandler>(_ => new FakeHandler("acme-crm", "create-lead"));
+        builder.Services.AddScoped<Flowamaz.Core.Interfaces.Services.IConnectorOperationHandler>(_ => new FakeHandler("acme-crm", "find-lead"));
 
         _app = builder.Build();
         _app.UseAuthentication();
@@ -116,6 +119,37 @@ public sealed class EngineApiEndpointTests : IAsyncLifetime
             if (DateTime.UtcNow > until) throw new TimeoutException($"Run {runId} is still {run.GetProperty("status")}.");
             await Task.Delay(100);
         }
+    }
+
+    private sealed class FakeHandler(string connectorId, string operationId) : Flowamaz.Core.Interfaces.Services.IConnectorOperationHandler
+    {
+        public string ConnectorId => connectorId;
+        public string OperationId => operationId;
+        public Task<JsonDocument> ExecuteAsync(JsonDocument input, Flowamaz.Core.Models.ConnectorCredential? credential, CancellationToken ct) =>
+            Task.FromResult(JsonDocument.Parse("{}"));
+    }
+
+    [Fact]
+    public async Task Connectors_lists_what_the_host_registered_with_each_manifest()
+    {
+        var response = await _client.GetAsync($"{Ws}/connectors");
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var list = (await JsonOf(response)).EnumerateArray().ToList();
+
+        list.Select(c => c.GetProperty("connectorId").GetString()).Should().Equal("acme-crm", "slack");
+        var slack = list.Single(c => c.GetProperty("connectorId").GetString() == "slack");
+        slack.GetProperty("displayName").GetString().Should().Be("Slack");
+        slack.GetProperty("isOfficial").GetBoolean().Should().BeTrue();
+        var slackManifest = JsonDocument.Parse(slack.GetProperty("manifestJson").GetString()!).RootElement;
+        slackManifest.GetProperty("operations").EnumerateArray().Select(o => o.GetProperty("id").GetString())
+            .Should().Contain("send-message", "the official catalog's manifest");
+
+        var acme = list.Single(c => c.GetProperty("connectorId").GetString() == "acme-crm");
+        acme.GetProperty("displayName").GetString().Should().Be("acme-crm");
+        acme.GetProperty("isOfficial").GetBoolean().Should().BeFalse();
+        acme.GetProperty("isInstalled").GetBoolean().Should().BeTrue("registered in the host is installed");
+        JsonDocument.Parse(acme.GetProperty("manifestJson").GetString()!).RootElement.GetProperty("operations")
+            .EnumerateArray().Select(o => o.GetProperty("id").GetString()).Should().Equal("create-lead", "find-lead");
     }
 
     [Fact]

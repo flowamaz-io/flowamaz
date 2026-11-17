@@ -70,13 +70,15 @@ const cronPreview = computed<string>(() => {
     <div v-if="triggerType === 'webhook'">
       <label class="mb-1 block text-xs font-medium text-gray-300">Webhook URL</label>
       <code class="block break-all rounded-md border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-300">
-        {{ webhookUrl || 'Create a webhook in Settings → Webhooks for this workflow.' }}
+        {{ webhookUrl || (host.pages?.webhooks
+          ? 'Create a webhook in Settings → Webhooks for this workflow.'
+          : 'Runs start when the workflow\'s webhook is called with a signed POST (see "Webhook trigger" in the engine API docs).') }}
       </code>
       <button
-        v-if="host.openPage"
+        v-if="host.pages?.webhooks"
         type="button"
         class="mt-1 inline-block text-xs text-indigo-400 hover:text-indigo-300"
-        @click="host.openPage('webhooks')"
+        @click="host.pages.webhooks()"
       >
         Manage webhooks
       </button>

@@ -1,4 +1,4 @@
-import { WorkbenchApiError, type GateListOptions, type RunListFilters, type StartRunRequest, type WorkbenchApi } from './api';
+import { WorkbenchApiError, type ConnectorSummary, type GateListOptions, type RunListFilters, type StartRunRequest, type WorkbenchApi } from './api';
 import type {
   CreateWorkflowDefinitionRequest,
   EventResponse,
@@ -106,5 +106,8 @@ export function createEngineApiClient(options: EngineApiClientOptions): Workbenc
     })}`),
     decideGate: (run, nodeId, decision, note?: string, values?: Record<string, GateFormValue>) =>
       call<GateResponse>('POST', `/gates/${id(run)}/${id(nodeId)}/decide`, { decision, note, values }),
+
+    // Credentials and Library forms are the host's own (the engine API has none), so the host adds those calls.
+    listConnectors: () => call<ConnectorSummary[]>('GET', '/connectors'),
   };
 }

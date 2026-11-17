@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue';
 import FmBadge from './FmBadge.vue';
 import FmButton from './FmButton.vue';
 import FmErrorState from './FmErrorState.vue';
@@ -10,10 +10,13 @@ import { describeError } from '../api';
 import { useWorkbenchApi } from '../host';
 import type { WorkflowDefinitionResponse } from '../types';
 
-// Edit one workflow on the WorkbenchApi alone: its YAML on the left, a live picture of it on the right, Save and
-// Publish (which saves first). The server validates on publish and its message is shown as it is.
-// Visual editing on the canvas is a later step; the product's editor has it.
-const props = withDefaults(defineProps<{ workflowId: string; readOnly?: boolean }>(), { readOnly: false });
+// Edit one workflow on the WorkbenchApi alone: its YAML on the left and, on the right, either a live picture of it or
+// (with `canvas`) the visual editor, kept in step with the YAML. Save and Publish (which saves first); the server
+// validates on publish and its message is shown as it is.
+const props = withDefaults(defineProps<{ workflowId: string; readOnly?: boolean; canvas?: boolean }>(), { readOnly: false, canvas: false });
+
+// Loaded only when used: the canvas brings in Cytoscape.
+const SfgCanvas = defineAsyncComponent(() => import('./canvas/SfgCanvas.vue'));
 const emit = defineEmits<{ published: [workflow: WorkflowDefinitionResponse]; back: [] }>();
 
 const api = useWorkbenchApi();
@@ -192,7 +195,25 @@ defineExpose({ dirty, save });
             :read-only="readOnly"
           />
         </div>
-        <div class="relative min-h-64">
+        <div
+          v-if="canvas"
+          class="relative h-[32rem] min-h-0 lg:h-auto"
+          data-testid="editor-canvas"
+        >
+          <SfgCanvas
+            :workflow-id="workflowId"
+            :initial-yaml="yaml"
+            :read-only="readOnly"
+            :saving="busy === 'save'"
+            :is-dirty="dirty"
+            @yaml-change="yaml = $event"
+            @save="save"
+          />
+        </div>
+        <div
+          v-else
+          class="relative min-h-64"
+        >
           <WorkflowGraphPreview
             :yaml="yaml"
             @valid="(ok: boolean) => (drawable = ok)"

@@ -52,7 +52,8 @@ type ActionItem = {
 type SeparatorItem = { separator: true; id: string };
 type MenuItem = ActionItem | SeparatorItem;
 
-const props = defineProps<{ visible: boolean; x: number; y: number; nodeType?: string }>();
+/** `showHelp: false` leaves out "Help with … node" (for a host with no help articles). */
+const props = withDefaults(defineProps<{ visible: boolean; x: number; y: number; nodeType?: string; showHelp?: boolean }>(), { showHelp: true });
 const emit = defineEmits<{
   edit: [];
   duplicate: [];
@@ -131,7 +132,9 @@ const menuItems = computed((): MenuItem[] => {
     { id: 'edit', label: 'Edit', icon: Edit2, action: () => emit('edit') },
     { id: 'duplicate', label: 'Duplicate', icon: Copy, action: () => emit('duplicate') },
     { id: 'add-connected', label: 'Add connected node', icon: PlusCircle, action: () => emit('add-connected') },
-    { id: 'help', label: `Help with ${nodeType ?? 'this'} node`, icon: HelpCircle, action: () => emit('help', nodeType ?? '') },
+    ...(props.showHelp
+      ? [{ id: 'help', label: `Help with ${nodeType ?? 'this'} node`, icon: HelpCircle, action: () => emit('help', nodeType ?? '') }]
+      : []),
     { id: 'show-in-yaml', label: 'Show in YAML', icon: FileCode, action: () => emit('show-in-yaml') },
   ];
   const typeItems = getTypeSpecificItems(nodeType);

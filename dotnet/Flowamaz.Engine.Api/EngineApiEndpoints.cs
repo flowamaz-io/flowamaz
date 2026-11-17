@@ -182,11 +182,43 @@ public static class EngineApiEndpoints
                     body!.Decision, body.Note, caller.UserId, ct, values: body.Values), "gate", runId, nodeId);
             }));
 
+        // ── Connectors (what a connector step can use in this host) ─────────
+        // The connectors whose operations this host has registered, each with its manifest (operations and how it signs
+        // in), so an editor can offer them. Official ones carry the catalog's manifest; others list their operations.
+        ws.MapGet("/connectors", (HttpContext h, Guid workspaceId, CancellationToken ct) =>
+            As(h, workspaceId, EngineApiAction.Read, ct, (_, s) => Task.FromResult(Ok(ListConnectors(s)))));
+
         // ── Webhook trigger (signed, no sign-in) ─────────────────────────────
         root.MapPost("/hooks/workspaces/{workspaceId:guid}/workflows/{id:guid}", WebhookAsync);
 
         return root;
     }
+
+    /// <summary>
+    /// One connector a step can use: its id, the name to show and its manifest as JSON. Registered in the host means
+    /// installed, so <c>IsInstalled</c> is always true here.
+    /// </summary>
+    public sealed record ConnectorListItem(string ConnectorId, string DisplayName, string ManifestJson, bool IsOfficial, bool IsInstalled = true);
+
+    internal static IReadOnlyList<ConnectorListItem> ListConnectors(IServiceProvider services) =>
+        services.GetServices<Flowamaz.Core.Interfaces.Services.IConnectorOperationHandler>()
+            .GroupBy(handler => handler.ConnectorId, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var official = Flowamaz.Application.Connectors.OfficialConnectorCatalog.FindConnector(group.Key) is not null;
+                var manifest = official
+                    ? Flowamaz.Application.Connectors.OfficialConnectorCatalog.ManifestJson(group.Key)
+                    : JsonSerializer.Serialize(new
+                    {
+                        id = group.Key,
+                        operations = group.Select(handler => new { id = handler.OperationId, name = handler.OperationId })
+                            .DistinctBy(o => o.id).OrderBy(o => o.id, StringComparer.Ordinal),
+                    }, Json);
+                var name = Flowamaz.Application.Connectors.OfficialConnectorCatalog.DisplayName(group.Key) ?? group.Key;
+                return new ConnectorListItem(group.Key, name, manifest, official);
+            })
+            .OrderBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     private sealed record CreateWorkflowBody(string? Name, string? Slug, string? YamlContent, string? Description, long? SlaThresholdMs);
 
