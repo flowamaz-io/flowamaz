@@ -63,7 +63,8 @@ public sealed class GateDecisionRepository(EngineDbContext db) : IGateDecisionRe
 
     public Task<bool> IsInstanceFinishedAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
         db.WorkflowInstances.AnyAsync(i => i.Id == instanceId
-            && (i.Status == InstanceStatus.Cancelled || i.Status == InstanceStatus.Completed || i.Status == InstanceStatus.Failed),
+            && (i.Status == InstanceStatus.Cancelled || i.Status == InstanceStatus.Completed || i.Status == InstanceStatus.Failed
+                || i.Status == InstanceStatus.Rejected),
             cancellationToken);
 
     public async Task AddAsync(GateDecision gate, CancellationToken cancellationToken = default) =>

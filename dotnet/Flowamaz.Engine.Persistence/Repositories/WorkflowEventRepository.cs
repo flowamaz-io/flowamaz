@@ -24,18 +24,21 @@ public sealed class WorkflowEventRepository(EngineDbContext db) : IWorkflowEvent
             join d in db.WorkflowDefinitions.AsNoTracking() on i.WorkflowDefinitionId equals d.Id
             where i.WorkspaceId == workspaceId && d.WorkspaceId == workspaceId && ids.Contains(i.WorkflowDefinitionId) && !i.IsTest
                 && i.StartedAt != null && i.StartedAt >= since
-                && (i.Status == Core.Enums.InstanceStatus.Completed || i.Status == Core.Enums.InstanceStatus.Failed)
+                && (i.Status == Core.Enums.InstanceStatus.Completed || i.Status == Core.Enums.InstanceStatus.Failed
+                    || i.Status == Core.Enums.InstanceStatus.Rejected)
             select new { i.WorkflowDefinitionId, i.Status, i.StartedAt, End = i.CompletedAt ?? i.FailedAt, d.SlaThresholdMs })
             .ToListAsync(cancellationToken);
 
         return runs.GroupBy(r => r.WorkflowDefinitionId).ToDictionary(g => g.Key, g =>
         {
-            var durations = g.Where(r => r.End is not null).Select(r => new { r.SlaThresholdMs, Ms = (r.End!.Value - r.StartedAt!.Value).TotalMilliseconds }).ToList();
+            // Durations and SLA breaches stay over completed and failed runs, as before B10.
+            var durations = g.Where(r => r.End is not null && r.Status != Core.Enums.InstanceStatus.Rejected).Select(r => new { r.SlaThresholdMs, Ms = (r.End!.Value - r.StartedAt!.Value).TotalMilliseconds }).ToList();
             return new Core.Models.RunPerformanceRow(
                 g.Count(r => r.Status == Core.Enums.InstanceStatus.Completed),
                 g.Count(r => r.Status == Core.Enums.InstanceStatus.Failed),
                 durations.Count == 0 ? 0 : durations.Average(x => x.Ms),
-                durations.Count(x => x.SlaThresholdMs is > 0 && x.Ms > x.SlaThresholdMs));
+                durations.Count(x => x.SlaThresholdMs is > 0 && x.Ms > x.SlaThresholdMs),
+                g.Count(r => r.Status == Core.Enums.InstanceStatus.Rejected));
         });
     }
 
@@ -47,7 +50,8 @@ public sealed class WorkflowEventRepository(EngineDbContext db) : IWorkflowEvent
         var runs = await db.WorkflowInstances.AsNoTracking()
             .Where(i => i.WorkspaceId == workspaceId && i.WorkflowDefinitionId == workflowDefinitionId && !i.IsTest
                 && i.StartedAt != null && i.StartedAt >= since
-                && (i.Status == Core.Enums.InstanceStatus.Completed || i.Status == Core.Enums.InstanceStatus.Failed))
+                && (i.Status == Core.Enums.InstanceStatus.Completed || i.Status == Core.Enums.InstanceStatus.Failed
+                    || i.Status == Core.Enums.InstanceStatus.Rejected)) // a rejected run's wait at the gate is a real wait
             .OrderByDescending(i => i.StartedAt)
             .Take(maxRuns)
             .Select(i => new { i.Id, StartedAt = i.StartedAt!.Value, EndedAt = i.CompletedAt ?? i.FailedAt })

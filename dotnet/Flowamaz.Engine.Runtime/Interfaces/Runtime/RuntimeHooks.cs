@@ -18,6 +18,9 @@ public interface IRunEventSink
     Task RunCompletedAsync(RunCompletedEvent e, CancellationToken ct);
     Task RunCancelledAsync(RunCancelledEvent e, CancellationToken ct);
     Task GateDecidedAsync(GateDecidedEvent e, CancellationToken ct);
+
+    /// <summary>The run ended Rejected (an approver's "no", B10). Defaults to nothing so existing sinks keep working.</summary>
+    Task RunRejectedAsync(RunRejectedEvent e, CancellationToken ct) => Task.CompletedTask;
 }
 
 /// <summary>Lets a host pause a run before a node executes (for example, a debugger breakpoint).</summary>
@@ -34,6 +37,10 @@ public sealed record RunStartedEvent(
 /// <param name="CreatedBy">The user who started the run, if any.</param>
 /// <param name="WorkflowName">The workflow's name, for messages; null if unknown.</param>
 public sealed record RunCompletedEvent(Guid WorkspaceId, Guid InstanceId, Guid? CreatedBy, string? WorkflowName = null);
+
+/// <param name="Reason">The reason the run records, e.g. "Gate rejected: budget too high".</param>
+public sealed record RunRejectedEvent(
+    Guid WorkspaceId, Guid InstanceId, Guid WorkflowId, string? WorkflowName, Guid? CreatedBy, string NodeId, string Reason, bool IsTest);
 
 /// <param name="ActorUserId">Who cancelled it; null for a public-API call (the host attributes it to the API key).</param>
 /// <param name="CancelledByLabel">A name the calling application gave, when there is no user.</param>

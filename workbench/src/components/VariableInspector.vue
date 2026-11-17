@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const api = useWorkbenchApi();
 
-const TERMINAL: InstanceStatus[] = ['Completed', 'Failed', 'Cancelled'];
+const TERMINAL: InstanceStatus[] = ['Completed', 'Rejected', 'Failed', 'Cancelled'];
 const POLL_MS = 5000;
 
 const variables = ref<VariableResponse[]>([]);

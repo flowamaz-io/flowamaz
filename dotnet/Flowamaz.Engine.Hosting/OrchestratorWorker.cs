@@ -180,7 +180,7 @@ public sealed class OrchestratorWorker : BackgroundService
             if (node is null) continue;
             // Cancelled (or otherwise ended) since the step: don't run the node's side effects (HTTP calls, emails).
             if (await instances.GetCurrentStatusAsync(instanceId, cancellationToken)
-                is InstanceStatus.Cancelled or InstanceStatus.Completed or InstanceStatus.Failed)
+                is InstanceStatus.Cancelled or InstanceStatus.Completed or InstanceStatus.Failed or InstanceStatus.Rejected)
             {
                 _logger.LogInformation("OrchestratorWorker {WorkerId} skips node={NodeId}: instance={InstanceId} has ended", _workerId, nodeId, instanceId);
                 return;

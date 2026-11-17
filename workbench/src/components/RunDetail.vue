@@ -82,6 +82,14 @@ const activeTab = ref('timeline');
     </div>
 
     <p
+      v-if="run.status === 'Rejected'"
+      class="rounded-lg border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-800"
+      data-testid="run-rejected"
+    >
+      {{ run.errorMessage ?? 'An approver rejected this run.' }} The steps after the approval did not run.
+    </p>
+
+    <p
       v-if="dataHidden"
       class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
       data-testid="run-data-hidden"

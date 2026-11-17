@@ -62,20 +62,21 @@ public class WorkflowInstance : WorkspaceEntity
             [InstanceStatus.Pending] = [InstanceStatus.Running, InstanceStatus.Cancelled],
             [InstanceStatus.Running] =
             [
-                InstanceStatus.Waiting, InstanceStatus.Completed, InstanceStatus.Failed,
+                InstanceStatus.Waiting, InstanceStatus.Completed, InstanceStatus.Failed, InstanceStatus.Rejected,
                 InstanceStatus.Cancelled, InstanceStatus.Compensating, InstanceStatus.BreakpointHit,
             ],
             // A breakpoint pause resumes back to Running, or the run can be cancelled outright.
             [InstanceStatus.BreakpointHit] = [InstanceStatus.Running, InstanceStatus.Cancelled],
             [InstanceStatus.Waiting] =
             [
-                InstanceStatus.Running, InstanceStatus.Failed,
+                InstanceStatus.Running, InstanceStatus.Failed, InstanceStatus.Rejected,
                 InstanceStatus.Cancelled, InstanceStatus.Compensating,
             ],
             // Running is reachable from Compensating for the Forward saga strategy (resume execution).
-            [InstanceStatus.Compensating] = [InstanceStatus.Completed, InstanceStatus.Failed, InstanceStatus.Running],
+            [InstanceStatus.Compensating] = [InstanceStatus.Completed, InstanceStatus.Failed, InstanceStatus.Rejected, InstanceStatus.Running],
             [InstanceStatus.Completed] = [],
             [InstanceStatus.Failed] = [InstanceStatus.Compensating],
+            [InstanceStatus.Rejected] = [InstanceStatus.Compensating],
             [InstanceStatus.Cancelled] = [],
         };
 }

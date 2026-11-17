@@ -53,7 +53,8 @@ public sealed class SagaEngine : ISagaEngine
         _logger = logger;
     }
 
-    public async Task StartAsync(Guid instanceId, string failedNodeId, SagaStrategyType strategy, CancellationToken cancellationToken = default)
+    public async Task StartAsync(Guid instanceId, string failedNodeId, SagaStrategyType strategy, CancellationToken cancellationToken = default,
+        InstanceStatus endStatus = InstanceStatus.Failed)
     {
         _logger.LogInformation(
             "SagaEngine.StartAsync enter instance={InstanceId} failedNode={FailedNode} strategy={Strategy}",
@@ -79,10 +80,10 @@ public sealed class SagaEngine : ISagaEngine
                 seq = await ForwardAsync(instance, failedNodeId, states, seq, cancellationToken);
                 break;
             case SagaStrategyType.Pivot:
-                seq = await PivotAsync(instance, graph, failedNodeId, states, seq, cancellationToken);
+                seq = await PivotAsync(instance, graph, failedNodeId, states, seq, endStatus, cancellationToken);
                 break;
             default:
-                seq = await BackwardAsync(instance, graph, states, seq, cancellationToken);
+                seq = await BackwardAsync(instance, graph, states, seq, endStatus, cancellationToken);
                 break;
         }
 
@@ -91,7 +92,8 @@ public sealed class SagaEngine : ISagaEngine
             instanceId, instance.SagaState, instance.Status);
     }
 
-    private async Task<long> BackwardAsync(WorkflowInstance instance, WorkflowGraph graph, List<WorkflowNodeState> states, long seq, CancellationToken ct)
+    private async Task<long> BackwardAsync(WorkflowInstance instance, WorkflowGraph graph, List<WorkflowNodeState> states, long seq,
+        InstanceStatus endStatus, CancellationToken ct)
     {
         var reverseCompleted = states
             .Where(s => s.Status == NodeStatus.Completed)
@@ -141,7 +143,7 @@ public sealed class SagaEngine : ISagaEngine
             }
         }
 
-        return await FinalizeAsync(instance, seq, anyFailed, ct);
+        return await FinalizeAsync(instance, seq, anyFailed, endStatus, ct);
     }
 
     private async Task<long> ForwardAsync(WorkflowInstance instance, string failedNodeId, List<WorkflowNodeState> states, long seq, CancellationToken ct)
@@ -163,31 +165,34 @@ public sealed class SagaEngine : ISagaEngine
         return await AppendEventAsync(seq, instance, "CompensationCompleted", failedNodeId, null, """{"strategy":"Forward"}""", ct);
     }
 
-    private async Task<long> PivotAsync(WorkflowInstance instance, WorkflowGraph graph, string failedNodeId, List<WorkflowNodeState> states, long seq, CancellationToken ct)
+    private async Task<long> PivotAsync(WorkflowInstance instance, WorkflowGraph graph, string failedNodeId, List<WorkflowNodeState> states, long seq,
+        InstanceStatus endStatus, CancellationToken ct)
     {
         // Compensate everything completed before the pivot, then retry the pivot forward.
         var before = states
             .Where(s => s.Status == NodeStatus.Completed && s.NodeId != failedNodeId)
             .ToList();
-        seq = await BackwardAsync(instance, graph, before, seq, ct);
+        seq = await BackwardAsync(instance, graph, before, seq, endStatus, ct);
 
         // Backward set a terminal state; Pivot resumes, so retry the failed node forward.
         return await ForwardAsync(instance, failedNodeId, states, seq, ct);
     }
 
-    private async Task<long> FinalizeAsync(WorkflowInstance instance, long seq, bool anyFailed, CancellationToken ct)
+    private async Task<long> FinalizeAsync(WorkflowInstance instance, long seq, bool anyFailed, InstanceStatus endStatus, CancellationToken ct)
     {
+        // A rejection stays a rejection after compensation, even if a compensation step failed (SagaState says so).
+        var end = endStatus == InstanceStatus.Rejected ? InstanceStatus.Rejected : InstanceStatus.Failed;
         if (anyFailed)
         {
             instance.SagaState = SagaState.CompensationFailed;
-            if (instance.CanTransitionTo(InstanceStatus.Failed)) instance.TransitionTo(InstanceStatus.Failed);
+            if (instance.CanTransitionTo(end)) instance.TransitionTo(end);
             instance.FailedAt ??= DateTime.UtcNow;
             _instances.Update(instance);
             return await AppendEventAsync(seq, instance, "CompensationFailed", null, null, "{}", ct);
         }
 
         instance.SagaState = SagaState.None;
-        if (instance.CanTransitionTo(InstanceStatus.Failed)) instance.TransitionTo(InstanceStatus.Failed);
+        if (instance.CanTransitionTo(end)) instance.TransitionTo(end);
         instance.FailedAt ??= DateTime.UtcNow;
         _instances.Update(instance);
         return await AppendEventAsync(seq, instance, "CompensationCompleted", null, null, "{}", ct);

@@ -42,6 +42,13 @@ public interface IWorkflowOrchestrator
         bool retryable = true);
 
     /// <summary>
+    /// Ends a gate node that an approver rejected when the workflow has no <c>rejected</c> path (B10): the node
+    /// is Failed with <paramref name="reason"/>, compensation runs as for a failure, and the run ends Rejected
+    /// rather than Failed. Never retried.
+    /// </summary>
+    Task RejectNodeAsync(Guid instanceId, string nodeId, string reason, string leaseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Parks the instance at a human gate: the node stays Running, the instance becomes Waiting and a
     /// GateWaiting event is appended. The decision later calls Complete/FailNodeAsync to resume.
     /// </summary>

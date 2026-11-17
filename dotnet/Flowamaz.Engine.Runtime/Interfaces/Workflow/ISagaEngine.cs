@@ -10,5 +10,8 @@ namespace Flowamaz.Core.Interfaces.Workflow;
 /// </summary>
 public interface ISagaEngine
 {
-    Task StartAsync(Guid instanceId, string failedNodeId, SagaStrategyType strategy, CancellationToken cancellationToken = default);
+    /// <param name="endStatus">How the run ends once compensation finishes: Failed, or Rejected when an
+    /// approver's "no" started the saga (B10).</param>
+    Task StartAsync(Guid instanceId, string failedNodeId, SagaStrategyType strategy, CancellationToken cancellationToken = default,
+        InstanceStatus endStatus = InstanceStatus.Failed);
 }

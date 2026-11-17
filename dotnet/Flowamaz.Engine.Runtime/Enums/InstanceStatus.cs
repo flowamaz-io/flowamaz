@@ -19,4 +19,10 @@ public enum InstanceStatus
     /// only in the Development environment; resume transitions back to Running.
     /// </summary>
     BreakpointHit,
+
+    /// <summary>
+    /// Ended by an approver's "no" at a gate that has no <c>rejected</c> path (B10). A business outcome,
+    /// not an error: analytics count it apart from <see cref="Failed"/>. The end time is stored in FailedAt.
+    /// </summary>
+    Rejected,
 }

@@ -6,6 +6,7 @@ using Flowamaz.Core.Exceptions;
 using Flowamaz.Core.Interfaces.Persistence;
 using Flowamaz.Core.Interfaces.Queue;
 using Flowamaz.Core.Interfaces.Repositories;
+using Flowamaz.Core.Interfaces.Runtime;
 using Flowamaz.Core.Interfaces.Services;
 using Flowamaz.Core.Interfaces.Workflow;
 using Flowamaz.Core.Workflow;
@@ -286,6 +287,48 @@ public class WorkflowOrchestratorTests
         state.Status.Should().Be(NodeStatus.Failed);
         instance.Status.Should().Be(InstanceStatus.Failed);
         instance.ErrorMessage.Should().Be("boom");
+    }
+
+    [Fact]
+    public async Task RejectNodeAsync_ends_the_run_Rejected_not_Failed()
+    {
+        // B10: an approver's "no" with no rejected path is a business outcome, not an error.
+        var instanceId = SetupNodeOps(SnakeRetryYaml, out var instance, out var state);
+        instance.WorkflowDefinitionId = _definitionId;
+        instance.IsTest = true;
+        _definitions.Setup(r => r.GetByIdForWorkspaceAsync(_definitionId, _workspaceId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkflowDefinition { Id = _definitionId, WorkspaceId = _workspaceId, Name = "Loan", Slug = "loan" });
+        var appended = new List<WorkflowEvent>();
+        _events.Setup(r => r.AppendAsync(It.IsAny<WorkflowEvent>(), It.IsAny<CancellationToken>()))
+            .Callback<WorkflowEvent, CancellationToken>((e, _) => appended.Add(e)).Returns(Task.CompletedTask);
+        var sink = new Mock<IRunEventSink>();
+
+        await new WorkflowOrchestrator(
+            _definitions.Object, _versions.Object, _instances.Object, _nodeStates.Object,
+            _variables.Object, _events.Object, _queue.Object, _variableEvaluation.Object,
+            _unitOfWork.Object, new SfgParser(), NullLogger<WorkflowOrchestrator>.Instance, runEvents: sink.Object)
+            .RejectNodeAsync(instanceId, "a", "Gate rejected: too risky", "gate");
+
+        state.Status.Should().Be(NodeStatus.Failed);
+        state.RetryCount.Should().Be(0, "a rejection is never retried, even with a retry policy");
+        instance.Status.Should().Be(InstanceStatus.Rejected);
+        instance.FailedAt.Should().NotBeNull("the end time of a Rejected run is kept in FailedAt");
+        instance.ErrorMessage.Should().Be("Gate rejected: too risky");
+        appended.Select(e => e.EventType).Should().Contain("InstanceRejected").And.NotContain("InstanceFailed");
+        _queue.Verify(q => q.EnqueueDelayedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        sink.Verify(s => s.RunRejectedAsync(It.Is<RunRejectedEvent>(e => e.InstanceId == instanceId && e.WorkflowName == "Loan"
+            && e.NodeId == "a" && e.Reason == "Gate rejected: too risky" && e.IsTest), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RejectNodeAsync_on_an_ended_run_changes_nothing()
+    {
+        var instanceId = SetupNodeOps(ActionYaml(), out var instance, out _);
+        instance.Status = InstanceStatus.Cancelled;
+
+        await NewOrchestrator().RejectNodeAsync(instanceId, "a", "Gate rejected", "gate");
+
+        instance.Status.Should().Be(InstanceStatus.Cancelled);
     }
 
     [Fact]

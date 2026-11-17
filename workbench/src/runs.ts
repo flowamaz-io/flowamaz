@@ -6,10 +6,12 @@ import type { InstanceStatus } from './types';
 export type BadgeVariant = 'primary' | 'accent' | 'amber' | 'danger' | 'slate' | 'blue';
 
 /** Every run status, in the order filters list them. */
-export const RUN_STATUSES: readonly InstanceStatus[] = ['Pending', 'Running', 'Waiting', 'Completed', 'Failed', 'Cancelled', 'Compensating'];
+export const RUN_STATUSES: readonly InstanceStatus[] = [
+  'Pending', 'Running', 'Waiting', 'Completed', 'Rejected', 'Failed', 'Cancelled', 'Compensating',
+];
 
 /** Statuses a run never leaves. */
-export const ENDED_RUN_STATUSES: readonly string[] = ['Completed', 'Failed', 'Cancelled'];
+export const ENDED_RUN_STATUSES: readonly string[] = ['Completed', 'Rejected', 'Failed', 'Cancelled'];
 
 export function isRunEnded(status: string | null | undefined): boolean {
   return !!status && ENDED_RUN_STATUSES.includes(status);
@@ -30,6 +32,9 @@ export function instanceStatusVariant(status: InstanceStatus): BadgeVariant {
       return 'amber';
     case 'Completed':
       return 'primary';
+    case 'Rejected':
+      // An approver's "no" is an outcome, not an error: not red.
+      return 'accent';
     case 'Failed':
       return 'danger';
     default:
@@ -38,8 +43,8 @@ export function instanceStatusVariant(status: InstanceStatus): BadgeVariant {
 }
 
 /**
- * How long a run took, or has taken so far. Only a successful run has completedAt; a failed run ends at
- * failedAt. A run that ended without an end time (a cancelled run) shows "—" instead of a clock that
+ * How long a run took, or has taken so far. Only a successful run has completedAt; a failed or rejected run
+ * ends at failedAt. A run that ended without an end time (a cancelled run) shows "—" instead of a clock that
  * keeps counting.
  */
 export function runDuration(run: {

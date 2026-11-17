@@ -57,14 +57,41 @@ public class TwinAnalyzerTests
     }
 
     [Fact]
-    public void A_rejection_with_no_rejected_branch_is_a_break()
+    public void A_rejection_with_no_rejected_branch_ends_the_run_as_rejected()
     {
+        // As the engine (B10): the gate's "no" has no rejected path, so the run ends Rejected at the gate. The router
+        // after it is never reached, so it is not reported as stranding the run.
         var report = TwinAnalyzer.Analyse(Parser.Parse(PurchaseApproval), TwinHistory.Empty);
 
-        var rejected = report.Findings.Single(f => f.NodeId == "decided" && f.Kind == "no-route");
-        rejected.Severity.Should().Be(TwinSeverity.Break);
-        rejected.Title.Should().Contain("\"Manager approval\" is rejected");
+        report.Findings.Should().NotContain(f => f.NodeId == "decided" && f.Kind == "no-route");
+        var rejected = report.Findings.Single(f => f.Kind == "ends-rejected");
+        rejected.NodeId.Should().Be("manager");
+        rejected.Severity.Should().Be(TwinSeverity.Info);
+        rejected.Title.Should().Be("Ends as Rejected when \"Manager approval\" is rejected");
         rejected.Fix.Should().Contain("rejected");
+    }
+
+    [Fact]
+    public void A_rejected_path_after_the_gate_carries_the_run_on()
+    {
+        var yaml = PurchaseApproval.Replace(
+            "- { from: pay, to: done }",
+            "- { from: decided, to: done, via: rejected }\n    - { from: pay, to: done }");
+        yaml.Should().Contain("via: rejected");
+        var report = TwinAnalyzer.Analyse(Parser.Parse(yaml), TwinHistory.Empty);
+
+        report.Findings.Should().NotContain(f => f.Kind == "ends-rejected");
+    }
+
+    [Fact]
+    public void Simulator_stops_at_a_rejected_gate_with_no_rejected_path()
+    {
+        var trace = TwinSimulator.Run(Parser.Parse(PurchaseApproval), JsonNode.Parse("""{"amount": 9000}"""),
+            new Dictionary<string, JsonNode?>(), new Dictionary<string, string> { ["manager"] = TwinSimulator.Rejected });
+
+        trace.RejectedAt.Should().Be("manager");
+        trace.Issues.Should().BeEmpty();
+        trace.NodesVisited.Should().NotContain("decided");
     }
 
     [Fact]

@@ -36,7 +36,8 @@ public sealed record TwinReport(int CasesRun, int RoutersTested, IReadOnlyList<T
 /// or makes a router take two branches; also a missing optional field that strands the run.</item>
 /// <item><b>Warning</b>: only a missing required field or a value of the wrong type does it — nothing rejects such
 /// input today, but the caller is expected not to send it.</item>
-/// <item><b>Info</b>: a conditional branch no simulated input ever took.</item>
+/// <item><b>Info</b>: a conditional branch no simulated input ever took; a gate whose "no" ends the run as Rejected
+/// because the workflow has no rejected path (B10), so the author knows nothing runs after it.</item>
 /// </list>
 /// </summary>
 public static class TwinAnalyzer
@@ -49,6 +50,7 @@ public static class TwinAnalyzer
         var groups = new Dictionary<string, Group>(StringComparer.Ordinal);
         var edgesTaken = new HashSet<string>(StringComparer.Ordinal);
         var nodesVisited = new HashSet<string>(StringComparer.Ordinal);
+        var endsRejected = new Dictionary<string, int>(StringComparer.Ordinal);
 
         // Cases come in groups: the base input first, then one changed value at a time. An issue the base input already
         // has is reported once, from the base case, not again for every changed value that happens to share it.
@@ -58,6 +60,7 @@ public static class TwinAnalyzer
             var trace = TwinSimulator.Run(graph, c.Payload, c.NodeOutputs, c.GateDecisions);
             edgesTaken.UnionWith(trace.EdgesTaken);
             nodesVisited.UnionWith(trace.NodesVisited);
+            if (trace.RejectedAt is { } gateId) endsRejected[gateId] = endsRejected.GetValueOrDefault(gateId) + 1;
             if (c.VariedPath is null)
             {
                 baseIssues.Clear();
@@ -91,6 +94,7 @@ public static class TwinAnalyzer
             .Select(g => ToFinding(graph, g, declared, conditionPaths))
             .ToList();
         findings.AddRange(NeverTaken(graph, edgesTaken, nodesVisited, cases.Count));
+        findings.AddRange(endsRejected.Select(kv => EndsRejected(graph, kv.Key, kv.Value)));
 
         var routers = graph.Nodes.Count(n => n.Type is NodeType.Router or NodeType.IfElse or NodeType.Switch
             || graph.OutgoingEdges(n.Id).Any(e => e.Condition is not null || e.Via is not null || e.IsDefault));
@@ -98,6 +102,20 @@ public static class TwinAnalyzer
             .OrderBy(f => f.Severity)
             .ThenByDescending(f => f.Cases)
             .ToList());
+    }
+
+    /// <summary>A gate's "no" ends the run as Rejected: by design for many workflows, but worth knowing (B10).</summary>
+    private static TwinFinding EndsRejected(WorkflowGraph graph, string gateId, int cases)
+    {
+        var node = graph.FindNode(gateId);
+        var label = node is null || string.IsNullOrWhiteSpace(node.Label) ? gateId : node.Label;
+        return new TwinFinding(
+            "ends-rejected", TwinSeverity.Info, gateId, label,
+            $"Ends as Rejected when \"{label}\" is rejected",
+            $"The workflow has no rejected path after \"{label}\", so a \"no\" ends the run with the status Rejected and the steps after it don't run. "
+            + "Rejected runs are counted apart from failures.",
+            "If something should still happen after a \"no\" (for example, telling the requester), add a branch labelled \"rejected\" after the approval step.",
+            new Dictionary<string, string> { [gateId] = TwinSimulator.Rejected }, [], cases);
     }
 
     private static TwinSeverity SeverityOf(TwinCase c, Dictionary<string, WorkflowInput> declared) => c.VariedValue?.Kind switch

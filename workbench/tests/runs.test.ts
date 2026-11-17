@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { RunDetail, RunDetailPage, RunsPage, RunTable, WORKBENCH_HOST, canCancelRun, testRunExpiry, type WorkbenchApi } from '../src';
+import { RUN_STATUSES, instanceStatusVariant, isRunEnded, runDuration } from '../src/runs';
 import type { InstanceDetailResponse, InstanceListItem, TimelineResponse } from '../src/types';
 
 const run = (over: Partial<InstanceDetailResponse> = {}): InstanceDetailResponse => ({
@@ -49,6 +50,27 @@ describe('run helpers', () => {
     expect(testRunExpiry('2026-11-16T03:20:00Z', now)).toBe('Expires in 3h 20m');
     expect(testRunExpiry('2026-11-15T00:00:00Z', now)).toBe('Expired');
     expect(testRunExpiry(null, now)).toBe('');
+  });
+});
+
+describe('Rejected runs (B10)', () => {
+  it('is an ended run with its own, non-red badge, listed in the filters', () => {
+    expect(isRunEnded('Rejected')).toBe(true);
+    expect(canCancelRun('Rejected')).toBe(false);
+    expect(instanceStatusVariant('Rejected')).toBe('accent');
+    expect(instanceStatusVariant('Failed')).toBe('danger');
+    expect(RUN_STATUSES).toContain('Rejected');
+    expect(runDuration({ status: 'Rejected', startedAt: '2026-11-16T00:00:00Z', completedAt: null, failedAt: '2026-11-16T00:00:30Z' })).toBe('30.0s');
+  });
+
+  it('shows the reason, no Retry and no Cancel', () => {
+    const wrapper = mount(RunDetail, {
+      props: { run: run({ status: 'Rejected', failedAt: '2026-11-16T00:01:00Z', errorMessage: 'Gate rejected: over budget' }), timeline, canAct: true },
+    });
+    expect(wrapper.get('[data-testid="run-rejected"]').text()).toContain('Gate rejected: over budget');
+    expect(wrapper.text()).toContain('Rejected');
+    expect(wrapper.findAll('button').map((b) => b.text())).not.toContain('Retry');
+    expect(wrapper.findAll('button').map((b) => b.text())).not.toContain('Cancel');
   });
 });
 

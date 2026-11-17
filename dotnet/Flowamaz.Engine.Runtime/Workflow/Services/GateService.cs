@@ -205,8 +205,8 @@ public sealed class GateService
         }
         else
         {
-            await _orchestrator.FailNodeAsync(instanceId, nodeId, $"Gate rejected{(string.IsNullOrWhiteSpace(note) ? "" : $": {note}")}", "gate", ct,
-                retryable: false);
+            // No rejected path: the run ends Rejected, a business outcome rather than a failure (B10).
+            await _orchestrator.RejectNodeAsync(instanceId, nodeId, $"Gate rejected{(string.IsNullOrWhiteSpace(note) ? "" : $": {note}")}", "gate", ct);
         }
 
         if (transaction is not null) await transaction.CommitAsync(ct);

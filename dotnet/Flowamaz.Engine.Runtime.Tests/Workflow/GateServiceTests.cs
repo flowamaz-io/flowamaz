@@ -115,7 +115,7 @@ public class GateServiceTests
     }
 
     [Fact]
-    public async Task DecideAsync_Rejected_FailsNode()
+    public async Task DecideAsync_Rejected_with_no_rejected_path_rejects_the_run()
     {
         var gate = Gate();
         _gates.Setup(r => r.GetByNodeAsync(_instanceId, Node, It.IsAny<CancellationToken>())).ReturnsAsync(gate);
@@ -123,8 +123,9 @@ public class GateServiceTests
         await NewService().DecideAsync(_ws, _instanceId, Node, "rejected", "budget exceeded", Guid.NewGuid());
 
         gate.Decision.Should().Be(GateDecisionStatus.Rejected);
-        // A rejection is a decision, not a transient failure — never retried.
-        _orchestrator.Verify(o => o.FailNodeAsync(_instanceId, Node, It.Is<string>(s => s.Contains("budget exceeded")), "gate", It.IsAny<CancellationToken>(), false), Times.Once);
+        // B10: the run ends Rejected (never retried), not Failed.
+        _orchestrator.Verify(o => o.RejectNodeAsync(_instanceId, Node, It.Is<string>(s => s.StartsWith("Gate rejected") && s.Contains("budget exceeded")), "gate", It.IsAny<CancellationToken>()), Times.Once);
+        _orchestrator.Verify(o => o.FailNodeAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()), Times.Never);
     }
 
     [Theory]

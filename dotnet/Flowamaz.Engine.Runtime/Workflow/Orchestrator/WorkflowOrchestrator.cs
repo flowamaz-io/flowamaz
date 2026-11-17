@@ -213,7 +213,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
     /// <summary>A run that already ended (e.g. cancelled while a node was executing) takes no further changes.</summary>
     private bool HasEnded(WorkflowInstance instance, string operation, string nodeId)
     {
-        if (instance.Status is not (InstanceStatus.Cancelled or InstanceStatus.Completed or InstanceStatus.Failed)) return false;
+        if (instance.Status is not (InstanceStatus.Cancelled or InstanceStatus.Completed or InstanceStatus.Failed or InstanceStatus.Rejected)) return false;
         _logger.LogInformation("WorkflowOrchestrator.{Operation} ignored — instance={InstanceId} already {Status} (node {NodeId})",
             operation, instance.Id, instance.Status, nodeId);
         return true;
@@ -231,7 +231,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
             var instance = await _instances.GetByIdAsync(instanceId, cancellationToken)
                 ?? throw new InvalidOperationException($"Instance '{instanceId}' not found while stepping.");
 
-            if (instance.Status is InstanceStatus.Completed or InstanceStatus.Failed or InstanceStatus.Cancelled)
+            if (instance.Status is InstanceStatus.Completed or InstanceStatus.Failed or InstanceStatus.Rejected or InstanceStatus.Cancelled)
             {
                 return OrchestratorResult.Complete;
             }
@@ -465,10 +465,27 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
 
     public Task FailNodeAsync(Guid instanceId, string nodeId, string error, string leaseId, CancellationToken cancellationToken = default,
         bool retryable = true) =>
-        LockedAsync(instanceId, () => FailNodeCoreAsync(instanceId, nodeId, error, retryable, cancellationToken), cancellationToken);
+        LockedAsync(instanceId, () => FailNodeCoreAsync(instanceId, nodeId, error, retryable, rejected: false, cancellationToken), cancellationToken);
 
-    private async Task<bool> FailNodeCoreAsync(Guid instanceId, string nodeId, string error, bool retryable, CancellationToken cancellationToken)
+    public async Task RejectNodeAsync(Guid instanceId, string nodeId, string reason, string leaseId, CancellationToken cancellationToken = default)
     {
+        var ended = await LockedAsync<bool>(instanceId,
+            () => FailNodeCoreAsync(instanceId, nodeId, reason, retryable: false, rejected: true, cancellationToken), cancellationToken);
+        if (!ended) return;
+
+        // Once committed as Rejected (compensation may have kept it Compensating in a host without a saga engine).
+        var instance = await _instances.GetByIdAsync(instanceId, cancellationToken);
+        if (instance?.Status != InstanceStatus.Rejected) return;
+        var definition = await _definitions.GetByIdForWorkspaceAsync(instance.WorkflowDefinitionId, instance.WorkspaceId, cancellationToken);
+        await _runEvents.RunRejectedAsync(new RunRejectedEvent(
+            instance.WorkspaceId, instance.Id, instance.WorkflowDefinitionId, definition?.Name, instance.CreatedBy, nodeId, reason,
+            instance.IsTest), cancellationToken);
+    }
+
+    private async Task<bool> FailNodeCoreAsync(Guid instanceId, string nodeId, string error, bool retryable, bool rejected,
+        CancellationToken cancellationToken)
+    {
+        if (rejected) retryable = false;
         _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync enter instance={InstanceId} node={NodeId}", instanceId, nodeId);
 
         var instance = await _instances.GetByIdAsync(instanceId, cancellationToken)
@@ -524,10 +541,16 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         {
             // Persist the node failure, then hand off to the saga engine which drives the chosen
             // strategy and records CompensationStarted → CompensationCompleted/Failed itself.
+            if (rejected)
+            {
+                instance.ErrorMessage = error; // the run's reason ("Gate rejected: …") survives compensation
+                _instances.Update(instance);
+            }
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             var strategy = Enum.TryParse<SagaStrategyType>(compensation.Strategy, ignoreCase: true, out var parsed)
                 ? parsed : SagaStrategyType.Backward;
-            await _sagaEngine.StartAsync(instanceId, nodeId, strategy, cancellationToken);
+            await _sagaEngine.StartAsync(instanceId, nodeId, strategy, cancellationToken,
+                rejected ? InstanceStatus.Rejected : InstanceStatus.Failed);
             _logger.LogInformation("WorkflowOrchestrator.FailNodeAsync exit instance={InstanceId} node={NodeId} — saga {Strategy}", instanceId, nodeId, strategy);
             return true;
         }
@@ -543,12 +566,17 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         }
         else
         {
-            if (instance.CanTransitionTo(InstanceStatus.Failed)) instance.TransitionTo(InstanceStatus.Failed);
+            // A rejection is a business outcome, not an error (B10): Rejected, ended at FailedAt, no error snapshot.
+            var end = rejected ? InstanceStatus.Rejected : InstanceStatus.Failed;
+            if (instance.CanTransitionTo(end)) instance.TransitionTo(end);
             instance.FailedAt = DateTime.UtcNow;
             instance.ErrorMessage = error;
             _instances.Update(instance);
-            await AppendEventAsync(seq, instance, "InstanceFailed", nodeId, state.NodeType, ErrorPayload(error), cancellationToken,
-                errorSnapshot: ErrorSnapshot(error));
+            if (rejected)
+                await AppendEventAsync(seq, instance, "InstanceRejected", nodeId, state.NodeType, ErrorPayload(error), cancellationToken);
+            else
+                await AppendEventAsync(seq, instance, "InstanceFailed", nodeId, state.NodeType, ErrorPayload(error), cancellationToken,
+                    errorSnapshot: ErrorSnapshot(error));
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -731,12 +759,7 @@ public sealed class WorkflowOrchestrator : IWorkflowOrchestrator
         var instance = await _instances.GetByIdAsync(instanceId, cancellationToken);
         if (instance is null) return false;
         var graph = await LoadGraphAsync(instance, cancellationToken);
-
-        bool Routes(string from) => graph.OutgoingEdges(from).Any(e => IsLabelOnly(e) && DecisionMatches(e.Via!, decision));
-        if (Routes(nodeId)) return true;
-        return graph.OutgoingEdges(nodeId)
-            .Select(e => graph.Nodes.FirstOrDefault(n => n.Id == e.ToNodeId))
-            .Any(n => n is { Type: NodeType.Router } && Routes(n.Id));
+        return Core.Workflow.Twin.TwinSimulator.HasDecisionRoute(graph, nodeId, decision);
     }
 
     private async Task SeedTriggerVariablesAsync(WorkflowInstance instance, CancellationToken ct)

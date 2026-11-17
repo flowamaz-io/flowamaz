@@ -10,7 +10,9 @@ export type InstanceStatus =
   | 'Completed'
   | 'Failed'
   | 'Cancelled'
-  | 'Compensating';
+  | 'Compensating'
+  /** Ended by an approver's "no" at a gate with no rejected path: an outcome, not a failure. */
+  | 'Rejected';
 
 export type WorkflowCreatedByMethod =
   | 'NaturalLanguage'
@@ -91,7 +93,7 @@ export interface InstanceListItem {
   triggerType: string;
   startedAt: string | null;
   completedAt: string | null;
-  /** Set when the run failed (completedAt is only set on success). */
+  /** Set when the run failed or was rejected (completedAt is only set on success). */
   failedAt?: string | null;
   createdAt: string;
   isTest: boolean;

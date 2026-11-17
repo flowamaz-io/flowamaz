@@ -22,11 +22,13 @@ public sealed record TwinEdgeEvaluation(
 public sealed record TwinIssue(TwinIssueKind Kind, string NodeId, IReadOnlyList<TwinEdgeEvaluation> Edges);
 
 /// <summary>What one simulated run did.</summary>
+/// <param name="RejectedAt">The gate whose "no" ended the run as Rejected (no <c>rejected</c> path, B10); null otherwise.</param>
 public sealed record TwinTrace(
     bool ReachedEnd,
     IReadOnlyList<TwinIssue> Issues,
     IReadOnlySet<string> NodesVisited,
-    IReadOnlySet<string> EdgesTaken);
+    IReadOnlySet<string> EdgesTaken,
+    string? RejectedAt = null);
 
 /// <summary>
 /// Workflow Twin (FUNCTIONAL.md §8.1): walks a workflow graph in memory for one input, with the engine's routing rules
@@ -56,6 +58,7 @@ public static class TwinSimulator
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var taken = new HashSet<string>(StringComparer.Ordinal);
         var reachedEnd = false;
+        string? rejectedAt = null;
 
         var trigger = graph.TriggerNode;
         visited.Add(trigger.Id);
@@ -84,6 +87,12 @@ public static class TwinSimulator
                     break;
                 case NodeType.HumanGate:
                     var decision = gateDecisions.TryGetValue(node.Id, out var d) ? d : Approved;
+                    // As the engine: a "no" with no rejected path ends the run as Rejected, without following any edge.
+                    if (DecisionMatches(decision, Rejected) && !HasDecisionRoute(graph, node.Id, Rejected))
+                    {
+                        rejectedAt ??= node.Id;
+                        break;
+                    }
                     vars[$"{node.Id}.output"] = JsonSerializer.SerializeToElement(new { decision });
                     Follow(node);
                     break;
@@ -97,7 +106,7 @@ public static class TwinSimulator
             }
         }
 
-        return new TwinTrace(reachedEnd, issues, visited, taken);
+        return new TwinTrace(reachedEnd, issues, visited, taken, rejectedAt);
 
         void Follow(SfgNode from)
         {
@@ -197,6 +206,19 @@ public static class TwinSimulator
 
     public static bool IsLabelOnly(SfgEdge edge) =>
         !edge.IsDefault && string.IsNullOrWhiteSpace(edge.Condition) && !string.IsNullOrWhiteSpace(edge.Via);
+
+    /// <summary>
+    /// Whether the workflow handles <paramref name="decision"/> at gate <paramref name="nodeId"/>: a label-only branch
+    /// for it on the gate, or on a router straight after it. The engine uses the same rule (B10).
+    /// </summary>
+    public static bool HasDecisionRoute(WorkflowGraph graph, string nodeId, string decision)
+    {
+        bool Routes(string from) => graph.OutgoingEdges(from).Any(e => IsLabelOnly(e) && DecisionMatches(e.Via!, decision));
+        if (Routes(nodeId)) return true;
+        return graph.OutgoingEdges(nodeId)
+            .Select(e => graph.FindNode(e.ToNodeId))
+            .Any(n => n is { Type: NodeType.Router } && Routes(n.Id));
+    }
 
     /// <summary>The "decision" field of this node's output, else of its nearest predecessor that has one.</summary>
     private static string? UpstreamDecision(WorkflowGraph graph, string nodeId, Dictionary<string, JsonElement> vars)

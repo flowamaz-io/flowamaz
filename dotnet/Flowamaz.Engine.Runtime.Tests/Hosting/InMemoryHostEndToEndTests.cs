@@ -202,7 +202,7 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_rejected_gate_ends_the_run()
+    public async Task A_rejected_gate_ends_the_run_as_Rejected()
     {
         await StartAsync();
         var runId = await TriggerAsync(await PublishAsync(Yaml()));
@@ -210,8 +210,13 @@ public sealed class InMemoryHostEndToEndTests : IAsyncLifetime
 
         await DecideAsync(runId, "reject");
 
-        var done = await WaitForAsync(runId, r => r.Status is InstanceStatus.Completed or InstanceStatus.Failed);
-        done.Status.Should().Be(InstanceStatus.Failed);
+        // B10: an approver's "no" with no rejected path is its own outcome, not a failure.
+        var done = await WaitForAsync(runId, r => r.Status is InstanceStatus.Completed or InstanceStatus.Failed or InstanceStatus.Rejected);
+        done.Status.Should().Be(InstanceStatus.Rejected);
+        done.FailedAt.Should().NotBeNull();
+        using var read = _host.Services.CreateScope();
+        var runs = read.ServiceProvider.GetRequiredService<InstanceService>();
+        (await runs.ListAsync(_workspaceId, null, null, null, null)).Should().ContainSingle(r => r.Id == runId && r.Status == "Rejected");
     }
 
     [Fact]
